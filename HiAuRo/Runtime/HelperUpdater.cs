@@ -32,6 +32,9 @@ public static class HelperUpdater
 
     public static bool Loaded { get; private set; }
 
+    /// <summary>HelperUpdater 已加载并注入 _ctx 的 HiAuRo.Helper 程序集（供 ACRLoader 共享，避免 ALC 隔离）</summary>
+    public static Assembly? HelperAssembly => _helperAsm;
+
     /// <summary>检查更新，下载并加载最新 DLL（异步，不阻塞启动）</summary>
     public static async Task CheckAndUpdateAsync()
     {

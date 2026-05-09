@@ -97,6 +97,13 @@ public static class ACRLoader
                 return selfAsm;
             }
 
+            // HiAuRo.Helper: 优先用 HelperUpdater 已初始化 _ctx 的程序集，避免 ALC 隔离导致 _ctx=null
+            if (name.Name == "HiAuRo.Helper" && HelperUpdater.HelperAssembly != null)
+            {
+                DService.Instance().Log.Debug($"[ACRLoader]   → 共享 HelperUpdater 的 HiAuRo.Helper 程序集");
+                return HelperUpdater.HelperAssembly;
+            }
+
             // 其它宿主程序集（OmenTools, Dalamud 等）：
             // 1. 先在 Default ALC 中查找（如 System.*, Microsoft.*）
             foreach (var asm in AssemblyLoadContext.Default.Assemblies)
