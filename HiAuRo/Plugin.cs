@@ -123,6 +123,10 @@ public partial class Plugin : IDalamudPlugin
             DService.Instance().Log.Information("[ACR] 扫描完成, 等待职业切换触发加载");
             ACRLifecycle.ForceRecheck(); // RuntimeCore 可能先于 LoadAll 跑了第一帧，强制重检
 
+            // 加载通用插件
+            PluginLifecycle.Init(_pluginInterface.AssemblyLocation.Directory?.FullName ?? ".",
+                _pluginInterface.ConfigDirectory.FullName);
+
             try
             {
                 var merged = new TriggerCatalog();
@@ -212,6 +216,8 @@ public partial class Plugin : IDalamudPlugin
         GameEventHook.Instance.Shutdown();
         EventSystem.Shutdown();
         CommandMgr.Shutdown();
+
+        PluginLifecycle.Shutdown();
 
         // 先关 ACR（UnloadRotation 依赖 Plugin.Instance）
         ACRLifecycle.Shutdown();

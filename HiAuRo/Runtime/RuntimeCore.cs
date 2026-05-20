@@ -47,6 +47,7 @@ public static class RuntimeCore
             EventSystem.CheckTargetChanged();
             ACR.HotkeyPoller.Update();
             ACRLifecycle.Update();
+            PluginLifecycle.Update();
         }
         catch (Exception ex)
         {

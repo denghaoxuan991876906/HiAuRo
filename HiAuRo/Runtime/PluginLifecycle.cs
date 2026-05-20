@@ -11,6 +11,16 @@ public static class PluginLifecycle
         DService.Instance().Log.Information("[PluginLifecycle] 开始加载插件...");
         PluginLoader.LoadAll(pluginDir, configDir);
         PluginLoader.InitializeAll();
+
+        // 注入插件程序集到 ScriptCompiler
+        try
+        {
+            Execution.ScriptCompiler.RegisterPluginReferences();
+        }
+        catch (Exception ex)
+        {
+            DService.Instance().Log.Warning($"[PluginLifecycle] ScriptCompiler 注入失败: {ex.Message}");
+        }
     }
 
     /// <summary>每帧更新所有已加载插件</summary>
