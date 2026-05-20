@@ -127,6 +127,8 @@ public partial class Plugin : IDalamudPlugin
             PluginLifecycle.Init(_pluginInterface.AssemblyLocation.Directory?.FullName ?? ".",
                 _pluginInterface.ConfigDirectory.FullName);
 
+            PluginWindowManager.Init(_windowSystem);
+
             try
             {
                 var merged = new TriggerCatalog();
