@@ -10,4 +10,6 @@ public interface IPlugin : IDisposable
     string Version { get; }
     void Initialize();
     void Update();
+    /// <summary>返回插件窗口，无需窗口时返回 null</summary>
+    IPluginWindow? GetWindow() => null;
 }
