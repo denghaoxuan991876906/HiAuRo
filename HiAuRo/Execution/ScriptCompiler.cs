@@ -128,7 +128,6 @@ public static class ScriptCompiler
         lock (_refLock)
         {
             _refCache.Add(MetadataReference.CreateFromImage(dllBytes));
-            _refsLoaded = true;
         }
     }
 
