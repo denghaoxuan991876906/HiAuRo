@@ -44,6 +44,9 @@ public static class PluginLoader
                 using var ms = new MemoryStream(dllBytes, writable: false);
                 var asm = alc.LoadFromStream(ms);
 
+                // 立即预解析所有引用程序集，避免 JIT 惰性解析在战斗中触发
+                PreResolveReferences(alc, asm, pluginsPath);
+
                 var found = false;
                 foreach (var type in asm.GetExportedTypes())
                 {
@@ -162,6 +165,26 @@ public static class PluginLoader
             }
         }
         _plugins.Clear();
+    }
+
+    /// <summary>立即解析所有引用程序集，避免战斗中 JIT 惰性解析触发 I/O</summary>
+    private static void PreResolveReferences(AssemblyLoadContext alc, Assembly asm, string pluginsDir)
+    {
+        foreach (var refName in asm.GetReferencedAssemblies())
+        {
+            try
+            {
+                alc.LoadFromAssemblyName(refName);
+            }
+            catch
+            {
+                try
+                {
+                    ResolveAssembly(alc, refName, pluginsDir);
+                }
+                catch { }
+            }
+        }
     }
 
     /// <summary>插件记录</summary>
