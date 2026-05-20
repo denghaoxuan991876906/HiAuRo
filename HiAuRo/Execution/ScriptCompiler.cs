@@ -30,6 +30,7 @@ public static class ScriptCompiler
         "System.Primitives",
         "mscorlib",
         "netstandard",
+        "HiAuRo.FA",
         "HiAuRo",
         "OmenTools",
         "Dalamud",
@@ -121,6 +122,33 @@ public static class ScriptCompiler
         }
     }
 
+    /// <summary>从内存字节注入程序集引用到编译上下文（供 PluginLoader 使用）</summary>
+    public static void AddPluginReferenceFromImage(byte[] dllBytes)
+    {
+        lock (_refLock)
+        {
+            _refCache.Add(MetadataReference.CreateFromImage(dllBytes));
+            _refsLoaded = true;
+        }
+    }
+
+    /// <summary>批量注册所有已加载插件的程序集引用</summary>
+    public static void RegisterPluginReferences()
+    {
+        foreach (var (name, record) in Runtime.PluginLoader.Plugins)
+        {
+            try
+            {
+                AddPluginReferenceFromImage(record.DllBytes);
+                DService.Instance().Log.Debug($"[ScriptCompiler] 已注入插件程序集: {name}");
+            }
+            catch (Exception ex)
+            {
+                DService.Instance().Log.Error($"[ScriptCompiler] 注入 {name} 失败: {ex.Message}");
+            }
+        }
+    }
+
     /// <summary>收集编译引用（白名单过滤）</summary>
     private static List<MetadataReference> GetReferences()
     {
@@ -174,6 +202,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using HiAuRo;
 using HiAuRo.ACR;
+using HiAuRo.FA.Shapes;
 using static HiAuRo.Data;
 using HiAuRo.Execution;
 using HiAuRo.Runtime;
