@@ -5,4 +5,7 @@
   <Project Path="OmenTools/OmenTools.csproj">
     <Platform Solution="Debug|*" Project="x64" />
   </Project>
+  <Project Path="../HiAuRo.FA/HiAuRo.FA.csproj">
+    <Platform Solution="Debug|*" Project="x64" />
+  </Project>
 </Solution>
