@@ -32,7 +32,7 @@ public sealed class MovementExecutor
     // 移动参数（参考 BossMod）
     private const float 基础移速 = 6.0f;
     private const float 安全缓冲 = 0.5f;
-    private const float 滑步阈值ms = 100f;
+    private const float 滑步阈值ms = 450f;
 
     /// <summary>重置执行器状态</summary>
     public void Reset()
