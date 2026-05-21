@@ -4,6 +4,7 @@ using HiAuRo.Infrastructure;
 using OmenTools;
 using OmenTools.Interop.Game.Models;
 using OmenTools.Interop.Game.Models.Packets.Downstream;
+using HiAuRo.ACR;
 
 namespace HiAuRo.Runtime.Intelligence;
 
@@ -12,6 +13,8 @@ namespace HiAuRo.Runtime.Intelligence;
 /// MoveTo: 寻路 + deadline 调度 + TP 兜底
 /// TP: 坐标瞬移（内部实现，通过 ActorSetPos 封包）
 /// Hold: 停止 + 阻塞 duration 秒
+/// Mechanic 策略: 惰性移动，读条职业有前向计算
+/// Gather 策略: 尽快移动，读条职业等滑步窗口
 /// </summary>
 public sealed class MovementExecutor
 {
@@ -29,6 +32,7 @@ public sealed class MovementExecutor
     // 移动参数（参考 BossMod）
     private const float 基础移速 = 6.0f;
     private const float 安全缓冲 = 0.5f;
+    private const float 滑步阈值ms = 100f;
 
     /// <summary>重置执行器状态</summary>
     public void Reset()
@@ -55,13 +59,22 @@ public sealed class MovementExecutor
             switch (demand.Type)
             {
                 case DemandType.MoveTo when flags.MoveTo:
-                    处理MoveTo(demand, state, flags);
+                    if (demand.Policy == MovementPolicy.Gather)
+                        处理Gather_MoveTo(demand, flags);
+                    else
+                        处理MoveTo(demand, state, flags);
                     break;
                 case DemandType.TP when flags.TP:
-                    处理TP(demand);
+                    if (demand.Policy == MovementPolicy.Gather)
+                        处理Gather_TP(demand);
+                    else
+                        处理TP(demand);
                     break;
                 case DemandType.Hold when flags.Hold:
-                    处理Hold(demand);
+                    if (demand.Policy == MovementPolicy.Gather)
+                        处理Gather_Hold(demand);
+                    else
+                        处理Hold(demand);
                     break;
             }
         }
@@ -90,12 +103,49 @@ public sealed class MovementExecutor
             }
         }
 
-        // 检查出发时间
         var travelTime = 计算移动耗时(playerPos.Value, demand.TargetPos.Value);
-        if (state.TotalTime >= deadline.Value - travelTime)
+        var now = state.TotalTime;
+        var timeToDeadline = deadline.Value - now;
+
+        // 非读条职业：卡 deadline 走
+        if (!IsSlidecastJob(Data.Me.ClassJob))
+        {
+            if (timeToDeadline <= travelTime)
+            {
+                执行移动(demand, flags);
+                _startedMoveDemands[demand.Id] = now;
+            }
+            return;
+        }
+
+        // 读条职业：前向策略
+        var gcdRemainSec = GCDHelper.GetGCDCooldown() / 1000f;
+        var gcdDurationSec = GCDHelper.GetGCDDuration() / 1000f;
+        var oneMoreGcd = gcdRemainSec + gcdDurationSec + travelTime;
+
+        if (now + oneMoreGcd <= deadline.Value)
+            return;
+
+        if (IsCasting)
+        {
+            var castRemainSec = GetCastRemainingMs() / 1000f;
+            var slidecastThresholdSec = 滑步阈值ms / 1000f;
+            if (castRemainSec <= slidecastThresholdSec)
+            {
+                执行移动(demand, flags);
+                _startedMoveDemands[demand.Id] = now;
+                return;
+            }
+            var slideDepart = now + castRemainSec - slidecastThresholdSec + travelTime;
+            if (slideDepart <= deadline.Value)
+                return;
+            执行移动(demand, flags);
+            _startedMoveDemands[demand.Id] = now;
+        }
+        else
         {
             执行移动(demand, flags);
-            _startedMoveDemands[demand.Id] = state.TotalTime;
+            _startedMoveDemands[demand.Id] = now;
         }
     }
 
@@ -139,6 +189,61 @@ public sealed class MovementExecutor
         if (demand.Duration.HasValue && demand.Duration.Value > 0)
             _holdUntilMs = Environment.TickCount64 + (long)(demand.Duration.Value * 1000);
         _executedDemandIds.Add(demand.Id);
+    }
+
+    private static bool IsSlidecastJob(uint jobId)
+        => jobId is 25 or 27 or 35 or 42 or 24 or 28 or 33 or 40;
+
+    private static unsafe float GetCastRemainingMs()
+    {
+        var player = DService.Instance().ObjectTable.LocalPlayer;
+        if (player == null || !player.IsCasting) return 0;
+        return player.CurrentCastTime * 1000f;
+    }
+
+    private static bool IsCasting => Data.Combat.IsCasting;
+
+    private void 处理Gather_MoveTo(MovementDemand demand, FactAxisFlags flags)
+    {
+        if (demand.TargetPos == null) return;
+
+        if (!IsSlidecastJob(Data.Me.ClassJob) || !IsCasting)
+        {
+            执行移动(demand, flags);
+            _executedDemandIds.Add(demand.Id);
+            return;
+        }
+
+        var castRemainSec = GetCastRemainingMs() / 1000f;
+        if (castRemainSec <= 滑步阈值ms / 1000f)
+        {
+            执行移动(demand, flags);
+            _executedDemandIds.Add(demand.Id);
+        }
+    }
+
+    private void 处理Gather_TP(MovementDemand demand)
+    {
+        if (demand.TargetPos == null) return;
+
+        if (!IsSlidecastJob(Data.Me.ClassJob) || !IsCasting)
+        {
+            瞬移(demand.TargetPos.Value, demand.TargetHeading);
+            _executedDemandIds.Add(demand.Id);
+            return;
+        }
+
+        var castRemainSec = GetCastRemainingMs() / 1000f;
+        if (castRemainSec <= 滑步阈值ms / 1000f)
+        {
+            瞬移(demand.TargetPos.Value, demand.TargetHeading);
+            _executedDemandIds.Add(demand.Id);
+        }
+    }
+
+    private void 处理Gather_Hold(MovementDemand demand)
+    {
+        处理Hold(demand);
     }
 
     private float 计算移动耗时(Vector3 from, Vector3 to)
