@@ -21,4 +21,6 @@ public sealed class MovementDemand
     public int AddedOrder { get; set; }
     /// <summary>来源描述</summary>
     public string Source { get; set; } = "";
+    /// <summary>移动策略（默认 Mechanic 惰性策略）</summary>
+    public MovementPolicy Policy { get; set; } = MovementPolicy.Mechanic;
 }
