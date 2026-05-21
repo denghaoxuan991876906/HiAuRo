@@ -201,7 +201,14 @@ public sealed class MovementExecutor
         return player.CurrentCastTime * 1000f;
     }
 
-    private static bool IsCasting => Data.Combat.IsCasting;
+    private static bool IsCasting
+    {
+        get
+        {
+            var player = DService.Instance().ObjectTable.LocalPlayer;
+            return player?.IsCasting ?? false;
+        }
+    }
 
     private void 处理Gather_MoveTo(MovementDemand demand, FactAxisFlags flags)
     {
