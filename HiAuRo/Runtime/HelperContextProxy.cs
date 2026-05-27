@@ -115,7 +115,7 @@ sealed class HiAuRoContextImpl
     public bool IsCurrentTargetInvincible()
     {
         var target = Data.Target.Current;
-        return target == null || target.IsDead == true || !target.IsTargetable;
+        return target == null || target.IsDead == true || !target.IsTargetable || AuraHelper.HasInvincibleBuffs(target);
     }
 
     // ── 技能数据 ──
