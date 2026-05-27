@@ -73,8 +73,25 @@ public static class SpellExtension
         {
             SpellTargetType.Self => Data.Me.Object?.GameObjectID ?? 0xE000_0000,
             SpellTargetType.Target => Data.Target.Current?.GameObjectID ?? 0xE000_0000,
+            SpellTargetType.TargetTarget => Data.Target.Current is IBattleChara bc
+                ? (ulong)bc.TargetObjectID : 0xE000_0000,
+            SpellTargetType.SpecifyTarget => spell.SpecifyTarget is IGameObject sgo
+                ? sgo.GameObjectID : 0xE000_0000,
+            SpellTargetType.DynamicTarget => spell.GetDynamicTarget?.Invoke() is IGameObject dgo
+                ? dgo.GameObjectID : 0xE000_0000,
+            SpellTargetType.Pm1 or SpellTargetType.Pm2 or SpellTargetType.Pm3 or SpellTargetType.Pm4
+            or SpellTargetType.Pm5 or SpellTargetType.Pm6 or SpellTargetType.Pm7 or SpellTargetType.Pm8
+                => GetPartyMemberGameObjectID(spell.TargetType),
             _ => 0xE000_0000
         };
+    }
+
+    private static ulong GetPartyMemberGameObjectID(SpellTargetType targetType)
+    {
+        var idx = (int)targetType - (int)SpellTargetType.Pm1;
+        if (idx >= 0 && idx < Data.Party.All.Count)
+            return Data.Party.All[idx].Player?.GameObjectID ?? 0xE000_0000;
+        return 0xE000_0000;
     }
 
     #endregion
