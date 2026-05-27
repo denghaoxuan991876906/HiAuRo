@@ -1,4 +1,7 @@
+using System.Reflection;
+using HiAuRo.ACR;
 using HiAuRo.Infrastructure;
+using HiAuRo.UI;
 
 namespace HiAuRo.Setting;
 
@@ -108,6 +111,86 @@ public static class SettingMgr
         var path = GetAcrJobPath(author, jobId);
         var loaded = Load<ACR.UiSettings>(path);
         return loaded ?? new ACR.UiSettings();
+    }
+
+    /// <summary>
+    /// 将 AcrSettings 的 public 属性值同步到 ControlValues（label→属性名匹配）
+    /// </summary>
+    public static void SyncControlsFromSettings(
+        AcrSettings settings,
+        Dictionary<string, object> controlValues,
+        List<UiControlDef> controls)
+    {
+        if (settings == null || controlValues == null || controls == null) return;
+
+        var props = settings.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead)
+            .ToArray();
+
+        foreach (var ctrl in controls)
+        {
+            var prop = FindMatchingProperty(props, ctrl.Label);
+            if (prop == null) continue;
+
+            try
+            {
+                var val = prop.GetValue(settings);
+                if (val != null)
+                    controlValues[ctrl.Id] = val;
+            }
+            catch { /* 类型不兼容则跳过 */ }
+        }
+    }
+
+    /// <summary>
+    /// 将 ControlValues 写回 AcrSettings 的 public 属性（label→属性名匹配）
+    /// </summary>
+    public static void SyncSettingsFromControls(
+        AcrSettings settings,
+        Dictionary<string, object> controlValues,
+        List<UiControlDef> controls)
+    {
+        if (settings == null || controlValues == null || controls == null) return;
+
+        var props = settings.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanWrite)
+            .ToArray();
+
+        foreach (var ctrl in controls)
+        {
+            if (!controlValues.TryGetValue(ctrl.Id, out var val)) continue;
+
+            var prop = FindMatchingProperty(props, ctrl.Label);
+            if (prop == null) continue;
+
+            try
+            {
+                var converted = Convert.ChangeType(val, prop.PropertyType);
+                prop.SetValue(settings, converted);
+            }
+            catch { /* 类型不兼容则跳过 */ }
+        }
+    }
+
+    /// <summary>
+    /// 按 label 匹配属性：精确匹配 → 去掉括号后缀匹配
+    /// </summary>
+    private static PropertyInfo? FindMatchingProperty(PropertyInfo[] props, string label)
+    {
+        // 1. 精确匹配
+        var exact = props.FirstOrDefault(p => p.Name == label);
+        if (exact != null) return exact;
+
+        // 2. 去掉 label 末尾括号后缀（如 "续红斩时间阈值(s)" → "续红斩时间阈值"）
+        var parenIdx = label.LastIndexOf('(');
+        if (parenIdx > 0)
+        {
+            var stripped = label[..parenIdx];
+            var match = props.FirstOrDefault(p => p.Name == stripped);
+            if (match != null) return match;
+        }
+
+        return null;
     }
 
     #endregion

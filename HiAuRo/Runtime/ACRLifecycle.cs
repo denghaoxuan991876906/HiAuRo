@@ -194,6 +194,8 @@ public static class ACRLifecycle
 
         CurrentJobId = _lastJob;
 
+        AcrSettings? loadedSettings = null;
+
         // 自动检测 ISettingsProvider<T> 接口 → 加载 settings 并注入
         var providerInterface = entry.GetType()
             .GetInterfaces()
@@ -218,6 +220,7 @@ public static class ACRLifecycle
                     {
                         acr._author = entry.AuthorName;
                         acr._jobId = CurrentJobId;
+                        loadedSettings = acr;
                     }
                     lock (_settingsLock)
                     {
@@ -283,6 +286,12 @@ public static class ACRLifecycle
                 Plugin.Instance._uiBridge.CacheControls(controls);
             }
             ImGuiOverlayState.UpdateControls(controls);
+
+            // 从已加载的 WARSettings 填充 UI 控件初始值
+            if (loadedSettings != null)
+                HiAuRo.Setting.SettingMgr.SyncControlsFromSettings(
+                    loadedSettings, ImGuiOverlayState.ControlValues, controls);
+
             DService.Instance().Log.Information("[ACR] controls 消息已发送 + 已缓存");
         }
         else
@@ -440,6 +449,17 @@ public static class ACRLifecycle
     }
 
     private static void OnHkExecuted(string id, string label) { } // 占位，绑定/可见性由前端 saveUiSettings 维护
+
+    /// <summary>获取当前加载的 AcrSettings（供 ImGuiWidgetRenderer 同步用）</summary>
+    public static AcrSettings? GetCurrentSettings()
+    {
+        if (CurrentEntry == null) return null;
+        var providerInterface = CurrentEntry.GetType()
+            .GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISettingsProvider<>));
+        if (providerInterface == null) return null;
+        return providerInterface.GetProperty("Settings")?.GetValue(CurrentEntry) as AcrSettings;
+    }
 
     /// <summary>宿主 save handler —— 遍历所有已加载 ISettingsProvider 并保存</summary>
     private static void HostSaveAllSettings()

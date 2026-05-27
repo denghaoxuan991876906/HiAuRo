@@ -133,12 +133,19 @@ public sealed class OverlayStatusBar : OverlayBase
                 framePad.Push(ImGuiStyleVar.FramePadding, Theme.PaddingSM);
                 ImGui.Indent(ContentOffset.X);
 
-                if (tab.Id == "__qt_setup__")
-                    DrawQtSetup();
-                else if (tab.Id == "__hk_setup__")
-                    DrawHotkeySetup();
-                else
-                    ImGuiWidgetRenderer.Render(controls, tab.Id);
+                // 内容区域：水平滚动+宽度约束，防止控件溢出窗口
+                var childSize = new Vector2(-1, -1);
+                if (ImGui.BeginChild($"##acrContent_{tab.Id}", childSize, false,
+                        ImGuiWindowFlags.None))
+                {
+                    if (tab.Id == "__qt_setup__")
+                        DrawQtSetup();
+                    else if (tab.Id == "__hk_setup__")
+                        DrawHotkeySetup();
+                    else
+                        ImGuiWidgetRenderer.Render(controls, tab.Id);
+                }
+                ImGui.EndChild();
 
                 ImGui.Unindent(ContentOffset.X);
                 ImGui.EndTabItem();
