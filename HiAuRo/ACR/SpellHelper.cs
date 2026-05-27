@@ -15,9 +15,39 @@ public static class SpellHelper
         return UseActionManager.Instance().IsActionOffCooldown(ActionType.Action, id);
     }
 
-    /// <summary>综合就绪检查（CD + MP + 目标 + 解锁等），直接读游戏原生 GetActionStatus</summary>
-    public static unsafe bool IsActionReady(uint actionId, ulong targetId = 0xE000_0000)
+    /// <summary>综合就绪检查（CD + MP + 目标 + 解锁等），需手动指定 targetId</summary>
+    public static unsafe bool IsActionReady(uint actionId, ulong targetId)
         => ActionManager.Instance()->GetActionStatus(ActionType.Action, actionId, targetId, true, true, null) <= 1;
+
+    /// <summary>综合就绪检查 —— 自动查表选择目标（ACR 无指定目标时使用）</summary>
+    public static bool IsActionReady(uint actionId)
+        => IsActionReady(actionId, ResolveTargetByActionTable(actionId));
+
+    /// <summary>根据 Action 表 CanTarget* 字段自动选择检查目标</summary>
+    private static ulong ResolveTargetByActionTable(uint actionId)
+    {
+        var row = GetActionRow(actionId);
+        if (row == null) return 0xE000_0000;
+
+        var action = row.Value;
+
+        // 地面放置技能：不需要具体目标
+        if (action.TargetArea) return 0xE000_0000;
+
+        // 纯攻击技能：用当前目标（敌人）
+        if (action.CanTargetHostile && !action.CanTargetParty && !action.CanTargetAlly && !action.CanTargetSelf)
+            return Data.Target.Current?.GameObjectID ?? 0xE000_0000;
+
+        // 友方技能（治疗/增益）：用自己作为检查目标（自己永远是合法的友方目标）
+        if (action.CanTargetSelf || action.CanTargetParty || action.CanTargetAlly)
+            return Data.Me.Object?.GameObjectID ?? 0xE000_0000;
+
+        // 混合技能（既能打敌又能奶人）：用当前目标
+        if (action.CanTargetHostile)
+            return Data.Target.Current?.GameObjectID ?? 0xE000_0000;
+
+        return 0xE000_0000;
+    }
 
     /// <summary>技能剩余冷却毫秒（0 表示已冷却好）</summary>
     public static unsafe float GetCooldownRemaining(uint spellId)
