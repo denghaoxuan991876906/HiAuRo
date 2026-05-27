@@ -78,7 +78,7 @@ public sealed class GameEventHook
         try
         {
             var sigScanner = DService.Instance().SigScanner;
-            var objectEffectAddr = sigScanner.ScanText("40 53 55 56 57 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 0F B7 FA");
+            var objectEffectAddr = sigScanner.ScanText("40 53 55 57 41 56 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 44 0F B7 F2");
             if (objectEffectAddr != nint.Zero)
             {
                 _objectEffectHook = DService.Instance().Hook.HookFromAddress<ObjectEffectDelegate>(
@@ -562,7 +562,7 @@ public sealed class GameEventHook
     #region ObjectEffect Hook
 
     /// <summary>
-    /// 从 Splatoon 签名: 40 53 55 56 57 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 0F B7 FA
+    /// 从 Splatoon 签名 (2026.05): 40 53 55 57 41 56 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 44 0F B7 F2
     /// 函数签名: long ProcessObjectEffect(GameObject* a1, ushort a2, ushort a3, long a4)
     /// </summary>
     private long OnObjectEffect(nint gameObjectPtr, ushort data1, ushort data2, long a4)
