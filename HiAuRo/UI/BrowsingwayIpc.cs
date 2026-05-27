@@ -16,6 +16,7 @@ internal sealed class BrowsingwayIpc : IDisposable
     private OverlayWindowSetting[] _overlayConfigs = [];
     public bool IsReady { get; private set; }
     private readonly CancellationTokenSource _cts = new();
+    private bool _inOverlayOp; // 重入保护
 
     public BrowsingwayIpc(int port, Func<UIMode> getUIMode)
     {
@@ -74,6 +75,8 @@ internal sealed class BrowsingwayIpc : IDisposable
     /// <summary>创建或更新 overlay（替换 URL 中的端口占位符）</summary>
     public void CreateOrUpdateOverlay(OverlayWindowSetting ol)
     {
+        if (_inOverlayOp) return; // 重入保护
+        _inOverlayOp = true;
         try
         {
             var url = ol.Url.Replace("localhost:5678", $"localhost:{_port}");
@@ -101,6 +104,7 @@ internal sealed class BrowsingwayIpc : IDisposable
         {
             DService.Instance().Log.Warning($"[BrowsingwayIpc] CreateOrUpdate 失败 ({ol.Name}): {ex.Message}");
         }
+        finally { _inOverlayOp = false; }
     }
 
     /// <summary>调整 overlay 尺寸（保留其他属性从配置读取）</summary>
@@ -136,6 +140,8 @@ internal sealed class BrowsingwayIpc : IDisposable
     /// <summary>显示/隐藏 overlay</summary>
     public void SetOverlayVisible(string name, bool visible)
     {
+        if (_inOverlayOp) return; // 重入保护
+        _inOverlayOp = true;
         try
         {
             DService.Instance().Framework.RunOnFrameworkThread(() =>
@@ -154,6 +160,7 @@ internal sealed class BrowsingwayIpc : IDisposable
         {
             DService.Instance().Log.Warning($"[BrowsingwayIpc] SetVisibility 失败 ({name}): {ex.Message}");
         }
+        finally { _inOverlayOp = false; }
     }
 
     /// <summary>按配置显示/隐藏所有 overlay</summary>
