@@ -399,12 +399,16 @@ public static class ComponentLibrary
     /// <summary>滑块控件</summary>
     public static bool Slider(string id, string label, ref float value, float min, float max, string format = "%.1f")
     {
+        var avail = ImGui.GetContentRegionAvail().X;
+        var labelWidth = ImGui.CalcTextSize(label).X + 4;
+        var sliderWidth = Math.Max(avail - labelWidth - 8, 60);
+
         using var c = new ImRaii.ColorDisposable();
         c.Push(ImGuiCol.FrameBg, Theme.Colors.SliderRail);
         c.Push(ImGuiCol.SliderGrab, Theme.Colors.SliderTrack);
         c.Push(ImGuiCol.SliderGrabActive, Theme.Colors.SliderTrack);
         c.Push(ImGuiCol.Text, Theme.Colors.TextPrimary);
-        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - 60);
+        ImGui.SetNextItemWidth(sliderWidth);
         var changed = ImGui.SliderFloat($"##{id}", ref value, min, max, format);
         ImGui.SameLine();
         ImGui.TextColored(Theme.Colors.TextSecondary, label);
@@ -414,12 +418,16 @@ public static class ComponentLibrary
     /// <summary>整数滑块控件</summary>
     public static bool SliderInt(string id, string label, ref int value, int min, int max)
     {
+        var avail = ImGui.GetContentRegionAvail().X;
+        var labelWidth = ImGui.CalcTextSize(label).X + 4;
+        var sliderWidth = Math.Max(avail - labelWidth - 8, 60);
+
         using var c = new ImRaii.ColorDisposable();
         c.Push(ImGuiCol.FrameBg, Theme.Colors.SliderRail);
         c.Push(ImGuiCol.SliderGrab, Theme.Colors.SliderTrack);
         c.Push(ImGuiCol.SliderGrabActive, Theme.Colors.SliderTrack);
         c.Push(ImGuiCol.Text, Theme.Colors.TextPrimary);
-        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - 60);
+        ImGui.SetNextItemWidth(sliderWidth);
         var changed = ImGui.SliderInt($"##{id}", ref value, min, max);
         ImGui.SameLine();
         ImGui.TextColored(Theme.Colors.TextSecondary, label);
@@ -433,13 +441,17 @@ public static class ComponentLibrary
     /// <summary>下拉选择器</summary>
     public static bool Select(string id, string label, ref int selectedIndex, string[] options)
     {
+        var avail = ImGui.GetContentRegionAvail().X;
+        var labelWidth = ImGui.CalcTextSize(label).X + 4;
+        var comboWidth = Math.Max(avail - labelWidth - 8, 80);
+
         using var c = new ImRaii.ColorDisposable();
         c.Push(ImGuiCol.FrameBg, Theme.Colors.FillSecondary);
         c.Push(ImGuiCol.Header, Theme.Colors.AccentBlue);
         c.Push(ImGuiCol.HeaderHovered, Theme.Colors.BgHover);
         using var v = new ImRaii.StyleDisposable();
         v.Push(ImGuiStyleVar.FrameRounding, Theme.RadiusSM);
-        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X - 80);
+        ImGui.SetNextItemWidth(comboWidth);
         var changed = ImGui.Combo($"##{id}", ref selectedIndex, options, options.Length);
         ImGui.SameLine();
         ImGui.TextColored(Theme.Colors.TextSecondary, label);
@@ -558,11 +570,15 @@ public static class ComponentLibrary
     /// <summary>数字输入框</summary>
     public static bool InputNumber(string id, string label, ref int value, int step = 1, int stepFast = 10)
     {
+        var avail = ImGui.GetContentRegionAvail().X;
+        var labelWidth = ImGui.CalcTextSize(label).X + 4;
+        var inputWidth = Math.Max(avail - labelWidth - 8, 60);
+
         using var c = new ImRaii.ColorDisposable();
         c.Push(ImGuiCol.FrameBg, Theme.Colors.FillSecondary);
         using var v = new ImRaii.StyleDisposable();
         v.Push(ImGuiStyleVar.FrameRounding, Theme.RadiusSM);
-        ImGui.SetNextItemWidth(80);
+        ImGui.SetNextItemWidth(inputWidth);
         var changed = ImGui.InputInt($"##{id}", ref value, step, stepFast);
         ImGui.SameLine();
         ImGui.TextColored(Theme.Colors.TextPrimary, label);
