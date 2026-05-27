@@ -89,8 +89,17 @@ public static class SpellExtension
     private static ulong GetPartyMemberGameObjectID(SpellTargetType targetType)
     {
         var idx = (int)targetType - (int)SpellTargetType.Pm1;
-        if (idx >= 0 && idx < Data.Party.All.Count)
-            return Data.Party.All[idx].Player?.GameObjectID ?? 0xE000_0000;
+        var selfId = Data.Me.Object?.GameObjectID ?? 0;
+        
+        // PM1-PM8 排除自己，所以需要跳过自己在 All 中的位置
+        var count = 0;
+        foreach (var member in Data.Party.All)
+        {
+            if (member.Player?.GameObjectID == selfId) continue;
+            if (count == idx)
+                return member.Player?.GameObjectID ?? 0xE000_0000;
+            count++;
+        }
         return 0xE000_0000;
     }
 
