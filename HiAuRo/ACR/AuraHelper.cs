@@ -56,4 +56,10 @@ public static class AuraHelper
     /// <summary>目标上是否有 buff</summary>
     public static bool HasTargetAura(uint buffId) =>
         HasAura(Data.Target.Current, buffId);
+
+    private static readonly uint[] InvincibleBuffIds = [325, 529, 656, 671, 775, 776, 969, 981, 1570, 1697, 1829, 328, 2287, 2670, 3012, 3039, 3255, 811, 810, 409, 1836];
+
+    /// <summary>目标身上是否有无敌buff</summary>
+    public static bool HasInvincibleBuffs(IGameObject? target) =>
+        HasAnyAura(target, InvincibleBuffIds);
 }
