@@ -392,6 +392,33 @@ public static class ACRLifecycle
                 DService.Instance().Log.Information($"[ACR] 自定义窗口已加载: {customWindows.Count()}个");
             }
         }
+        // 合并 QT 值：首次加载时写入默认值，QT 数量变化时补充新增项
+        // 原则：已保存的值不动，只补新增的
+        var qtAll = ACR.QTHelper.GetAll();
+        var needSave = false;
+        foreach (var qt in qtAll)
+        {
+            if (!loadedSettings.QtValues.ContainsKey(qt.Id))
+            {
+                loadedSettings.QtValues[qt.Id] = qt.Value;
+                needSave = true;
+            }
+        }
+        // 同理合并 QtVisible：新增 QT 补默认可见
+        foreach (var qt in qtAll)
+        {
+            if (!loadedSettings.QtVisible.ContainsKey(qt.Id))
+            {
+                loadedSettings.QtVisible[qt.Id] = true;
+                needSave = true;
+            }
+        }
+        if (needSave)
+        {
+            loadedSettings.Save();
+            DService.Instance().Log.Information($"[ACR] QT 新增项已合并保存 (qtValues={loadedSettings.QtValues.Count})");
+        }
+
         // 宿主订阅保存事件 —— 用户点击保存按钮时自动写回所有 settings
         ACR.MainControlHelper.OnSave += HostSaveAllSettings;
 
@@ -466,24 +493,12 @@ public static class ACRLifecycle
         return _defaultSettings;
     }
 
-    /// <summary>宿主 save handler —— 遍历所有已加载 ISettingsProvider 并保存</summary>
+    /// <summary>宿主 save handler —— 保存当前 AcrSettings（包括 ISettingsProvider 和默认实例）</summary>
     private static void HostSaveAllSettings()
     {
-        (IRotationEntry Entry, Type SettingsType)[] snapshot;
-        lock (_settingsLock)
-        {
-            snapshot = _settingsProviders.Values.ToArray();
-        }
-        foreach (var (entry, _) in snapshot)
-        {
-            var providerInterface = entry.GetType()
-                .GetInterfaces()
-                .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISettingsProvider<>));
-            if (providerInterface == null) continue;
-            var settings = providerInterface.GetProperty("Settings")?.GetValue(entry);
-            if (settings is AcrSettings acr)
-                acr.Save();
-        }
+        var settings = GetCurrentSettings();
+        if (settings != null)
+            settings.Save();
     }
 
     private static string GetProviderKey(string author, uint jobId) => $"{author}_{jobId}";

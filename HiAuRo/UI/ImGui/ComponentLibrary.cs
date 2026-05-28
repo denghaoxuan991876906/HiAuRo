@@ -579,7 +579,7 @@ public static class ComponentLibrary
     /// <summary>数字输入框（labelFirst=true 标签在左，false 标签在右）</summary>
     public static bool InputNumber(string id, string label, ref int value, int step = 1, int stepFast = 10, bool labelFirst = true)
     {
-        var inputWidth = 120f;
+        var inputWidth = 160f;
 
         using var c = new ImRaii.ColorDisposable();
         c.Push(ImGuiCol.FrameBg, Theme.Colors.FillSecondary);
