@@ -33,6 +33,12 @@ cd HiAuRo
 dotnet build HiAuRo.slnx -c Release
 ```
 
+### 本地开发加速
+
+内部开发者可将 `HiAuRo.Sdk` 自动输出到本地 NuGet 源，ACR 秒级恢复，无需等待 nuget.org 更新。
+
+详见 **[本地 NuGet 源开发指南](doc/LOCAL_NUGET_DEV.md)** — 一键设置，零等待。
+
 > HiAuRo.Helper 是独立仓库，编译时不依赖。运行时通过 HelperUpdater 自动拉取最新 DLL。
 
 ## 项目结构
