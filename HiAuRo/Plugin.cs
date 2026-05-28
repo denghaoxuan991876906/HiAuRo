@@ -46,6 +46,7 @@ public partial class Plugin : IDalamudPlugin
             _pluginInterface = pluginInterface;
 
             DService.Init(pluginInterface);
+            SettingMgr.Init(_pluginInterface.ConfigDirectory.FullName);
             _config = LoadConfig();
             LogManager.Instance.Init(_pluginInterface.ConfigDirectory.FullName);
             Theme.Mode = _config.ImGuiThemeMode == ImGuiThemeMode.Dark ? Theme.ThemeMode.Dark : Theme.ThemeMode.Light;
@@ -67,7 +68,6 @@ public partial class Plugin : IDalamudPlugin
                 DService.Instance().Log.Error($"[UI] web源目录不存在: {sourceWebRoot}, 悬浮窗将无内容!");
             }
 
-            SettingMgr.Init(_pluginInterface.ConfigDirectory.FullName);
             CommandMgr.Init();
             EventSystem.Init();
             GameEventHook.Instance.Init();
