@@ -35,7 +35,7 @@ public partial class Plugin : IDalamudPlugin
     public static Plugin Instance { get; private set; } = null!;
 
     /// <summary>保存配置到磁盘</summary>
-    public static void SaveConfig() => Instance?._pluginInterface.SavePluginConfig(Instance._config);
+    public static void SaveConfig() => Instance?._config.Save();
 
     /// <summary>Initializes a new instance of the <see cref="Plugin"/> class</summary>
     public Plugin(IDalamudPluginInterface pluginInterface)
@@ -101,7 +101,7 @@ public partial class Plugin : IDalamudPlugin
 
             _windowSystem = new WindowSystem("HiAuRo");
             _uiManager = new UIManager(_config, _pluginInterface, _windowSystem,
-                () => _pluginInterface.SavePluginConfig(_config), webRoot);
+                () => _config.Save(), webRoot);
             _uiManager.Init();
             _uiBridge = _uiManager.Bridge;
             if (_uiBridge != null)
@@ -110,7 +110,7 @@ public partial class Plugin : IDalamudPlugin
                 AuthoringServer.Instance.Register(_uiBridge);
             }
 
-            _mainWindow = new MainWindow(_config, () => _pluginInterface.SavePluginConfig(_config));
+            _mainWindow = new MainWindow(_config, () => _config.Save());
             _windowSystem.AddWindow(_mainWindow);
 #if DEBUG
             _pluginInterface.UiBuilder.Draw += () =>
@@ -471,37 +471,39 @@ public partial class Plugin : IDalamudPlugin
 
     private PluginConfig LoadConfig()
     {
-        var config = _pluginInterface.GetPluginConfig() as PluginConfig ?? new PluginConfig();
+        var config = Setting.SettingMgr.GetMainSetting<PluginConfig>();
+        if (config.LoadCount == 0)
+        {
+            // 试从 Dalamud 旧路径迁移
+            try
+            {
+                var oldPath = Path.Combine(_pluginInterface.ConfigDirectory.FullName, "PluginConfig.json");
+                if (File.Exists(oldPath))
+                {
+                    var oldJson = File.ReadAllText(oldPath);
+                    var migrated = System.Text.Json.JsonSerializer.Deserialize<PluginConfig>(oldJson,
+                        new System.Text.Json.JsonSerializerOptions { IncludeFields = true });
+                    if (migrated is { LoadCount: > 0 }) { config = migrated; DService.Instance().Log.Information("[Config] 从 Dalamud 旧配置迁移"); }
+                }
+            }
+            catch { }
+        }
+
         PluginConfig.Instance = config;
         config.LoadCount++;
+        config.Version = 2;
 
-        var migrated = false;
-
-        // 方向 2 迁移：ActionPanel 拆分为 QtWindow + HotkeyWindow
         if (config.Overlays?.Any(o => o.Name == "ActionPanel") == true)
-        {
-            config.Overlays = config.Overlays
-                .Where(o => o.Name != "ActionPanel")
+            config.Overlays = config.Overlays.Where(o => o.Name != "ActionPanel")
                 .Append(new OverlayWindowSetting { Name = "QtWindow", Url = "http://localhost:5678/qt.html", Width = 320, Height = 80 })
                 .Append(new OverlayWindowSetting { Name = "HotkeyWindow", Url = "http://localhost:5678/hotkey.html", Width = 320, Height = 100 })
                 .ToArray();
-            migrated = true;
-        }
 
-        // 修复之前 contentResize 错误写入 MainWindow 的尺寸（高度 < 100 视为异常值）
         var mw = config.Overlays?.FirstOrDefault(o => o.Name == "MainWindow");
-        if (mw != null && mw.Height < 100)
-        {
-            mw.Width = 310;
-            mw.Height = 480;
-            migrated = true;
-        }
+        if (mw is { Height: < 100 }) { mw.Width = 310; mw.Height = 480; }
 
-        if (migrated)
-            _pluginInterface.SavePluginConfig(config);
-
-        DService.Instance().Log.Information(
-            $"[Config] SchemaVersion={config.Version}, LoadCount={config.LoadCount}, DebugEnabled={config.DebugEnabled}");
+        config.Save();
+        DService.Instance().Log.Information($"[Config] V={config.Version}, Load={config.LoadCount}, Debug={config.DebugEnabled}");
         return config;
     }
 

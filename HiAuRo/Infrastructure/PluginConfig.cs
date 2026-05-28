@@ -1,4 +1,4 @@
-using Dalamud.Configuration;
+using HiAuRo.ACR;
 
 namespace HiAuRo.Infrastructure;
 
@@ -44,7 +44,7 @@ public enum BgEffectMode
 /// <summary>
 /// HiAuRo 主配置对象 —— 走 Dalamud 原生 IPluginConfiguration 序列化
 /// </summary>
-public sealed class PluginConfig : IPluginConfiguration
+public sealed class PluginConfig : SettingsBase
 {
     /// <summary>全局配置实例</summary>
     public static PluginConfig Instance { get; internal set; } = null!;

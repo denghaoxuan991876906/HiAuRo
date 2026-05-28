@@ -1,54 +1,20 @@
-using HiAuRo.Setting;
-
 namespace HiAuRo.ACR;
 
 /// <summary>
-/// ACR 作者继承此类获得 .Save() 方法和 QT/Hotkey UI 设置属性
-/// 所有设置统一存储在 {configDir}/setting/ACR/{author}/{author}-{jobName}.json
+/// ACR 作者继承此类获得 Qt/Hotkey/Overlay UI 设置属性和 .Save() 方法
 /// </summary>
-public abstract class AcrSettings
+public abstract class AcrSettings : SettingsBase
 {
-    #region QT 布局设置（ACR 作者无需手动管理）
-
-    /// <summary>QT 面板每行列数</summary>
     public int QtCols { get; set; }
-    /// <summary>QT 按钮宽度</summary>
     public int QtBtnW { get; set; }
-    /// <summary>QT 可见性</summary>
     public Dictionary<string, bool> QtVisible { get; set; } = [];
-    /// <summary>QT 开关值</summary>
     public Dictionary<string, bool> QtValues { get; set; } = [];
 
-    #endregion
-
-    #region 热键布局设置
-
-    /// <summary>热键面板每行列数</summary>
     public int HkCols { get; set; }
-    /// <summary>热键按钮大小(px)</summary>
     public int HkBtnSize { get; set; } = 52;
-    /// <summary>热键可见性</summary>
     public Dictionary<string, bool> HkVisible { get; set; } = [];
-    /// <summary>热键绑定</summary>
     public Dictionary<string, string> HkBindings { get; set; } = [];
 
-    #endregion
-
-    #region Overlay 尺寸
-
-    /// <summary>每个 overlay 上次自适应后的宽度</summary>
     public Dictionary<string, int> OverlayContentWidth { get; set; } = [];
-    /// <summary>每个 overlay 上次自适应后的高度</summary>
     public Dictionary<string, int> OverlayContentHeight { get; set; } = [];
-
-    #endregion
-
-    /// <summary>保存设置到磁盘（从 ACRLifecycle 获取当前作者/职业信息）</summary>
-    public void Save()
-    {
-        var author = Runtime.ACRLifecycle.CurrentAuthor;
-        var jobId = Runtime.ACRLifecycle.CurrentJobId;
-        if (string.IsNullOrEmpty(author) || jobId == 0) return;
-        SettingMgr.SaveAcrJobSetting(author, jobId, this);
-    }
 }
