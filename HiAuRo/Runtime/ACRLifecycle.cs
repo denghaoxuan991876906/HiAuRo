@@ -393,16 +393,16 @@ public static class ACRLifecycle
                 DService.Instance().Log.Information($"[ACR] 自定义窗口已加载: {customWindows.Count()}个");
             }
         }
-        // 增量合并：QT / HK / ACR 自定义属性 — 只补新增，不覆盖用户已保存的值
+        // 增量合并：QT / HK — 只补新增，不覆盖用户已保存的值
         var needSave = false;
 
-        // 合并 QT 值和可见性
+        // 合并 QT 值和可见性（用注册时的 DefaultValue）
         var qtAll = ACR.QTHelper.GetAll();
         foreach (var qt in qtAll)
         {
             if (!loadedSettings.QtValues.ContainsKey(qt.Id))
             {
-                loadedSettings.QtValues[qt.Id] = qt.Value;
+                loadedSettings.QtValues[qt.Id] = qt.DefaultValue;
                 needSave = true;
             }
             if (!loadedSettings.QtVisible.ContainsKey(qt.Id))
@@ -412,13 +412,18 @@ public static class ACRLifecycle
             }
         }
 
-        // 合并 HK 可见性
+        // 合并 HK 可见性和绑定（用注册时的 DefaultKey）
         var hkAll = ACR.HotkeyHelper.GetAll();
         foreach (var hk in hkAll)
         {
             if (!loadedSettings.HkVisible.ContainsKey(hk.Id))
             {
                 loadedSettings.HkVisible[hk.Id] = true;
+                needSave = true;
+            }
+            if (!loadedSettings.HkBindings.ContainsKey(hk.Id))
+            {
+                loadedSettings.HkBindings[hk.Id] = hk.DefaultKey;
                 needSave = true;
             }
         }
