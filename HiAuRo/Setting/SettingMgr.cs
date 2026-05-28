@@ -170,62 +170,6 @@ public static class SettingMgr
     }
 
     /// <summary>
-    /// 将 UI 控件的默认值回填到 AcrSettings 中尚未有非默认值的属性
-    /// 仅新增属性时补值，不覆盖用户已保存的值
-    /// </summary>
-    /// <returns>是否有新增属性被填充</returns>
-    public static bool MergeDefaultsFromControls(
-        AcrSettings settings,
-        List<UiControlDef> controls)
-    {
-        if (settings == null || controls == null) return false;
-
-        var props = settings.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanWrite)
-            .ToArray();
-
-        var changed = false;
-        foreach (var ctrl in controls)
-        {
-            var prop = FindMatchingProperty(props, ctrl.Label);
-            if (prop == null) continue;
-
-            // 只处理 checkbox/slider/dropdown/intInput 等值类型控件
-            if (ctrl.Value == null) continue;
-
-            try
-            {
-                var currentVal = prop.GetValue(settings);
-                var defaultVal = Convert.ChangeType(ctrl.Value, prop.PropertyType);
-
-                // 判断当前值是否为类型的默认值（0, false, null, 空字符串等）
-                // 如果是，说明是 new T() 产生的、未被用户设置过的属性，用控件默认值填充
-                if (IsTypeDefault(currentVal, prop.PropertyType))
-                {
-                    prop.SetValue(settings, defaultVal);
-                    changed = true;
-                }
-            }
-            catch { /* 类型不兼容则跳过 */ }
-        }
-
-        return changed;
-    }
-
-    /// <summary>判断值是否为类型的默认值</summary>
-    private static bool IsTypeDefault(object? val, Type type)
-    {
-        if (val == null) return true;
-        if (type == typeof(bool)) return (bool)val == false;
-        if (type == typeof(int)) return (int)val == 0;
-        if (type == typeof(double)) return (double)val == 0.0;
-        if (type == typeof(float)) return (float)val == 0f;
-        if (type == typeof(long)) return (long)val == 0;
-        if (type == typeof(string)) return string.IsNullOrEmpty((string)val);
-        return false;
-    }
-
-    /// <summary>
     /// 按 label 匹配属性：精确匹配 → 去掉括号后缀匹配
     /// </summary>
     private static PropertyInfo? FindMatchingProperty(PropertyInfo[] props, string label)

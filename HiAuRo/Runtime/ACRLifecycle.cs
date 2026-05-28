@@ -423,10 +423,6 @@ public static class ACRLifecycle
             }
         }
 
-        // 合并 UI 控件对应的 ACR 自定义属性（新增控件用默认值填充）
-        if (controls != null)
-            needSave |= HiAuRo.Setting.SettingMgr.MergeDefaultsFromControls(loadedSettings, controls);
-
         if (needSave)
         {
             loadedSettings.Save();
