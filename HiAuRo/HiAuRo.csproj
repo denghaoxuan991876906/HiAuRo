@@ -11,6 +11,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>CS1591</NoWarn>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <UseLocalNuGetFeed Condition="'$(UseLocalNuGetFeed)' == ''">true</UseLocalNuGetFeed>
+    <LocalNuGetFeed Condition="'$(LocalNuGetFeed)' == ''">E:\DalamudPlugins\local-nuget-feed\</LocalNuGetFeed>
   </PropertyGroup>
 
   <!-- 编译时注入 Dev-时间戳 到 AssemblyInformationalVersion -->
@@ -18,6 +20,21 @@
     <PropertyGroup>
       <InformationalVersion>Dev-$([System.DateTime]::UtcNow.AddHours(8).ToString(yyyyMMdd-HHmm))</InformationalVersion>
     </PropertyGroup>
+  </Target>
+
+  <!-- 构建后自动打包 HiAuRo.Sdk.nupkg 到本地 NuGet 源（加速本地 ACR 测试） -->
+  <!-- 关闭：dotnet build -p:UseLocalNuGetFeed=false -->
+  <Target Name="PackSdkToLocalFeed" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true' And '$(UseLocalNuGetFeed)' == 'true'">
+    <PropertyGroup>
+      <PackArgs>$(ProjectDir)../HiAuRo.Sdk.nuspec $(OutputPath) $(LocalNuGetFeed)</PackArgs>
+      <PackArgs Condition="'$(DALAMUD_HOME)' != ''">$(ProjectDir)../HiAuRo.Sdk.nuspec $(OutputPath) $(DALAMUD_HOME) $(LocalNuGetFeed)</PackArgs>
+    </PropertyGroup>
+    <Exec Command="python $(ProjectDir)../tools/nuspec_pack.py $(PackArgs)"
+          IgnoreExitCode="true"
+          IgnoreStandardErrorWarningFormat="true">
+      <Output TaskParameter="ExitCode" PropertyName="PackExitCode" />
+    </Exec>
+    <Message Text="[HiAuRo] SDK 包已输出到本地 NuGet 源" Importance="high" Condition="'$(PackExitCode)' == '0'" />
   </Target>
 
   <ItemGroup>

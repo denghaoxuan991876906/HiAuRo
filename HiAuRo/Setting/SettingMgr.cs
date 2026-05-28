@@ -56,6 +56,56 @@ public static class SettingMgr
 
     #endregion
 
+    #region 主插件 / 副插件设置
+
+    /// <summary>主插件路径: {configDir}/setting/PluginConfig.json</summary>
+    public static string GetMainPath() => Path.Combine(ConfigDirectory, "setting", "PluginConfig.json");
+
+    /// <summary>副插件路径: {configDir}/setting/Plugin/{name}.json</summary>
+    public static string GetPluginPath(string name) => Path.Combine(ConfigDirectory, "setting", "Plugin", $"{name}.json");
+
+    /// <summary>读取主插件设置</summary>
+    public static T GetMainSetting<T>() where T : class, new()
+    {
+        var path = GetMainPath();
+        return Load<T>(path) ?? new T();
+    }
+
+    /// <summary>保存主插件设置</summary>
+    public static void SaveMainSetting<T>(T setting) where T : class
+    {
+        Save(GetMainPath(), setting);
+    }
+
+    /// <summary>读取副插件设置</summary>
+    public static T GetPluginSetting<T>(string name) where T : class, new()
+    {
+        var path = GetPluginPath(name);
+        return Load<T>(path) ?? new T();
+    }
+
+    /// <summary>保存副插件设置</summary>
+    public static void SavePluginSetting<T>(string name, T setting) where T : class
+    {
+        Save(GetPluginPath(name), setting);
+    }
+
+    /// <summary>通用保存入口：AcrSettings → ACR 路径，其他 → 主插件路径</summary>
+    public static void Save(SettingsBase setting)
+    {
+        if (setting is AcrSettings)
+        {
+            var author = HiAuRo.Runtime.ACRLifecycle.CurrentAuthor;
+            var jobId = HiAuRo.Runtime.ACRLifecycle.CurrentJobId;
+            if (!string.IsNullOrEmpty(author) && jobId != 0)
+                SaveAcrJobSetting(author, jobId, setting);
+            return;
+        }
+        Save(GetMainPath(), setting);
+    }
+
+    #endregion
+
     #region ACR 设置
 
     /// <summary>jobId → Jobs 枚举名（如 23 → "BRD"）</summary>

@@ -82,17 +82,24 @@ internal sealed class BrowsingwayIpc : IDisposable
             var url = ol.Url.Replace("localhost:5678", $"localhost:{_port}");
             DService.Instance().Framework.RunOnFrameworkThread(() =>
             {
-                DService.Instance().PI
-                    .GetIpcSubscriber<CreateOrUpdateArgs, object>("Browsingway.Overlay.CreateOrUpdate")
-                    .InvokeAction(new CreateOrUpdateArgs
-                    {
-                        Name = ol.Name,
-                        Url = url,
-                        Width = ol.Width,
-                        Height = ol.Height,
-                        Zoom = ol.Zoom,
-                        Locked = ol.Locked
-                    });
+                try
+                {
+                    DService.Instance().PI
+                        .GetIpcSubscriber<CreateOrUpdateArgs, object>("Browsingway.Overlay.CreateOrUpdate")
+                        .InvokeAction(new CreateOrUpdateArgs
+                        {
+                            Name = ol.Name,
+                            Url = url,
+                            Width = ol.Width,
+                            Height = ol.Height,
+                            Zoom = ol.Zoom,
+                            Locked = ol.Locked
+                        });
+                }
+                catch (Exception ex)
+                {
+                    DService.Instance().Log.Warning($"[BrowsingwayIpc] IPC CreateOrUpdate 不可用 ({ol.Name}): {ex.Message}");
+                }
             });
             if (ol.Visible)
                 SetOverlayVisible(ol.Name, true);
@@ -117,17 +124,24 @@ internal sealed class BrowsingwayIpc : IDisposable
             var url = cfg.Url.Replace("localhost:5678", $"localhost:{_port}");
             DService.Instance().Framework.RunOnFrameworkThread(() =>
             {
-                DService.Instance().PI
-                    .GetIpcSubscriber<CreateOrUpdateArgs, object>("Browsingway.Overlay.CreateOrUpdate")
-                    .InvokeAction(new CreateOrUpdateArgs
-                    {
-                        Name = name,
-                        Url = url,
-                        Width = width,
-                        Height = height,
-                        Zoom = cfg.Zoom,
-                        Locked = cfg.Locked
-                    });
+                try
+                {
+                    DService.Instance().PI
+                        .GetIpcSubscriber<CreateOrUpdateArgs, object>("Browsingway.Overlay.CreateOrUpdate")
+                        .InvokeAction(new CreateOrUpdateArgs
+                        {
+                            Name = name,
+                            Url = url,
+                            Width = width,
+                            Height = height,
+                            Zoom = cfg.Zoom,
+                            Locked = cfg.Locked
+                        });
+                }
+                catch (Exception ex)
+                {
+                    DService.Instance().Log.Warning($"[BrowsingwayIpc] IPC Resize 不可用 ({name}): {ex.Message}");
+                }
             });
             DService.Instance().Log.Debug($"[BrowsingwayIpc] Resize: {name} {width}x{height}");
         }
@@ -146,13 +160,20 @@ internal sealed class BrowsingwayIpc : IDisposable
         {
             DService.Instance().Framework.RunOnFrameworkThread(() =>
             {
-                DService.Instance().PI
-                    .GetIpcSubscriber<SetVisibilityArgs, object>("Browsingway.Overlay.SetVisibility")
-                    .InvokeAction(new SetVisibilityArgs
-                    {
-                        Name = name,
-                        Visible = visible
-                    });
+                try
+                {
+                    DService.Instance().PI
+                        .GetIpcSubscriber<SetVisibilityArgs, object>("Browsingway.Overlay.SetVisibility")
+                        .InvokeAction(new SetVisibilityArgs
+                        {
+                            Name = name,
+                            Visible = visible
+                        });
+                }
+                catch (Exception ex)
+                {
+                    DService.Instance().Log.Warning($"[BrowsingwayIpc] IPC SetVisibility 不可用 ({name}): {ex.Message}");
+                }
             });
             DService.Instance().Log.Debug($"[BrowsingwayIpc] SetVisibility: {name} = {visible}");
         }
@@ -191,9 +212,16 @@ internal sealed class BrowsingwayIpc : IDisposable
         {
             DService.Instance().Framework.RunOnFrameworkThread(() =>
             {
-                DService.Instance().PI
-                    .GetIpcSubscriber<SetDisabledArgs, object>("Browsingway.Overlay.SetDisabled")
-                    .InvokeAction(new SetDisabledArgs { Name = name, Disabled = disabled });
+                try
+                {
+                    DService.Instance().PI
+                        .GetIpcSubscriber<SetDisabledArgs, object>("Browsingway.Overlay.SetDisabled")
+                        .InvokeAction(new SetDisabledArgs { Name = name, Disabled = disabled });
+                }
+                catch (Exception ex)
+                {
+                    DService.Instance().Log.Warning($"[BrowsingwayIpc] IPC SetDisabled 不可用 ({name}): {ex.Message}");
+                }
             });
             DService.Instance().Log.Debug($"[BrowsingwayIpc] SetDisabled: {name} = {disabled}");
         }

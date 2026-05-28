@@ -6,9 +6,42 @@ HiAuRo is a FFXIV Dalamud **全栈战斗辅助框架** (.NET 10, Dalamud.NET.Sdk
 
 ## Build & Verify
 
+**所有构建必须在 Windows 环境中执行。** 当前终端运行在 WSL2 中，构建命令必须通过 `cmd.exe /c` 转发到 Windows：
+
 ```bash
-dotnet build HiAuRo.slnx -c Debug -nologo
+# HiAuRo 框架构建（构建后自动打包 HiAuRo.Sdk.nupkg 到本地 NuGet 源）
+cmd.exe /c "dotnet build E:\DalamudPlugins\HiAuRo\HiAuRo.slnx -c Debug -nologo"
+
+# MyACR 构建（从本地 NuGet 源恢复，秒级完成）
+cmd.exe /c "dotnet build E:\DalamudPlugins\MyACR\嗨呀\嗨呀.csproj -c Debug -nologo"
 ```
+
+**禁止在 WSL bash 中直接执行 `dotnet build`。** 所有 `dotnet` 命令必须经 `cmd.exe /c` 或 `powershell.exe -Command` 转发。`DALAMUD_HOME` 由 Windows 系统环境预配置，无需手动设置。
+
+（如 `cmd.exe` 未在 PATH 中，使用 `/mnt/c/Windows/System32/cmd.exe /c` 的完整路径。）
+
+### 本地 NuGet 源（加速 ACR 开发）
+
+HiAuRo 构建后自动将 `HiAuRo.Sdk.nupkg` 输出到 `E:\DalamudPlugins\local-nuget-feed\`（可通过 MSBuild 属性 `LocalNuGetFeed` 自定义）。MyACR 项目通过 `NuGet.Config` 优先从该本地源恢复，无需等待 nuget.org 更新。
+
+**开关**：`HiAuRo/HiAuRo.csproj` 中的 `<UseLocalNuGetFeed>` 属性控制是否启用本地打包。
+- `true`（默认）：构建后自动打包到本地源，ACR 秒级恢复
+- `false`：跳过本地打包，ACR 走 nuget.org
+
+也可通过命令行临时覆盖：`dotnet build ... -p:UseLocalNuGetFeed=false`
+
+必须的目录结构：
+```
+E:\DalamudPlugins\
+├── HiAuRo\              ← HiAuRo 框架（本仓库）
+├── MyACR\                ← ACR 项目
+│   └── NuGet.Config      ← 指向 ..\local-nuget-feed\ 的本地源
+└── local-nuget-feed\     ← 本地 NuGet 包存放（首次构建 HiAuRo 时自动创建）
+```
+
+**首次设置**：确保 `E:\DalamudPlugins\local-nuget-feed\` 目录存在（HiAuRo 构建时会自动创建）。
+
+**版本升级流程**：同时更新 `HiAuRo/HiAuRo.csproj` 的 `<Version>` 和 `HiAuRo.Sdk.nuspec` 的 `<version>`。MyACR 的 `HiAuRo.Sdk` 引用使用浮动版本 `0.1.*`，自动拉最新本地包，无需手动同步。
 
 
 ## Architecture Rules
