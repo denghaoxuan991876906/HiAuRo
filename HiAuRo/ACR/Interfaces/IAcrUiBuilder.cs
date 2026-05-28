@@ -5,10 +5,16 @@ namespace HiAuRo.ACR;
 /// </summary>
 public interface IAcrUiBuilder : IUiBuilder
 {
-    bool AddCheckbox(string label, ref bool value);
-    bool AddSlider(string label, float min, float max, ref float value);
-    bool AddDropdown(string label, string[] options, ref string value);
-    bool AddIntInput(string label, ref int value, int step = 1, int stepFast = 10);
-    bool AddFloatInput(string label, ref float value);
-    bool AddTextInput(string label, ref string value);
+    bool AddCheckbox(string label, ref bool value,
+        [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? expr = null);
+    bool AddSlider(string label, float min, float max, ref float value,
+        [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? expr = null);
+    bool AddDropdown(string label, string[] options, ref string value,
+        [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? expr = null);
+    bool AddIntInput(string label, ref int value, int step = 1, int stepFast = 10,
+        [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? expr = null);
+    bool AddFloatInput(string label, ref float value,
+        [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? expr = null);
+    bool AddTextInput(string label, ref string value,
+        [System.Runtime.CompilerServices.CallerArgumentExpression("value")] string? expr = null);
 }

@@ -1,6 +1,7 @@
 using HiAuRo.ACR;
 using System.Linq;
 using System.Numerics;
+using System.Reflection;
 using System.Text.Json;
 
 namespace HiAuRo.UI;
@@ -12,6 +13,9 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     private string _currentTab = string.Empty;
     private string _currentGroup = string.Empty;
 
+    /// <summary>Web 模式绑定：控件 ID → 字段名（从 CallerArgumentExpression 解析）</summary>
+    internal readonly Dictionary<string, string> Bindings = [];
+
     private string CurrentParent => string.IsNullOrEmpty(_currentGroup) ? _currentTab : _currentGroup;
 
     public UiBuilderImpl(bool isImGui) => _isImGui = isImGui;
@@ -21,6 +25,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     public void Clear()
     {
         _controls.Clear();
+        Bindings.Clear();
         _currentTab = string.Empty;
         _currentGroup = string.Empty;
     }
@@ -111,18 +116,18 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region 无 ref 值控件（IUiBuilder，Trigger 系统用）
 
-    public bool AddCheckbox(string label, bool value) => _isImGui ? false : AddCtrl(label, "checkbox", value);
-    public bool AddSlider(string label, float min, float max, float value) => _isImGui ? false : AddCtrl(label, "slider", value, Options: new { min, max });
-    public bool AddDropdown(string label, string[] options, string value) => _isImGui ? false : AddCtrl(label, "dropdown", value, Options: options);
-    public bool AddIntInput(string label, int value, int step = 1, int stepFast = 10) => _isImGui ? false : AddCtrl(label, "intInput", value, Meta: new { step, stepFast });
-    public bool AddFloatInput(string label, float value) => _isImGui ? false : AddCtrl(label, "floatInput", value);
-    public bool AddTextInput(string label, string value) => _isImGui ? false : AddCtrl(label, "textInput", value ?? "");
+    public bool AddCheckbox(string label, bool value) { if (!_isImGui) AddCtrl(label, "checkbox", value); return false; }
+    public bool AddSlider(string label, float min, float max, float value) { if (!_isImGui) AddCtrl(label, "slider", value, Options: new { min, max }); return false; }
+    public bool AddDropdown(string label, string[] options, string value) { if (!_isImGui) AddCtrl(label, "dropdown", value, Options: options); return false; }
+    public bool AddIntInput(string label, int value, int step = 1, int stepFast = 10) { if (!_isImGui) AddCtrl(label, "intInput", value, Meta: new { step, stepFast }); return false; }
+    public bool AddFloatInput(string label, float value) { if (!_isImGui) AddCtrl(label, "floatInput", value); return false; }
+    public bool AddTextInput(string label, string value) { if (!_isImGui) AddCtrl(label, "textInput", value ?? ""); return false; }
 
     #endregion
 
     #region ref 值控件（IAcrUiBuilder，ACR 作者用）—— ImGui 即时渲染，ref 直接读写字段
 
-    public bool AddCheckbox(string label, ref bool value)
+    public bool AddCheckbox(string label, ref bool value, string? expr = null)
     {
         if (_isImGui)
         {
@@ -130,10 +135,12 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
             if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
             return changed;
         }
-        return AddCtrl(label, "checkbox", value);
+        var id = AddCtrl(label, "checkbox", value);
+        StoreBinding(id, expr);
+        return false;
     }
 
-    public bool AddSlider(string label, float min, float max, ref float value)
+    public bool AddSlider(string label, float min, float max, ref float value, string? expr = null)
     {
         if (_isImGui)
         {
@@ -141,10 +148,12 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
             if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
             return changed;
         }
-        return AddCtrl(label, "slider", value, Options: new { min, max });
+        var id = AddCtrl(label, "slider", value, Options: new { min, max });
+        StoreBinding(id, expr);
+        return false;
     }
 
-    public bool AddDropdown(string label, string[] options, ref string value)
+    public bool AddDropdown(string label, string[] options, ref string value, string? expr = null)
     {
         if (_isImGui)
         {
@@ -154,10 +163,12 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
             if (changed) { value = options[idx]; Runtime.ACRLifecycle.MarkSettingsDirty(); }
             return changed;
         }
-        return AddCtrl(label, "dropdown", value, Options: options);
+        var id = AddCtrl(label, "dropdown", value, Options: options);
+        StoreBinding(id, expr);
+        return false;
     }
 
-    public bool AddIntInput(string label, ref int value, int step = 1, int stepFast = 10)
+    public bool AddIntInput(string label, ref int value, int step = 1, int stepFast = 10, string? expr = null)
     {
         if (_isImGui)
         {
@@ -165,10 +176,12 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
             if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
             return changed;
         }
-        return AddCtrl(label, "intInput", value, Meta: new { step, stepFast });
+        var id = AddCtrl(label, "intInput", value, Meta: new { step, stepFast });
+        StoreBinding(id, expr);
+        return false;
     }
 
-    public bool AddFloatInput(string label, ref float value)
+    public bool AddFloatInput(string label, ref float value, string? expr = null)
     {
         if (_isImGui)
         {
@@ -176,10 +189,12 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
             if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
             return changed;
         }
-        return AddCtrl(label, "floatInput", value);
+        var id = AddCtrl(label, "floatInput", value);
+        StoreBinding(id, expr);
+        return false;
     }
 
-    public bool AddTextInput(string label, ref string value)
+    public bool AddTextInput(string label, ref string value, string? expr = null)
     {
         if (_isImGui)
         {
@@ -187,7 +202,9 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
             if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
             return changed;
         }
-        return AddCtrl(label, "textInput", value ?? "");
+        var id = AddCtrl(label, "textInput", value ?? "");
+        StoreBinding(id, expr);
+        return false;
     }
 
     #endregion
@@ -238,10 +255,39 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region 内部
 
-    private bool AddCtrl(string label, string type, object? value, object? Options = null, object? Meta = null)
+    private string AddCtrl(string label, string type, object? value, object? Options = null, object? Meta = null)
     {
-        _controls.Add(new UiControlDef("ctrl_" + label, type, CurrentParent, label, value, Options, Meta));
-        return false;
+        var id = "ctrl_" + label + Guid.NewGuid().ToString("N")[..8];
+        _controls.Add(new UiControlDef(id, type, CurrentParent, label, value, Options, Meta));
+        return id;
+    }
+
+    /// <summary>从 CallerArgumentExpression 解析字段名并存储绑定</summary>
+    private void StoreBinding(string id, string? expr)
+    {
+        if (string.IsNullOrEmpty(expr)) return;
+        // expr 如 "BLM_Setting.Instance.test1" → 取最后一段 "test1" 作为字段名
+        var dot = expr.LastIndexOf('.');
+        if (dot >= 0)
+            Bindings[id] = expr[(dot + 1)..];
+        else
+            Bindings[id] = expr;
+    }
+
+    /// <summary>Web 模式写回：根据控件 ID 找到绑定字段，反射写入 settings</summary>
+    public static void WriteBack(UiBuilderImpl builder, string controlId, object rawValue)
+    {
+        if (!builder.Bindings.TryGetValue(controlId, out var fieldName)) return;
+        var settings = Runtime.ACRLifecycle.GetCurrentSettings();
+        if (settings == null) return;
+        var field = settings.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.Instance);
+        if (field == null) return;
+        try
+        {
+            field.SetValue(settings, Convert.ChangeType(rawValue, field.FieldType));
+            Runtime.ACRLifecycle.MarkSettingsDirty();
+        }
+        catch { }
     }
 
     #endregion

@@ -269,8 +269,29 @@ public partial class Plugin : IDalamudPlugin
             _ = SendPauseState();
         });
 
-        bridge.On("saveACR", _ =>
+        bridge.On("saveACR", data =>
         {
+            // Web 模式：接收前端控件值 → 通过绑定写回 settings 字段
+            if (data != null && HiAuRo.Runtime.ACRLifecycle.UiBuilder != null)
+            {
+                try
+                {
+                    foreach (var prop in data.Value.EnumerateObject())
+                    {
+                        var val = prop.Value;
+                        object raw = val.ValueKind switch
+                        {
+                            System.Text.Json.JsonValueKind.True => true,
+                            System.Text.Json.JsonValueKind.False => false,
+                            System.Text.Json.JsonValueKind.Number => val.GetDouble(),
+                            _ => val.GetString() ?? ""
+                        };
+                        HiAuRo.UI.UiBuilderImpl.WriteBack(
+                            HiAuRo.Runtime.ACRLifecycle.UiBuilder, prop.Name, raw);
+                    }
+                }
+                catch (Exception ex) { DService.Instance().Log.Warning($"[UI] saveACR 写回失败: {ex.Message}"); }
+            }
             HiAuRo.ACR.MainControlHelper.Save();
         });
 
