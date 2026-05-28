@@ -126,7 +126,8 @@ public static class SettingMgr
         try
         {
             var json = File.ReadAllText(path);
-            return System.Text.Json.JsonSerializer.Deserialize<T>(json);
+            return System.Text.Json.JsonSerializer.Deserialize<T>(json,
+                new System.Text.Json.JsonSerializerOptions { IncludeFields = true });
         }
         catch (Exception ex)
         {
