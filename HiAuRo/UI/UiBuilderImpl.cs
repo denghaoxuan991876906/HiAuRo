@@ -1,81 +1,95 @@
 using HiAuRo.ACR;
 using System.Linq;
+using System.Reflection;
 
 namespace HiAuRo.UI;
 
 /// <summary>
-/// IUiBuilder 实现 —— 收集控件定义为 UiControlDef 列表
-/// 注册阶段返回 false；值控件通过 ImGui 渲染器自动检测变更并持久化
+/// IUiBuilder / IAcrUiBuilder 实现
+/// - ImGui 模式 (_isImGui=true): 值控件即时渲染 ImGui 控件，ref 直接读写字段
+/// - Web 模式 (_isImGui=false): 收集控件定义，发送到前端
 /// </summary>
-public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
+public sealed class UiBuilderImpl : IAcrUiBuilder
 {
+    private readonly bool _isImGui;
     private readonly List<UiControlDef> _controls = [];
     private string _currentTab = string.Empty;
     private string _currentGroup = string.Empty;
 
     private string CurrentParent => string.IsNullOrEmpty(_currentGroup) ? _currentTab : _currentGroup;
 
-    /// <summary>获取收集到的所有控件定义</summary>
+    public UiBuilderImpl(bool isImGui) => _isImGui = isImGui;
+    public UiBuilderImpl() : this(false) { } // 默认 Web 模式，向后兼容
     public List<UiControlDef> GetControls() => [.. _controls];
 
-    /// <summary>添加标签页</summary>
-    public void AddTab(string title)
+    /// <summary>清空控件列表（ImGui 模式下每帧调用前重置）</summary>
+    public void Clear()
     {
-        EndTab();
-        string shortId = "tab_" + title;
-        _currentTab = shortId;
-        _currentGroup = string.Empty;
-        _controls.Add(new UiControlDef(shortId, "tab", null, title, null));
-    }
-
-    /// <summary>结束当前标签页</summary>
-    public void EndTab()
-    {
+        _controls.Clear();
         _currentTab = string.Empty;
         _currentGroup = string.Empty;
     }
 
-    /// <summary>添加分组</summary>
-    public void AddGroup(string title)
+    #region 结构
+
+    public void AddTab(string title)
     {
-        string shortId = "grp_" + title;
-        _currentGroup = shortId;
-        _controls.Add(new UiControlDef(shortId, "group", _currentTab, title, null));
+        EndTab();
+        _currentTab = "tab_" + title;
+        _currentGroup = string.Empty;
+        _controls.Add(new UiControlDef(_currentTab, "tab", null, title, null));
     }
 
-    /// <summary>添加分隔线</summary>
+    public void EndTab() { _currentTab = string.Empty; _currentGroup = string.Empty; }
+
+    public void AddGroup(string title)
+    {
+        _currentGroup = "grp_" + title;
+        _controls.Add(new UiControlDef(_currentGroup, "group", _currentTab, title, null));
+    }
+
     public void AddSeparator() =>
         _controls.Add(new UiControlDef("__sep__", "separator", CurrentParent, string.Empty, null));
 
-    /// <summary>添加同行标记</summary>
     public void AddSameLine() =>
         _controls.Add(new UiControlDef("__sameline__", "sameLine", CurrentParent, string.Empty, null));
 
-    /// <summary>添加复选框</summary>
-    public bool AddCheckbox(string label, bool value) =>
-        AddValueControl(label, "checkbox", value);
+    public void AddMainControl(bool showPause = true, bool showSave = true) =>
+        _controls.Add(new UiControlDef("__main__", "mainControl", null, string.Empty, true,
+            Meta: new { showPause, showSave }));
 
-    /// <summary>添加滑块</summary>
-    public bool AddSlider(string label, float min, float max, float value) =>
-        AddValueControl(label, "slider", value, Options: new { min, max });
+    public void AddLabel(string text) =>
+        _controls.Add(new UiControlDef("lbl_" + text, "label", CurrentParent, text, null));
 
-    /// <summary>添加下拉框</summary>
-    public bool AddDropdown(string label, string[] options, string value) =>
-        AddValueControl(label, "dropdown", value, Options: options);
+    public void AddTooltip(string targetId, string tooltip) =>
+        _controls.Add(new UiControlDef($"__tip__{targetId}", "tooltip", CurrentParent, string.Empty, tooltip));
 
-    /// <summary>添加整数输入</summary>
-    public bool AddIntInput(string label, int value, int step = 1, int stepFast = 10) =>
-        AddValueControl(label, "intInput", value, Meta: new { step, stepFast });
+    #endregion
 
-    /// <summary>添加浮点数输入</summary>
-    public bool AddFloatInput(string label, float value) =>
-        AddValueControl(label, "floatInput", value);
+    #region 无 ref 值控件（IUiBuilder，Trigger 系统用）
 
-    /// <summary>添加文本输入</summary>
-    public bool AddTextInput(string label, string value) =>
-        AddValueControl(label, "textInput", value ?? "");
+    public bool AddCheckbox(string label, bool value) => AddCtrl(label, "checkbox", value);
+    public bool AddSlider(string label, float min, float max, float value) => AddCtrl(label, "slider", value, Options: new { min, max });
+    public bool AddDropdown(string label, string[] options, string value) => AddCtrl(label, "dropdown", value, Options: options);
+    public bool AddIntInput(string label, int value, int step = 1, int stepFast = 10) => AddCtrl(label, "intInput", value, Meta: new { step, stepFast });
+    public bool AddFloatInput(string label, float value) => AddCtrl(label, "floatInput", value);
+    public bool AddTextInput(string label, string value) => AddCtrl(label, "textInput", value ?? "");
 
-    /// <summary>添加 QT 开关（ID 使用稳定标识，确保跨会话持久化 key 一致）</summary>
+    #endregion
+
+    #region ref 值控件（IAcrUiBuilder，ACR 作者用）
+
+    public bool AddCheckbox(string label, ref bool value) => AddBoundCtrl(label, "checkbox", value);
+    public bool AddSlider(string label, float min, float max, ref float value) => AddBoundCtrl(label, "slider", value, Options: new { min, max });
+    public bool AddDropdown(string label, string[] options, ref string value) => AddBoundCtrl(label, "dropdown", value, Options: options);
+    public bool AddIntInput(string label, ref int value, int step = 1, int stepFast = 10) => AddBoundCtrl(label, "intInput", value, Meta: new { step, stepFast });
+    public bool AddFloatInput(string label, ref float value) => AddBoundCtrl(label, "floatInput", value);
+    public bool AddTextInput(string label, ref string value) => AddBoundCtrl(label, "textInput", value ?? "");
+
+    #endregion
+
+    #region QT / 热键
+
     public bool AddQtToggle(string label, bool value, string? tooltip = null, string? color = null, bool defaultVisible = true)
     {
         var id = "qt_" + label;
@@ -85,15 +99,6 @@ public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
         return false;
     }
 
-    /// <summary>添加文本标签</summary>
-    public void AddLabel(string text) =>
-        _controls.Add(new UiControlDef("lbl_" + text, "label", CurrentParent, text, null));
-
-    /// <summary>添加工具提示</summary>
-    public void AddTooltip(string targetId, string tooltip) =>
-        _controls.Add(new UiControlDef($"__tip__{targetId}", "tooltip", CurrentParent, string.Empty, tooltip));
-
-    /// <summary>添加 QT 热键</summary>
     public void AddQtHotkey(string label, IHotkeyResolver resolver, bool defaultVisible = true)
     {
         HotkeyHelper.Register(resolver);
@@ -101,21 +106,19 @@ public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
             Meta: new { defaultVisible }));
     }
 
-    /// <summary>添加热键行</summary>
     public void AddHotkeyRow(IHotkeyResolver[] hotkeyIds)
     {
         for (int i = 0; i < hotkeyIds.Length; i++)
         {
-            var resolver = hotkeyIds[i];
-            HotkeyHelper.Register(resolver);
-            _controls.Add(new UiControlDef(resolver.Id, "qthotkey", CurrentParent, resolver.Label, resolver.DefaultKey,
+            var r = hotkeyIds[i];
+            HotkeyHelper.Register(r);
+            _controls.Add(new UiControlDef(r.Id, "qthotkey", CurrentParent, r.Label, r.DefaultKey,
                 Meta: new { defaultVisible = true }));
             if (i < hotkeyIds.Length - 1)
                 _controls.Add(new UiControlDef("__sameline__", "sameLine", CurrentParent, string.Empty, null));
         }
     }
 
-    /// <summary>添加内置 QT 开关</summary>
     public void AddBuiltinQt(BuiltinQt type, bool? value = null)
     {
         var id = type.GetId();
@@ -127,16 +130,23 @@ public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
             Meta: new { defaultVisible = true }));
     }
 
-    /// <summary>添加主控制区</summary>
-    public void AddMainControl(bool showPause = true, bool showSave = true) =>
-        _controls.Add(new UiControlDef("__main__", "mainControl", null, string.Empty, true,
-            Meta: new { showPause, showSave }));
+    #endregion
 
-    /// <summary>通用值控件注册（注册阶段返回 false，变更由渲染器检测）</summary>
-    private bool AddValueControl(string label, string type, object? value, object? Options = null, object? Meta = null)
+    #region 内部
+
+    private bool AddCtrl(string label, string type, object? value, object? Options = null, object? Meta = null)
     {
-        var id = "ctrl_" + label;
-        _controls.Add(new UiControlDef(id, type, CurrentParent, label, value, Options, Meta));
+        _controls.Add(new UiControlDef("ctrl_" + label, type, CurrentParent, label, value, Options, Meta));
         return false;
     }
+
+    private bool AddBoundCtrl<T>(string label, string type, T value, object? Options = null, object? Meta = null)
+    {
+        // ImGui 模式：即时渲染在 Task 3 实现
+        // 当前先收集定义
+        _controls.Add(new UiControlDef("ctrl_" + label, type, CurrentParent, label, value, Options, Meta));
+        return false;
+    }
+
+    #endregion
 }

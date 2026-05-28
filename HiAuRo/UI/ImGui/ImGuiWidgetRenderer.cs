@@ -216,10 +216,6 @@ public static class ImGuiWidgetRenderer
 
     private static void SaveSettings()
     {
-        var settings = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
-        if (settings == null) return;
-        SettingMgr.SyncSettingsFromControls(
-            settings, ImGuiOverlayState.ControlValues, ImGuiOverlayState.Controls);
         HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
     }
 }

@@ -222,8 +222,6 @@ public static class ACRLifecycle
                     providerInterface.GetProperty("Settings")?.SetValue(entry, acrSettings);
                     if (acrSettings is AcrSettings acr)
                     {
-                        acr._author = entry.AuthorName;
-                        acr._jobId = CurrentJobId;
                         loadedSettings = acr;
                     }
                     lock (_settingsLock)
@@ -252,8 +250,6 @@ public static class ACRLifecycle
         if (loadedSettings == null)
         {
             loadedSettings = HiAuRo.Setting.SettingMgr.GetAcrJobSetting<DefaultAcrSettings>(entry.AuthorName, CurrentJobId);
-            loadedSettings._author = entry.AuthorName;
-            loadedSettings._jobId = CurrentJobId;
             _defaultSettings = loadedSettings;
         }
 

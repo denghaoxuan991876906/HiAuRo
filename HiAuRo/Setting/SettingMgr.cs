@@ -110,86 +110,6 @@ public static class SettingMgr
         Save(path, setting);
     }
 
-    /// <summary>
-    /// 将 AcrSettings 的 public 属性值同步到 ControlValues
-    /// </summary>
-    public static void SyncControlsFromSettings(
-        AcrSettings settings,
-        Dictionary<string, object> controlValues,
-        List<UiControlDef> controls)
-    {
-        if (settings == null || controlValues == null || controls == null) return;
-
-        var props = settings.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead)
-            .ToArray();
-
-        foreach (var ctrl in controls)
-        {
-            var prop = FindMatchingProperty(props, ctrl.Label);
-            if (prop == null) continue;
-
-            try
-            {
-                var val = prop.GetValue(settings);
-                if (val != null)
-                    controlValues[ctrl.Id] = val;
-            }
-            catch { /* 类型不兼容则跳过 */ }
-        }
-    }
-
-    /// <summary>
-    /// 将 ControlValues 写回 AcrSettings 的 public 属性（label→属性名匹配）
-    /// </summary>
-    public static void SyncSettingsFromControls(
-        AcrSettings settings,
-        Dictionary<string, object> controlValues,
-        List<UiControlDef> controls)
-    {
-        if (settings == null || controlValues == null || controls == null) return;
-
-        var props = settings.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanWrite)
-            .ToArray();
-
-        foreach (var ctrl in controls)
-        {
-            if (!controlValues.TryGetValue(ctrl.Id, out var val)) continue;
-
-            var prop = FindMatchingProperty(props, ctrl.Label);
-            if (prop == null) continue;
-
-            try
-            {
-                var converted = Convert.ChangeType(val, prop.PropertyType);
-                prop.SetValue(settings, converted);
-            }
-            catch { /* 类型不兼容则跳过 */ }
-        }
-    }
-
-    /// <summary>
-    /// 按 label 匹配属性：精确匹配 → 去掉括号后缀匹配
-    /// </summary>
-    private static PropertyInfo? FindMatchingProperty(PropertyInfo[] props, string label)
-    {
-        // 1. 精确匹配
-        var exact = props.FirstOrDefault(p => p.Name == label);
-        if (exact != null) return exact;
-
-        // 2. 去掉 label 末尾括号后缀（如 "续红斩时间阈值(s)" → "续红斩时间阈值"）
-        var parenIdx = label.LastIndexOf('(');
-        if (parenIdx > 0)
-        {
-            var stripped = label[..parenIdx];
-            var match = props.FirstOrDefault(p => p.Name == stripped);
-            if (match != null) return match;
-        }
-
-        return null;
-    }
-
     #endregion
 
     #region 底层持久化
@@ -223,11 +143,13 @@ public static class SettingMgr
             if (dir != null && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            // 用运行时类型序列化，确保子类属性也被写入；Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping 避免中文被转义
+            // 用运行时类型序列化，确保子类字段/属性都被写入
+            // IncludeFields 支持 ACR 作者使用字段（ref 要求字段而非属性）
             var json = System.Text.Json.JsonSerializer.Serialize(setting, setting.GetType(),
                 new System.Text.Json.JsonSerializerOptions
                 {
                     WriteIndented = true,
+                    IncludeFields = true,
                     Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
                 });
             File.WriteAllText(path, json);
