@@ -396,7 +396,8 @@ public static class ACRLifecycle
         // 增量合并：QT / HK — 只补新增，不覆盖用户已保存的值
         var needSave = false;
 
-        // 合并 QT 值和可见性（用注册时的 DefaultValue）
+        // 从 UI 控件定义中提取 QT/HK 的 defaultVisible 和 defaultValue
+        // 合并 QT 值和可见性（用注册时的 DefaultValue 和 defaultVisible）
         var qtAll = ACR.QTHelper.GetAll();
         foreach (var qt in qtAll)
         {
@@ -407,18 +408,21 @@ public static class ACRLifecycle
             }
             if (!loadedSettings.QtVisible.ContainsKey(qt.Id))
             {
-                loadedSettings.QtVisible[qt.Id] = true;
+                // 从控件定义的 Meta 中读取 defaultVisible
+                var vis = GetControlDefaultVisible(qt.Id, controls);
+                loadedSettings.QtVisible[qt.Id] = vis;
                 needSave = true;
             }
         }
 
-        // 合并 HK 可见性和绑定（用注册时的 DefaultKey）
+        // 合并 HK 可见性和绑定（用注册时的 DefaultKey 和 defaultVisible）
         var hkAll = ACR.HotkeyHelper.GetAll();
         foreach (var hk in hkAll)
         {
             if (!loadedSettings.HkVisible.ContainsKey(hk.Id))
             {
-                loadedSettings.HkVisible[hk.Id] = true;
+                var vis = GetControlDefaultVisible(hk.Id, controls);
+                loadedSettings.HkVisible[hk.Id] = vis;
                 needSave = true;
             }
             if (!loadedSettings.HkBindings.ContainsKey(hk.Id))
@@ -517,4 +521,21 @@ public static class ACRLifecycle
     }
 
     private static string GetProviderKey(string author, uint jobId) => $"{author}_{jobId}";
+
+    /// <summary>从 UI 控件定义的 Meta 中提取 defaultVisible（未找到则默认 true）</summary>
+    private static bool GetControlDefaultVisible(string id, List<HiAuRo.UI.UiControlDef>? controls)
+    {
+        if (controls == null) return true;
+        var ctrl = controls.FirstOrDefault(c => c.Id == id);
+        if (ctrl?.Meta == null) return true;
+        try
+        {
+            var metaType = ctrl.Meta.GetType();
+            var prop = metaType.GetProperty("defaultVisible");
+            if (prop != null)
+                return (bool?)prop.GetValue(ctrl.Meta) ?? true;
+        }
+        catch { }
+        return true;
+    }
 }
