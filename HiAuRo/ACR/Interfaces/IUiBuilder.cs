@@ -2,45 +2,31 @@ namespace HiAuRo.ACR;
 
 /// <summary>
 /// 描述性 UI 控件注册接口 —— C# 描述 UI，HiAuRo 转为 UiControlDef 供 Web / ImGui 双模式渲染
-/// label 自动作为控件 id，无需手动指定
+/// 值控件返回 true 表示当帧值有变化，ACR 作者可据此触发保存
 /// </summary>
 public interface IUiBuilder
 {
     // === 结构 ===
-    void AddTab( string title);
+    void AddTab(string title);
     void EndTab();
     void AddGroup(string title);
     void AddSeparator();
     void AddSameLine();
     void AddMainControl(bool showPause = true, bool showSave = true);
 
-    // === 控件（带 id） ===
-    void AddCheckbox(string label, bool defaultValue);
-    void AddSlider( string label, float min, float max, float defaultValue);
-    void AddDropdown(string label, string[] options, string defaultValue);
-    void AddIntInput(string label, int defaultValue, int step = 1, int stepFast = 10);
-    void AddFloatInput(string label, float defaultValue);
-    void AddTextInput(string label, string defaultValue);
+    // === 值控件：返回 true 表示值有变化 ===
+    bool AddCheckbox(string label, bool value);
+    bool AddSlider(string label, float min, float max, float value);
+    bool AddDropdown(string label, string[] options, string value);
+    bool AddIntInput(string label, int value, int step = 1, int stepFast = 10);
+    bool AddFloatInput(string label, float value);
+    bool AddTextInput(string label, string value);
+    bool AddQtToggle(string label, bool value, string? tooltip = null, string? color = null, bool defaultVisible = true);
     void AddLabel(string text);
-    void AddQtToggle(string label, bool defaultValue, string? tooltip = null, string? color = null, bool defaultVisible = true);
 
-    /*// === 控件（自动 id=label） ===
-    void AddCheckbox(string label, bool defaultValue) =>
-        AddCheckbox(label, label, defaultValue);
-    void AddSlider(string label, float min, float max, float defaultValue) =>
-        AddSlider(label, label, min, max, defaultValue);
-    void AddDropdown(string label, string[] options, string defaultValue) =>
-        AddDropdown(label, label, options, defaultValue);
-    void AddHotkey(string label, string defaultKey, bool defaultVisible = true) =>
-        AddHotkey(label, label, defaultKey, defaultVisible);
-    void AddIntInput(string label, int defaultValue, int step = 1, int stepFast = 10) =>
-        AddIntInput(label, label, defaultValue, step, stepFast);
-    void AddQtToggle(string label, bool defaultValue, string? tooltip = null, string? color = null, bool defaultVisible = true) =>
-        AddQtToggle(label, label, defaultValue, tooltip, color, defaultVisible);*/
-
-    // === QT / 热键（无 id，label 即标识） ===
+    // === QT / 热键 ===
     void AddQtHotkey(string label, IHotkeyResolver resolver, bool defaultVisible = true);
     void AddTooltip(string targetId, string tooltip);
     void AddHotkeyRow(IHotkeyResolver[] hotkeyIds);
-    void AddBuiltinQt(BuiltinQt type, bool? defaultValue = null);
+    void AddBuiltinQt(BuiltinQt type, bool? value = null);
 }

@@ -295,10 +295,6 @@ public static class ACRLifecycle
             }
             ImGuiOverlayState.UpdateControls(controls);
 
-            // 从已加载的 AcrSettings 填充 UI 控件初始值
-            HiAuRo.Setting.SettingMgr.SyncControlsFromSettings(
-                loadedSettings, ImGuiOverlayState.ControlValues, controls);
-
             DService.Instance().Log.Information("[ACR] controls 消息已发送 + 已缓存");
         }
         else
