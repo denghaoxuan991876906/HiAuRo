@@ -74,10 +74,10 @@ public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
             Meta: new { defaultVisible }));
     }
 
-    /// <summary>添加 QT 开关</summary>
+    /// <summary>添加 QT 开关（ID 使用 label，确保跨会话稳定，作为 QtValues/QtVisible 的持久化 key）</summary>
     public void AddQtToggle(string label, bool defaultValue, string? tooltip = null, string? color = null, bool defaultVisible = true)
     {
-        var id = label + Guid.NewGuid().ToString("N")[0..8];
+        var id = "qt_" + label;
         QTHelper.Register(id, label, defaultValue, tooltip, color);
         _controls.Add(new UiControlDef(id, "qttoggle", CurrentParent, label, defaultValue,
             Meta: new { tooltip, color, defaultVisible }));
