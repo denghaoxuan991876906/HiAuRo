@@ -168,7 +168,10 @@ public sealed class OverlayStatusBar : OverlayBase
         var cols = settings.QtCols;
         if (cols <= 0) cols = 4;
         if (ComponentLibrary.SliderInt("__qtcols", "每行列数", ref cols, 1, 10))
+        {
             settings.QtCols = cols;
+            HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
+        }
 
         ImGui.Spacing();
         ComponentLibrary.Label("可见性");
@@ -178,7 +181,10 @@ public sealed class OverlayStatusBar : OverlayBase
         {
             var vis = settings.QtVisible.GetValueOrDefault(qt.Id, true);
             if (ImGui.Checkbox(qt.Label, ref vis))
+            {
                 settings.QtVisible[qt.Id] = vis;
+                HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
+            }
         }
     }
 
@@ -189,12 +195,18 @@ public sealed class OverlayStatusBar : OverlayBase
         var cols = settings.HkCols;
         if (cols <= 0) cols = 5;
         if (ComponentLibrary.SliderInt("__hkcols", "每行列数", ref cols, 1, 10))
+        {
             settings.HkCols = cols;
+            HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
+        }
 
         var btnSize = settings.HkBtnSize > 0 ? settings.HkBtnSize : 50;
         var btnSz = (int)btnSize;
         if (ComponentLibrary.SliderInt("__hkbtnsz", "按钮大小(px)", ref btnSz, 28, 80))
+        {
             settings.HkBtnSize = btnSz;
+            HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
+        }
 
         ImGui.Spacing();
         ComponentLibrary.Label("可见性");
@@ -204,7 +216,10 @@ public sealed class OverlayStatusBar : OverlayBase
         {
             var vis = settings.HkVisible.GetValueOrDefault(hk.Id, true);
             if (ImGui.Checkbox(hk.Label, ref vis))
+            {
                 settings.HkVisible[hk.Id] = vis;
+                HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
+            }
         }
     }
 
