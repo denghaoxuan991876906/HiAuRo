@@ -223,8 +223,13 @@ public static class SettingMgr
             if (dir != null && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
 
-            // 用运行时类型序列化，确保子类属性也被写入（如 BLM_Setting 的自定义属性）
-            var json = System.Text.Json.JsonSerializer.Serialize(setting, setting.GetType(), new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            // 用运行时类型序列化，确保子类属性也被写入；Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping 避免中文被转义
+            var json = System.Text.Json.JsonSerializer.Serialize(setting, setting.GetType(),
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                });
             File.WriteAllText(path, json);
         }
         catch (Exception ex)
