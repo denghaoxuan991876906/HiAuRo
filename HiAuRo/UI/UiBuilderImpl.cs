@@ -32,8 +32,6 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region 结构
 
-    private int _tabBarId;
-
     public void AddTab(string title)
     {
         EndTab();
@@ -41,7 +39,6 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
         _currentGroup = string.Empty;
         if (_isImGui)
         {
-            if (_tabBarId == 0) { _tabBarId = 1; ImGui.BeginTabBar("##acr_tab_bar"); }
             ImGui.BeginTabItem(title);
         }
         else
@@ -58,13 +55,12 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
         _currentGroup = string.Empty;
     }
 
-    /// <summary>关闭 tab bar（ImGui 模式下在 RegisterControls 结束时调用）</summary>
+    /// <summary>结束 tab bar（ImGui 模式，由调用方管理 tab bar 时调用）</summary>
     public void Finish()
     {
-        if (_isImGui && _tabBarId > 0)
+        if (_isImGui)
         {
-            ImGui.EndTabBar();
-            _tabBarId = 0;
+            EndTab();
         }
     }
 
