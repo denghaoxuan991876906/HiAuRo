@@ -313,17 +313,26 @@ public partial class Plugin : IDalamudPlugin
             DService.Instance().Log.Debug($"[UI] saveUiSettings 收到: {json.Length} 字节");
             try
             {
-                var s = System.Text.Json.JsonSerializer.Deserialize<HiAuRo.ACR.UiSettings>(json,
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (s != null)
+                var settings = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
+                if (settings != null)
                 {
-                    DService.Instance().Log.Debug($"[UI] 反序列化成功 qtCols={s.QtCols} hkCols={s.HkCols}");
-                    HiAuRo.Setting.SettingMgr.SaveAcrUiSettings(
-                        HiAuRo.Runtime.ACRLifecycle.CurrentAuthor,
-                        HiAuRo.Runtime.ACRLifecycle.CurrentJobId, s);
-                    _ = SendUiSettings(s);
+                    using var doc = System.Text.Json.JsonDocument.Parse(json);
+                    var root = doc.RootElement;
+
+                    if (root.TryGetProperty("qtCols", out var qtCols)) settings.QtCols = qtCols.GetInt32();
+                    if (root.TryGetProperty("qtBtnW", out var qtBtnW)) settings.QtBtnW = qtBtnW.GetInt32();
+                    if (root.TryGetProperty("qtVisible", out var qtVis))
+                        settings.QtVisible = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, bool>>(qtVis.GetRawText()) ?? [];
+                    if (root.TryGetProperty("hkCols", out var hkCols)) settings.HkCols = hkCols.GetInt32();
+                    if (root.TryGetProperty("hkBtnSize", out var hkBtnSize)) settings.HkBtnSize = hkBtnSize.GetInt32();
+                    if (root.TryGetProperty("hkVisible", out var hkVis))
+                        settings.HkVisible = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, bool>>(hkVis.GetRawText()) ?? [];
+                    if (root.TryGetProperty("hkBindings", out var hkBind))
+                        settings.HkBindings = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(hkBind.GetRawText()) ?? [];
+
+                    settings.Save();
+                    _ = SendUiSettings(settings);
                 }
-                else { DService.Instance().Log.Debug("[UI] 反序列化结果为 null"); }
             }
             catch (Exception ex) { DService.Instance().Log.Error($"[UI] saveUiSettings 异常: {ex}"); }
         });
@@ -382,7 +391,7 @@ public partial class Plugin : IDalamudPlugin
         });
     }
 
-    private static async Task SendUiSettings(HiAuRo.ACR.UiSettings s)
+    private static async Task SendUiSettings(HiAuRo.ACR.AcrSettings s)
     {
         if (!IsWebUI) return;
         await Instance._uiBridge!.SendAsync(new

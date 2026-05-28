@@ -382,14 +382,23 @@ public static class ComponentLibrary
         return ImGui.Checkbox($"##{id}", ref value);
     }
 
-    /// <summary>带标签的开关控件</summary>
-    public static bool Switch(string id, string label, ref bool value)
+    /// <summary>带标签的开关控件（labelFirst=true 标签在左，false 标签在右）</summary>
+    public static bool Switch(string id, string label, ref bool value, bool labelFirst = true)
     {
-        ImGui.AlignTextToFramePadding();
-        ImGui.TextColored(Theme.Colors.TextPrimary, label);
-        ImGui.SameLine();
-        ImGui.SetCursorPosX(ImGui.GetContentRegionMax().X - 44);
-        return Switch(id, ref value);
+        if (labelFirst)
+        {
+            ImGui.AlignTextToFramePadding();
+            ImGui.TextColored(Theme.Colors.TextPrimary, label);
+            ImGui.SameLine();
+            return Switch(id, ref value);
+        }
+        else
+        {
+            var changed = Switch(id, ref value);
+            ImGui.SameLine();
+            ImGui.TextColored(Theme.Colors.TextPrimary, label);
+            return changed;
+        }
     }
 
     // ═══════════════════════════════════════════════════
@@ -567,22 +576,31 @@ public static class ComponentLibrary
     // 数字输入
     // ═══════════════════════════════════════════════════
 
-    /// <summary>数字输入框</summary>
-    public static bool InputNumber(string id, string label, ref int value, int step = 1, int stepFast = 10)
+    /// <summary>数字输入框（labelFirst=true 标签在左，false 标签在右）</summary>
+    public static bool InputNumber(string id, string label, ref int value, int step = 1, int stepFast = 10, bool labelFirst = true)
     {
-        var avail = ImGui.GetContentRegionAvail().X;
-        var labelWidth = ImGui.CalcTextSize(label).X + 4;
-        var inputWidth = Math.Max(avail - labelWidth - 8, 60);
+        var inputWidth = 120f;
 
         using var c = new ImRaii.ColorDisposable();
         c.Push(ImGuiCol.FrameBg, Theme.Colors.FillSecondary);
         using var v = new ImRaii.StyleDisposable();
         v.Push(ImGuiStyleVar.FrameRounding, Theme.RadiusSM);
-        ImGui.SetNextItemWidth(inputWidth);
-        var changed = ImGui.InputInt($"##{id}", ref value, step, stepFast);
-        ImGui.SameLine();
-        ImGui.TextColored(Theme.Colors.TextPrimary, label);
-        return changed;
+
+        if (labelFirst)
+        {
+            ImGui.TextColored(Theme.Colors.TextPrimary, label);
+            ImGui.SameLine();
+            ImGui.SetNextItemWidth(inputWidth);
+            return ImGui.InputInt($"##{id}", ref value, step, stepFast);
+        }
+        else
+        {
+            ImGui.SetNextItemWidth(inputWidth);
+            var changed = ImGui.InputInt($"##{id}", ref value, step, stepFast);
+            ImGui.SameLine();
+            ImGui.TextColored(Theme.Colors.TextPrimary, label);
+            return changed;
+        }
     }
 
     // ═══════════════════════════════════════════════════

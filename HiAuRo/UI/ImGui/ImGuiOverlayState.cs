@@ -31,9 +31,6 @@ public static class ImGuiOverlayState
     /// <summary>热键 resolver 列表</summary>
     public static List<IHotkeyResolver> Hotkeys { get; set; } = [];
 
-    /// <summary>UI 设置（布局参数）</summary>
-    public static UiSettings UiSettings { get; set; } = new();
-
     /// <summary>更新 ACR 状态（ACRLifecycle 调用）</summary>
     public static void UpdateStatus(string acrName, bool isRunning, bool isPaused,
         List<IHotkeyResolver> hotkeys, List<QtData> qts)

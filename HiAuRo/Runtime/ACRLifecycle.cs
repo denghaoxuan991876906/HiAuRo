@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Runtime.Loader;
 using HiAuRo.ACR;
+using HiAuRo.ACR.Internal;
 using HiAuRo.Infrastructure;
 using HiAuRo.ImGuiLib;
 
@@ -24,6 +25,8 @@ public static class ACRLifecycle
     /// <summary>ISettingsProvider 缓存（供显式 save 遍历）</summary>
     private static readonly Dictionary<string, (IRotationEntry Entry, Type SettingsType)> _settingsProviders = [];
     private static readonly object _settingsLock = new();
+    /// <summary>当 ACR 作者未实现 ISettingsProvider{T} 时的默认 AcrSettings 实例</summary>
+    private static AcrSettings? _defaultSettings;
     /// <summary>是否正在加载 Rotation</summary>
     public static bool IsLoadingRotation { get; private set; }
 
@@ -244,13 +247,17 @@ public static class ACRLifecycle
         if (Runner.CurrentRotation != null)
             HiAuRo.Execution.ExecutionJsonLoader.RegisterFromRotation(Runner.CurrentRotation);
 
-        // 恢复 UI 设置（从 {configDir}/ACR/{author}/{jobId}.json）
-        var author = CurrentAuthor;
-        var jobId = CurrentJobId;
-        var settings = HiAuRo.Setting.SettingMgr.LoadAcrUiSettings(author, jobId);
+        // 确保 UI 设置始终有 AcrSettings 实例
+        if (loadedSettings == null)
+        {
+            loadedSettings = HiAuRo.Setting.SettingMgr.GetAcrJobSetting<DefaultAcrSettings>(entry.AuthorName, CurrentJobId);
+            loadedSettings._author = entry.AuthorName;
+            loadedSettings._jobId = CurrentJobId;
+            _defaultSettings = loadedSettings;
+        }
 
-        // 恢复热键绑定
-        foreach (var (id, key) in settings.HkBindings)
+        // 恢复热键绑定（从 AcrSettings.HkBindings）
+        foreach (var (id, key) in loadedSettings.HkBindings)
             ACR.HotkeyHelper.SetBinding(id, key);
 
         // QT 值变更自动保存（先注册回调，值恢复在 RegisterControls 之后）
@@ -267,7 +274,6 @@ public static class ACRLifecycle
             var tabCount = controls.Count(c => c.Type == "tab");
             DService.Instance().Log.Information($"[ACR] UI控件收集: {controls.Count}个 (tabs={tabCount} hks={controls.Count(c=>c.Type=="qthotkey")} qts={controls.Count(c=>c.Type=="qttoggle")} mainCtrl={controls.Count(c=>c.Type=="maincontrol")})");
 
-            // 序列化验证: 打印 tab 控件的 JSON
             try
             {
                 var json = System.Text.Json.JsonSerializer.Serialize(controls,
@@ -287,10 +293,9 @@ public static class ACRLifecycle
             }
             ImGuiOverlayState.UpdateControls(controls);
 
-            // 从已加载的 WARSettings 填充 UI 控件初始值
-            if (loadedSettings != null)
-                HiAuRo.Setting.SettingMgr.SyncControlsFromSettings(
-                    loadedSettings, ImGuiOverlayState.ControlValues, controls);
+            // 从已加载的 AcrSettings 填充 UI 控件初始值
+            HiAuRo.Setting.SettingMgr.SyncControlsFromSettings(
+                loadedSettings, ImGuiOverlayState.ControlValues, controls);
 
             DService.Instance().Log.Information("[ACR] controls 消息已发送 + 已缓存");
         }
@@ -300,10 +305,10 @@ public static class ACRLifecycle
         }
 
         // 恢复 QT 值（必须在 RegisterControls 之后，否则 key 尚未注册）
-        foreach (var (id, value) in settings.QtValues)
+        foreach (var (id, value) in loadedSettings.QtValues)
             ACR.QTHelper.SetValue(id, value);
 
-        // 推送 UI 设置
+        // 推送 UI 设置（从 AcrSettings 读取）
         if (Plugin.IsWebUI && Plugin.Instance._uiBridge != null)
         {
             _ = Plugin.Instance._uiBridge.SendAsync(new
@@ -311,31 +316,27 @@ public static class ACRLifecycle
                 type = "uiSettings",
                 data = new
                 {
-                    qtCols = settings.QtCols,
-                    qtBtnW = settings.QtBtnW,
-                    qtVisible = settings.QtVisible,
-                    hkCols = settings.HkCols,
-                    hkBtnSize = settings.HkBtnSize,
-                    hkVisible = settings.HkVisible,
-                    hkBindings = settings.HkBindings
+                    qtCols = loadedSettings.QtCols,
+                    qtBtnW = loadedSettings.QtBtnW,
+                    qtVisible = loadedSettings.QtVisible,
+                    hkCols = loadedSettings.HkCols,
+                    hkBtnSize = loadedSettings.HkBtnSize,
+                    hkVisible = loadedSettings.HkVisible,
+                    hkBindings = loadedSettings.HkBindings
                 }
             });
             Plugin.Instance._uiBridge.CacheUiSettings(new
             {
-                qtCols = settings.QtCols,
-                qtBtnW = settings.QtBtnW,
-                qtVisible = settings.QtVisible,
-                hkCols = settings.HkCols,
-                hkBtnSize = settings.HkBtnSize,
-                hkVisible = settings.HkVisible,
-                hkBindings = settings.HkBindings
+                qtCols = loadedSettings.QtCols,
+                qtBtnW = loadedSettings.QtBtnW,
+                qtVisible = loadedSettings.QtVisible,
+                hkCols = loadedSettings.HkCols,
+                hkBtnSize = loadedSettings.HkBtnSize,
+                hkVisible = loadedSettings.HkVisible,
+                hkBindings = loadedSettings.HkBindings
             });
         }
-        else
-        {
-            ImGuiOverlayState.UiSettings = settings;
-        }
-        DService.Instance().Log.Information($"[ACR] uiSettings 消息已发送 + 已缓存 (qtVisible={settings.QtVisible?.Count ?? 0} hkVisible={settings.HkVisible?.Count ?? 0})");
+        DService.Instance().Log.Information($"[ACR] uiSettings 消息已发送 + 已缓存 (qtVisible={loadedSettings.QtVisible?.Count ?? 0} hkVisible={loadedSettings.HkVisible?.Count ?? 0})");
 
         // 推送完整状态（qt + hotkey 数据）
         var hotkeyList = ACR.HotkeyHelper.GetAll();
@@ -404,6 +405,7 @@ public static class ACRLifecycle
         DService.Instance().Log.Information($"[ACR] UnloadRotation: {CurrentAcrName}");
         ACR.QTHelper.OnChanged -= OnQtChanged;
         ACR.HotkeyHelper.OnExecuted -= OnHkExecuted;
+        _defaultSettings = null;
 
         Runner.Unload();
         CurrentEntry = null;
@@ -427,7 +429,6 @@ public static class ACRLifecycle
         var jobId = CurrentJobId;
         if (string.IsNullOrEmpty(author) || jobId == 0) return;
 
-        // 防抖：最多每秒写一次磁盘，避免频繁文件 I/O 导致 UI 卡顿
         if ((DateTime.UtcNow - _lastQtSave).TotalMilliseconds < QtSaveDebounceMs)
             return;
         _lastQtSave = DateTime.UtcNow;
@@ -436,10 +437,13 @@ public static class ACRLifecycle
         {
             try
             {
-                var existing = HiAuRo.Setting.SettingMgr.LoadAcrUiSettings(author, jobId);
-                var qtAll = ACR.QTHelper.GetAll();
-                existing.QtValues = qtAll.ToDictionary(q => q.Id, q => q.Value);
-                HiAuRo.Setting.SettingMgr.SaveAcrUiSettings(author, jobId, existing);
+                var settings = GetCurrentSettings();
+                if (settings != null)
+                {
+                    var qtAll = ACR.QTHelper.GetAll();
+                    settings.QtValues = qtAll.ToDictionary(q => q.Id, q => q.Value);
+                    settings.Save();
+                }
             }
             catch (Exception ex)
             {
@@ -450,15 +454,16 @@ public static class ACRLifecycle
 
     private static void OnHkExecuted(string id, string label) { } // 占位，绑定/可见性由前端 saveUiSettings 维护
 
-    /// <summary>获取当前加载的 AcrSettings（供 ImGuiWidgetRenderer 同步用）</summary>
+    /// <summary>获取当前加载的 AcrSettings（供 ImGui 面板/Web UI 读取）</summary>
     public static AcrSettings? GetCurrentSettings()
     {
         if (CurrentEntry == null) return null;
         var providerInterface = CurrentEntry.GetType()
             .GetInterfaces()
             .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISettingsProvider<>));
-        if (providerInterface == null) return null;
-        return providerInterface.GetProperty("Settings")?.GetValue(CurrentEntry) as AcrSettings;
+        if (providerInterface != null)
+            return providerInterface.GetProperty("Settings")?.GetValue(CurrentEntry) as AcrSettings;
+        return _defaultSettings;
     }
 
     /// <summary>宿主 save handler —— 遍历所有已加载 ISettingsProvider 并保存</summary>

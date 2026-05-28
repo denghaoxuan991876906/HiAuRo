@@ -216,19 +216,10 @@ public static class ImGuiWidgetRenderer
 
     private static void SaveSettings()
     {
-        var author = HiAuRo.Runtime.ACRLifecycle.CurrentAuthor;
-        var jobId = HiAuRo.Runtime.ACRLifecycle.CurrentJobId;
-        if (string.IsNullOrEmpty(author) || jobId == 0) return;
-
-        // 将 UI 控件值同步回 WARSettings 属性（触发属性 setter → 防抖自动保存）
         var settings = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
-        if (settings != null)
-        {
-            SettingMgr.SyncSettingsFromControls(
-                settings, ImGuiOverlayState.ControlValues, ImGuiOverlayState.Controls);
-            settings.Save(); // 立即持久化（绕过防抖）
-        }
-
-        SettingMgr.SaveAcrUiSettings(author, jobId, ImGuiOverlayState.UiSettings);
+        if (settings == null) return;
+        SettingMgr.SyncSettingsFromControls(
+            settings, ImGuiOverlayState.ControlValues, ImGuiOverlayState.Controls);
+        settings.Save();
     }
 }

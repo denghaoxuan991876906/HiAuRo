@@ -741,13 +741,38 @@ public sealed class MainWindow : Window
         ImGui.Text("全局设置");
         ImGui.Separator();
 
-        ImGui.PushItemWidth(100);
-        changed |= ImGui.InputInt("技能队列窗口 (ms)", ref aq, 50);
-        changed |= ImGui.InputInt("GCD 内能力技上限", ref maxAb, 1);
-        changed |= ImGui.InputInt("能力技间隔 (ms)", ref abInterval, 50);
-        changed |= ImGui.InputInt("AOE 判定敌人数", ref aoe, 1);
-        changed |= ImGui.SliderFloat("攻击距离", ref range, 5f, 40f, "%.1f");
-        ImGui.PopItemWidth();
+        ImGui.TextColored(Theme.Colors.TextPrimary, "技能队列窗口 (ms)");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(100);
+        changed |= ImGui.InputInt("##aq_window", ref aq, 50);
+
+        ImGui.TextColored(Theme.Colors.TextPrimary, "GCD 内能力技上限");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(100);
+        changed |= ImGui.InputInt("##max_ab", ref maxAb, 1);
+
+        ImGui.TextColored(Theme.Colors.TextPrimary, "能力技间隔 (ms)");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(100);
+        changed |= ImGui.InputInt("##ab_interval", ref abInterval, 50);
+
+        ImGui.TextColored(Theme.Colors.TextPrimary, "AOE 判定敌人数");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(100);
+        changed |= ImGui.InputInt("##aoe_count", ref aoe, 1);
+
+        using (var sc = new ImRaii.ColorDisposable())
+        {
+            sc.Push(ImGuiCol.FrameBg, Theme.Colors.SliderRail);
+            sc.Push(ImGuiCol.SliderGrab, Theme.Colors.SliderTrack);
+            sc.Push(ImGuiCol.SliderGrabActive, Theme.Colors.SliderTrack);
+            sc.Push(ImGuiCol.Text, Theme.Colors.TextPrimary);
+            ImGui.PushItemWidth(100);
+            changed |= ImGui.SliderFloat("##attack_range", ref range, 5f, 40f, "%.1f");
+            ImGui.PopItemWidth();
+        }
+        ImGui.SameLine();
+        ImGui.TextColored(Theme.Colors.TextSecondary, "攻击距离");
 
         ImGui.Separator();
         changed |= ImGui.Checkbox("Debug 日志", ref debug);

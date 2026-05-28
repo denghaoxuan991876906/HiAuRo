@@ -37,15 +37,16 @@ public sealed class OverlayHotkeyPanel : OverlayBase
     protected override void OnPreDraw()
     {
         var hotkeys = ImGuiOverlayState.Hotkeys;
-        _visibleCount = hotkeys.Count(h => ImGuiOverlayState.UiSettings.HkVisible.GetValueOrDefault(h.Id, true));
+        var ui = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
+        _visibleCount = hotkeys.Count(h => ui?.HkVisible.GetValueOrDefault(h.Id, true) ?? true);
         if (_visibleCount == 0) return;
-        var cols = ImGuiOverlayState.UiSettings.HkCols > 0 ? ImGuiOverlayState.UiSettings.HkCols : 5;
+        var cols = (ui?.HkCols ?? 0) > 0 ? ui!.HkCols : 5;
         var rows = (_visibleCount + cols - 1) / cols;
         var actualCols = Math.Min(_visibleCount, cols);
         var pad = ContentOffset.X;
         var gapX = 6f;
         var gapY = 4f;
-        var btnW = ImGuiOverlayState.UiSettings.HkBtnSize > 0 ? ImGuiOverlayState.UiSettings.HkBtnSize : 50f;
+        var btnW = (ui?.HkBtnSize ?? 0) > 0 ? (float)ui!.HkBtnSize : 50f;
         var btnH = btnW;
         var w = pad * 2 + btnW * actualCols + gapX * (actualCols - 1);
         var h = pad * 2 + btnH * rows + gapY * (rows - 1);
@@ -70,10 +71,13 @@ public sealed class OverlayHotkeyPanel : OverlayBase
         BeginContent();
         if (_visibleCount == 0) return;
 
-        var cols = ImGuiOverlayState.UiSettings.HkCols;
+        var ui = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
+        if (ui == null) return;
+
+        var cols = ui.HkCols;
         if (cols <= 0) cols = 5;
-        var btnSize = ImGuiOverlayState.UiSettings.HkBtnSize > 0
-            ? ImGuiOverlayState.UiSettings.HkBtnSize : 50;
+        var btnSize = ui.HkBtnSize > 0
+            ? ui.HkBtnSize : 50;
         var col = 0;
 
         // 公共样式：圆角、内边距、颜色（所有按钮相同）
@@ -89,7 +93,7 @@ public sealed class OverlayHotkeyPanel : OverlayBase
         for (var i = 0; i < hotkeys.Count; i++)
         {
             var hk = hotkeys[i];
-            var visible = ImGuiOverlayState.UiSettings.HkVisible.GetValueOrDefault(hk.Id, true);
+            var visible = ui.HkVisible.GetValueOrDefault(hk.Id, true);
             if (!visible) continue;
 
             ImGui.PushID(hk.Id);

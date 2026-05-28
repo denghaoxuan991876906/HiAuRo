@@ -7,7 +7,7 @@ namespace HiAuRo.Setting;
 
 /// <summary>
 /// 全局 + 职业 + ACR 设置管理器
-/// 目录结构: {configDir}/ACR/{author}/  → {jobId}.json, _global.json
+/// 目录结构: {configDir}/setting/ACR/{author}/  → {author}-{jobName}.json, _global.json
 /// </summary>
 public static class SettingMgr
 {
@@ -58,15 +58,27 @@ public static class SettingMgr
 
     #region ACR 设置
 
-    /// <summary>获取 ACR 作者配置目录: {configDir}/ACR/{author}/</summary>
+    /// <summary>jobId → Jobs 枚举名（如 23 → "BRD"）</summary>
+    private static string JobIdToName(uint jobId)
+    {
+        if (Enum.IsDefined(typeof(Jobs), (int)jobId))
+            return ((Jobs)jobId).ToString();
+        return jobId.ToString();
+    }
+
+    /// <summary>ACR 设置根目录: {configDir}/setting/ACR/</summary>
+    public static string GetAcrRootDir() =>
+        Path.Combine(ConfigDirectory, "setting", "ACR");
+
+    /// <summary>获取 ACR 作者配置目录: {configDir}/setting/ACR/{author}/</summary>
     public static string GetAcrDir(string author) =>
-        Path.Combine(ConfigDirectory, "ACR", author);
+        Path.Combine(GetAcrRootDir(), author);
 
-    /// <summary>获取 ACR 职业设置路径: {configDir}/ACR/{author}/{jobId}.json</summary>
+    /// <summary>获取 ACR 职业设置路径: {configDir}/setting/ACR/{author}/{author}-{jobName}.json</summary>
     public static string GetAcrJobPath(string author, uint jobId) =>
-        Path.Combine(GetAcrDir(author), $"{jobId}.json");
+        Path.Combine(GetAcrDir(author), $"{author}-{JobIdToName(jobId)}.json");
 
-    /// <summary>获取 ACR 全局设置路径: {configDir}/ACR/{author}/_global.json</summary>
+    /// <summary>获取 ACR 全局设置路径: {configDir}/setting/ACR/{author}/_global.json</summary>
     public static string GetAcrGlobalPath(string author) =>
         Path.Combine(GetAcrDir(author), "_global.json");
 
@@ -98,23 +110,8 @@ public static class SettingMgr
         Save(path, setting);
     }
 
-    /// <summary>保存 UI 设置（QtVisible / HkBindings / HkVisible）到 ACR 职业路径</summary>
-    public static void SaveAcrUiSettings(string author, uint jobId, ACR.UiSettings settings)
-    {
-        var path = GetAcrJobPath(author, jobId);
-        Save(path, settings);
-    }
-
-    /// <summary>加载 UI 设置，合并到现有 ACR.UiSettings</summary>
-    public static ACR.UiSettings LoadAcrUiSettings(string author, uint jobId)
-    {
-        var path = GetAcrJobPath(author, jobId);
-        var loaded = Load<ACR.UiSettings>(path);
-        return loaded ?? new ACR.UiSettings();
-    }
-
     /// <summary>
-    /// 将 AcrSettings 的 public 属性值同步到 ControlValues（label→属性名匹配）
+    /// 将 AcrSettings 的 public 属性值同步到 ControlValues
     /// </summary>
     public static void SyncControlsFromSettings(
         AcrSettings settings,

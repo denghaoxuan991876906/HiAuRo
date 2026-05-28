@@ -37,9 +37,10 @@ public sealed class OverlayQtPanel : OverlayBase
     protected override void OnPreDraw()
     {
         var qts = ImGuiOverlayState.Qts;
-        _visibleCount = qts.Count(q => ImGuiOverlayState.UiSettings.QtVisible.GetValueOrDefault(q.Id, true));
+        var ui = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
+        _visibleCount = qts.Count(q => ui?.QtVisible.GetValueOrDefault(q.Id, true) ?? true);
         if (_visibleCount == 0) return;
-        var cols = ImGuiOverlayState.UiSettings.QtCols > 0 ? ImGuiOverlayState.UiSettings.QtCols : 4;
+        var cols = (ui?.QtCols ?? 0) > 0 ? ui!.QtCols : 4;
         var rows = (_visibleCount + cols - 1) / cols;
         var actualCols = Math.Min(_visibleCount, cols);
         var pad = ContentOffset.X;
@@ -69,7 +70,10 @@ public sealed class OverlayQtPanel : OverlayBase
         BeginContent();
         if (_visibleCount == 0) return;
 
-        var cols = ImGuiOverlayState.UiSettings.QtCols;
+        var ui = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
+        if (ui == null) return;
+
+        var cols = ui.QtCols;
         if (cols <= 0) cols = 4;
         var col = 0;
         var btnSize = new Vector2(67, 46);
@@ -87,7 +91,7 @@ public sealed class OverlayQtPanel : OverlayBase
 
         foreach (var qt in qts)
         {
-            var visible = ImGuiOverlayState.UiSettings.QtVisible.GetValueOrDefault(qt.Id, true);
+            var visible = ui.QtVisible.GetValueOrDefault(qt.Id, true);
             if (!visible) continue;
 
             ImGui.PushID(qt.Id);

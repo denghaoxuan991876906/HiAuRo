@@ -12,6 +12,8 @@ public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
     private string _currentTab = string.Empty;
     private string _currentGroup = string.Empty;
 
+    private string CurrentParent => string.IsNullOrEmpty(_currentGroup) ? _currentTab : _currentGroup;
+
     /// <summary>获取收集到的所有控件定义</summary>
     public List<UiControlDef> GetControls() => [.. _controls];
 
@@ -44,31 +46,31 @@ public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
 
     /// <summary>添加分隔线</summary>
     public void AddSeparator() =>
-        _controls.Add(new UiControlDef("__sep__", "separator", _currentGroup, string.Empty, null));
+        _controls.Add(new UiControlDef("__sep__", "separator", CurrentParent, string.Empty, null));
 
     /// <summary>添加同行标记</summary>
     public void AddSameLine() =>
-        _controls.Add(new UiControlDef("__sameline__", "sameLine", _currentGroup, string.Empty, null));
+        _controls.Add(new UiControlDef("__sameline__", "sameLine", CurrentParent, string.Empty, null));
 
     /// <summary>添加复选框</summary>
     public void AddCheckbox(string label, bool defaultValue) =>
-        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "checkbox", _currentGroup, label, defaultValue));
+        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "checkbox", CurrentParent, label, defaultValue));
 
     /// <summary>添加滑块</summary>
     public void AddSlider(string label, float min, float max, float defaultValue) =>
-        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "slider", _currentGroup, label, defaultValue,
+        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "slider", CurrentParent, label, defaultValue,
             Options: new { min, max }));
 
     /// <summary>添加下拉框</summary>
     public void AddDropdown(string label, string[] options, string defaultValue) =>
-        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "dropdown", _currentGroup, label, defaultValue,
+        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "dropdown", CurrentParent, label, defaultValue,
             Options: options));
 
     /// <summary>添加 QT 热键</summary>
     public void AddQtHotkey(string label, IHotkeyResolver resolver, bool defaultVisible = true)
     {
         HotkeyHelper.Register(resolver);
-        _controls.Add(new UiControlDef(resolver.Id, "qthotkey", _currentGroup, label, resolver.DefaultKey,
+        _controls.Add(new UiControlDef(resolver.Id, "qthotkey", CurrentParent, label, resolver.DefaultKey,
             Meta: new { defaultVisible }));
     }
 
@@ -77,7 +79,7 @@ public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
     {
         var id = label + Guid.NewGuid().ToString("N")[0..8];
         QTHelper.Register(id, label, defaultValue, tooltip, color);
-        _controls.Add(new UiControlDef(id, "qttoggle", _currentGroup, label, defaultValue,
+        _controls.Add(new UiControlDef(id, "qttoggle", CurrentParent, label, defaultValue,
             Meta: new { tooltip, color, defaultVisible }));
     }
 
@@ -90,24 +92,24 @@ public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
 
     /// <summary>添加整数输入</summary>
     public void AddIntInput(string label, int defaultValue, int step = 1, int stepFast = 10) =>
-        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "intInput", _currentGroup, label, defaultValue,
+        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "intInput", CurrentParent, label, defaultValue,
             Meta: new { step, stepFast }));
 
     /// <summary>添加浮点数输入</summary>
     public void AddFloatInput(string label, float defaultValue) =>
-        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "floatInput", _currentGroup, label, defaultValue));
+        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "floatInput", CurrentParent, label, defaultValue));
 
     /// <summary>添加文本输入</summary>
     public void AddTextInput(string label, string defaultValue) =>
-        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "textInput", _currentGroup, label, defaultValue ?? ""));
+        _controls.Add(new UiControlDef(label + Guid.NewGuid().ToString("N")[0..8], "textInput", CurrentParent, label, defaultValue ?? ""));
 
     /// <summary>添加文本标签</summary>
     public void AddLabel(string text) =>
-        _controls.Add(new UiControlDef(text + Guid.NewGuid().ToString("N")[0..8], "label", _currentGroup, text, null));
+        _controls.Add(new UiControlDef(text + Guid.NewGuid().ToString("N")[0..8], "label", CurrentParent, text, null));
 
     /// <summary>添加工具提示</summary>
     public void AddTooltip(string targetId, string tooltip) =>
-        _controls.Add(new UiControlDef($"__tip__{targetId}", "tooltip", _currentGroup, string.Empty, tooltip));
+        _controls.Add(new UiControlDef($"__tip__{targetId}", "tooltip", CurrentParent, string.Empty, tooltip));
 
     public void AddHotkeyRow(IHotkeyResolver[] hotkeyIds)
     {
@@ -115,10 +117,10 @@ public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
         {
             var resolver = hotkeyIds[i];
             HotkeyHelper.Register(resolver);
-            _controls.Add(new UiControlDef(resolver.Id, "qthotkey", _currentGroup, resolver.Label, resolver.DefaultKey,
+            _controls.Add(new UiControlDef(resolver.Id, "qthotkey", CurrentParent, resolver.Label, resolver.DefaultKey,
                 Meta: new { defaultVisible = true }));
             if (i < hotkeyIds.Length - 1)
-                _controls.Add(new UiControlDef("__sameline__", "sameLine", _currentGroup, string.Empty, null));
+                _controls.Add(new UiControlDef("__sameline__", "sameLine", CurrentParent, string.Empty, null));
         }
     }
 
@@ -132,7 +134,7 @@ public sealed class UiBuilderImpl : HiAuRo.ACR.IUiBuilder
         // 同一个内置 QT 不重复注册
         if (_controls.Any(c => c.Id == id)) return;
         QTHelper.Register(id, label, defaultVal);
-        _controls.Add(new UiControlDef(id, "qttoggle", _currentGroup, label, defaultVal,
+        _controls.Add(new UiControlDef(id, "qttoggle", CurrentParent, label, defaultVal,
             Meta: new { defaultVisible = true }));
     }
 }

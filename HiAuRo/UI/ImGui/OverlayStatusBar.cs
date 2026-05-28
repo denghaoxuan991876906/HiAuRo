@@ -163,7 +163,8 @@ public sealed class OverlayStatusBar : OverlayBase
 
     private static void DrawQtSetup()
     {
-        var settings = ImGuiOverlayState.UiSettings;
+        var settings = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
+        if (settings == null) return;
         var cols = settings.QtCols;
         if (cols <= 0) cols = 4;
         if (ComponentLibrary.SliderInt("__qtcols", "每行列数", ref cols, 1, 10))
@@ -183,7 +184,8 @@ public sealed class OverlayStatusBar : OverlayBase
 
     private static void DrawHotkeySetup()
     {
-        var settings = ImGuiOverlayState.UiSettings;
+        var settings = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
+        if (settings == null) return;
         var cols = settings.HkCols;
         if (cols <= 0) cols = 5;
         if (ComponentLibrary.SliderInt("__hkcols", "每行列数", ref cols, 1, 10))
