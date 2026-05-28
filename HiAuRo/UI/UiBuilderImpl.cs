@@ -82,6 +82,12 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     public bool AddIntInput(string label, int value, int step = 1, int stepFast = 10) { WebOnly(() => AddCtrl(label, "intInput", value, Meta: new { step, stepFast })); return false; }
     public bool AddFloatInput(string label, float value) { WebOnly(() => AddCtrl(label, "floatInput", value)); return false; }
     public bool AddTextInput(string label, string value) { WebOnly(() => AddCtrl(label, "textInput", value ?? "")); return false; }
+    public bool AddButton(string label)
+    {
+        if (_isImGui) return InScope && ImGui.Button(Uid(label));
+        AddCtrl(label, "button", null);
+        return false;
+    }
 
     private void WebOnly(System.Action a) { if (!_isImGui) a(); }
 
@@ -89,7 +95,10 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region ref 值控件（IAcrUiBuilder，ACR 作者用）
 
-    private string Uid(string label) => label + "##" + _currentTab + "_" + _currentGroup + "_" + label;
+    /// <summary>每帧重置的控件序号（实例字段，新 builder 自动从 0 开始）</summary>
+    private int _uidSeq;
+    /// <summary>生成 ImGui 唯一 ID：{label}##{tab}_{group}_{seq}</summary>
+    private string Uid(string label) => label + "##" + _currentTab + "_" + _currentGroup + "_" + _uidSeq++;
 
     public bool AddCheckbox(string label, ref bool value, string? expr = null)
     {

@@ -22,6 +22,7 @@ public interface IUiBuilder
     bool AddIntInput(string label, int value, int step = 1, int stepFast = 10);
     bool AddFloatInput(string label, float value);
     bool AddTextInput(string label, string value);
+    bool AddButton(string label);
     bool AddQtToggle(string label, bool value, string? tooltip = null, string? color = null, bool defaultVisible = true);
 
     // === QT / 热键 ===
