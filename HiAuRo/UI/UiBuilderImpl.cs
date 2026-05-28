@@ -32,6 +32,8 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region 结构
 
+    private bool _tabVisible;
+
     public void AddTab(string title)
     {
         EndTab();
@@ -39,7 +41,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
         _currentGroup = string.Empty;
         if (_isImGui)
         {
-            ImGui.BeginTabItem(title);
+            _tabVisible = ImGui.BeginTabItem(title);
         }
         else
         {
@@ -53,6 +55,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
             ImGui.EndTabItem();
         _currentTab = string.Empty;
         _currentGroup = string.Empty;
+        _tabVisible = false;
     }
 
     /// <summary>结束 tab bar（ImGui 模式，由调用方管理 tab bar 时调用）</summary>
@@ -69,6 +72,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
         _currentGroup = "grp_" + title;
         if (_isImGui)
         {
+            if (!_tabVisible) return;
             ImGuiLib.ComponentLibrary.Label(title);
             ImGui.Spacing();
         }
@@ -80,13 +84,13 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     public void AddSeparator()
     {
-        if (_isImGui) ImGui.Separator();
+        if (_isImGui) { if (_tabVisible) ImGui.Separator(); }
         else _controls.Add(new UiControlDef("__sep__", "separator", CurrentParent, string.Empty, null));
     }
 
     public void AddSameLine()
     {
-        if (_isImGui) ImGui.SameLine();
+        if (_isImGui) { if (_tabVisible) ImGui.SameLine(); }
         else _controls.Add(new UiControlDef("__sameline__", "sameLine", CurrentParent, string.Empty, null));
     }
 
@@ -99,7 +103,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     public void AddLabel(string text)
     {
-        if (_isImGui) ImGuiLib.ComponentLibrary.Label(text);
+        if (_isImGui) { if (_tabVisible) ImGuiLib.ComponentLibrary.Label(text); }
         else _controls.Add(new UiControlDef("lbl_" + text, "label", CurrentParent, text, null));
     }
 
@@ -127,6 +131,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     {
         if (_isImGui)
         {
+            if (!_tabVisible) return false;
             var changed = ImGui.Checkbox(label, ref value);
             if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
             return changed;
@@ -140,6 +145,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     {
         if (_isImGui)
         {
+            if (!_tabVisible) return false;
             var changed = ImGui.SliderFloat(label, ref value, min, max);
             if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
             return changed;
@@ -153,6 +159,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     {
         if (_isImGui)
         {
+            if (!_tabVisible) return false;
             var idx = Array.IndexOf(options, value);
             if (idx < 0) idx = 0;
             var changed = ImGui.Combo(label, ref idx, options, options.Length);
@@ -168,6 +175,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     {
         if (_isImGui)
         {
+            if (!_tabVisible) return false;
             var changed = ImGui.InputInt(label, ref value, step, stepFast);
             if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
             return changed;
@@ -181,6 +189,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     {
         if (_isImGui)
         {
+            if (!_tabVisible) return false;
             var changed = ImGui.InputFloat(label, ref value);
             if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
             return changed;
@@ -194,6 +203,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     {
         if (_isImGui)
         {
+            if (!_tabVisible) return false;
             var changed = ImGui.InputText(label, ref value, 256);
             if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
             return changed;
