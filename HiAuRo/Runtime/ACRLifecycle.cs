@@ -265,12 +265,13 @@ public static class ACRLifecycle
         ACR.HotkeyHelper.OnExecuted += OnHkExecuted;
 
         // 收集 ACR 作者声明的 UI 控件 → 推送到 Web 前端动态渲染
+        List<HiAuRo.UI.UiControlDef>? controls = null;
         var ui = entry.GetRotationUI();
         if (ui != null)
         {
             var builder = new HiAuRo.UI.UiBuilderImpl();
             ui.RegisterControls(builder);
-            var controls = builder.GetControls();
+            controls = builder.GetControls();
             var tabCount = controls.Count(c => c.Type == "tab");
             DService.Instance().Log.Information($"[ACR] UI控件收集: {controls.Count}个 (tabs={tabCount} hks={controls.Count(c=>c.Type=="qthotkey")} qts={controls.Count(c=>c.Type=="qttoggle")} mainCtrl={controls.Count(c=>c.Type=="maincontrol")})");
 
@@ -392,10 +393,11 @@ public static class ACRLifecycle
                 DService.Instance().Log.Information($"[ACR] 自定义窗口已加载: {customWindows.Count()}个");
             }
         }
-        // 合并 QT 值：首次加载时写入默认值，QT 数量变化时补充新增项
-        // 原则：已保存的值不动，只补新增的
-        var qtAll = ACR.QTHelper.GetAll();
+        // 增量合并：QT / HK / ACR 自定义属性 — 只补新增，不覆盖用户已保存的值
         var needSave = false;
+
+        // 合并 QT 值和可见性
+        var qtAll = ACR.QTHelper.GetAll();
         foreach (var qt in qtAll)
         {
             if (!loadedSettings.QtValues.ContainsKey(qt.Id))
@@ -403,20 +405,32 @@ public static class ACRLifecycle
                 loadedSettings.QtValues[qt.Id] = qt.Value;
                 needSave = true;
             }
-        }
-        // 同理合并 QtVisible：新增 QT 补默认可见
-        foreach (var qt in qtAll)
-        {
             if (!loadedSettings.QtVisible.ContainsKey(qt.Id))
             {
                 loadedSettings.QtVisible[qt.Id] = true;
                 needSave = true;
             }
         }
+
+        // 合并 HK 可见性
+        var hkAll = ACR.HotkeyHelper.GetAll();
+        foreach (var hk in hkAll)
+        {
+            if (!loadedSettings.HkVisible.ContainsKey(hk.Id))
+            {
+                loadedSettings.HkVisible[hk.Id] = true;
+                needSave = true;
+            }
+        }
+
+        // 合并 UI 控件对应的 ACR 自定义属性（新增控件用默认值填充）
+        if (controls != null)
+            needSave |= HiAuRo.Setting.SettingMgr.MergeDefaultsFromControls(loadedSettings, controls);
+
         if (needSave)
         {
             loadedSettings.Save();
-            DService.Instance().Log.Information($"[ACR] QT 新增项已合并保存 (qtValues={loadedSettings.QtValues.Count})");
+            DService.Instance().Log.Information($"[ACR] 新增项已合并保存 (qtValues={loadedSettings.QtValues.Count} hkVisible={loadedSettings.HkVisible.Count})");
         }
 
         // 宿主订阅保存事件 —— 用户点击保存按钮时自动写回所有 settings
