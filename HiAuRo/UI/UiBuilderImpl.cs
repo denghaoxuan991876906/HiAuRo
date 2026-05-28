@@ -222,8 +222,9 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     public void AddQtHotkey(string label, IHotkeyResolver resolver, bool defaultVisible = true)
     {
-        HotkeyHelper.Register(resolver);
-        _controls.Add(new UiControlDef(resolver.Id, "qthotkey", CurrentParent, label, resolver.DefaultKey,
+        var stableId = "hk_" + label;
+        HotkeyHelper.Register(stableId, resolver);
+        _controls.Add(new UiControlDef(stableId, "qthotkey", CurrentParent, label, resolver.DefaultKey,
             Meta: new { defaultVisible }));
     }
 
@@ -232,8 +233,9 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
         for (int i = 0; i < hotkeyIds.Length; i++)
         {
             var r = hotkeyIds[i];
-            HotkeyHelper.Register(r);
-            _controls.Add(new UiControlDef(r.Id, "qthotkey", CurrentParent, r.Label, r.DefaultKey,
+            var stableId = "hk_" + r.Label;
+            HotkeyHelper.Register(stableId, r);
+            _controls.Add(new UiControlDef(stableId, "qthotkey", CurrentParent, r.Label, r.DefaultKey,
                 Meta: new { defaultVisible = true }));
             if (i < hotkeyIds.Length - 1)
                 _controls.Add(new UiControlDef("__sameline__", "sameLine", CurrentParent, string.Empty, null));

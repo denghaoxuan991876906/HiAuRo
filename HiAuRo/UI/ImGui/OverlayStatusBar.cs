@@ -181,10 +181,11 @@ public sealed class OverlayStatusBar : OverlayBase
         textColor2.Push(ImGuiCol.Text, Theme.Colors.TextPrimary);
         foreach (var hk in ImGuiOverlayState.Hotkeys)
         {
-            var vis = settings.HkVisible.GetValueOrDefault(hk.Id, true);
+            var hkId = "hk_" + hk.Label;
+            var vis = settings.HkVisible.GetValueOrDefault(hkId, true);
             if (ImGui.Checkbox(hk.Label, ref vis))
             {
-                settings.HkVisible[hk.Id] = vis;
+                settings.HkVisible[hkId] = vis;
                 HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
             }
         }

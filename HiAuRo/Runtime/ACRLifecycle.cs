@@ -144,7 +144,7 @@ public static class ACRLifecycle
                         iconId = r.IconId,
                         iconUrl = HiAuRo.UI.IconServer.GetIconUrl(r.IconId),
                         available = r.Check() >= 0,
-                        binding = ACR.HotkeyHelper.GetBinding(r.Id)
+                        binding = ACR.HotkeyHelper.GetBinding("hk_" + r.Label)
                     }).ToList(),
                     qts = ACR.QTHelper.GetAll().Select(q => new
                     {
@@ -355,7 +355,7 @@ public static class ACRLifecycle
                         iconId = r.IconId,
                         iconUrl = HiAuRo.UI.IconServer.GetIconUrl(r.IconId),
                         available = r.Check() >= 0,
-                        binding = ACR.HotkeyHelper.GetBinding(r.Id)
+                        binding = ACR.HotkeyHelper.GetBinding("hk_" + r.Label)
                     }).ToList(),
                     qts = qtList.Select(q => new
                     {
@@ -415,15 +415,16 @@ public static class ACRLifecycle
         var hkAll = ACR.HotkeyHelper.GetAll();
         foreach (var hk in hkAll)
         {
-            if (!loadedSettings.HkVisible.ContainsKey(hk.Id))
+            var hkId = "hk_" + hk.Label;
+            if (!loadedSettings.HkVisible.ContainsKey(hkId))
             {
-                var vis = GetControlDefaultVisible(hk.Id, controls);
-                loadedSettings.HkVisible[hk.Id] = vis;
+                var vis = GetControlDefaultVisible(hkId, controls);
+                loadedSettings.HkVisible[hkId] = vis;
                 needSave = true;
             }
-            if (!loadedSettings.HkBindings.ContainsKey(hk.Id))
+            if (!loadedSettings.HkBindings.ContainsKey(hkId))
             {
-                loadedSettings.HkBindings[hk.Id] = hk.DefaultKey;
+                loadedSettings.HkBindings[hkId] = hk.DefaultKey;
                 needSave = true;
             }
         }
