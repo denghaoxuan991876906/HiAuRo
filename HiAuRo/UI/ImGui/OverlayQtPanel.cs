@@ -105,14 +105,14 @@ public sealed class OverlayQtPanel : OverlayBase
                 innerC.Push(ImGuiCol.ButtonActive, activeColor);
                 innerC.Push(ImGuiCol.Text, Theme.Colors.TagActiveText);
 
-                var clicked = ImGui.Button(qt.Label, btnSize);
+                var clicked = ImGui.Button(qt.Label + "##" + qt.Id, btnSize);
 
                 if (clicked)
                     HiAuRo.ACR.QTHelper.Toggle(qt.Id);
             }
             else
             {
-                var clicked = ImGui.Button(qt.Label, btnSize);
+                var clicked = ImGui.Button(qt.Label + "##" + qt.Id, btnSize);
 
                 if (clicked)
                     HiAuRo.ACR.QTHelper.Toggle(qt.Id);

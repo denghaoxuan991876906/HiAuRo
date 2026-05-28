@@ -147,7 +147,7 @@ public sealed class OverlayStatusBar : OverlayBase
         foreach (var qt in ImGuiOverlayState.Qts)
         {
             var vis = settings.QtVisible.GetValueOrDefault(qt.Id, true);
-            if (ImGui.Checkbox(qt.Label, ref vis))
+            if (ImGui.Checkbox(qt.Label + "##qtvis_" + qt.Id, ref vis))
             {
                 settings.QtVisible[qt.Id] = vis;
                 HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
@@ -183,7 +183,7 @@ public sealed class OverlayStatusBar : OverlayBase
         {
             var hkId = "hk_" + hk.Label;
             var vis = settings.HkVisible.GetValueOrDefault(hkId, true);
-            if (ImGui.Checkbox(hk.Label, ref vis))
+            if (ImGui.Checkbox(hk.Label + "##hkvis_" + hkId, ref vis))
             {
                 settings.HkVisible[hkId] = vis;
                 HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();

@@ -89,16 +89,18 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region ref 值控件（IAcrUiBuilder，ACR 作者用）
 
+    private string Uid(string label) => label + "##" + _currentTab + "_" + _currentGroup + "_" + label;
+
     public bool AddCheckbox(string label, ref bool value, string? expr = null)
     {
-        if (_isImGui) return InScope && RenderChanged(ImGui.Checkbox(label, ref value));
+        if (_isImGui) return InScope && RenderChanged(ImGui.Checkbox(Uid(label), ref value));
         StoreAndBind(label, "checkbox", value, expr);
         return false;
     }
 
     public bool AddSlider(string label, float min, float max, ref float value, string? expr = null)
     {
-        if (_isImGui) return InScope && RenderChanged(ImGui.SliderFloat(label, ref value, min, max));
+        if (_isImGui) return InScope && RenderChanged(ImGui.SliderFloat(Uid(label), ref value, min, max));
         StoreAndBind(label, "slider", value, expr, Options: new { min, max });
         return false;
     }
@@ -109,7 +111,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
         {
             if (!InScope) return false;
             var idx = System.Array.IndexOf(options, value); if (idx < 0) idx = 0;
-            if (ImGui.Combo(label, ref idx, options, options.Length)) { value = options[idx]; Runtime.ACRLifecycle.MarkSettingsDirty(); return true; }
+            if (ImGui.Combo(Uid(label), ref idx, options, options.Length)) { value = options[idx]; Runtime.ACRLifecycle.MarkSettingsDirty(); return true; }
             return false;
         }
         StoreAndBind(label, "dropdown", value, expr, Options: options);
@@ -118,21 +120,21 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     public bool AddIntInput(string label, ref int value, int step = 1, int stepFast = 10, string? expr = null)
     {
-        if (_isImGui) return InScope && RenderChanged(ImGui.InputInt(label, ref value, step, stepFast));
+        if (_isImGui) return InScope && RenderChanged(ImGui.InputInt(Uid(label), ref value, step, stepFast));
         StoreAndBind(label, "intInput", value, expr, Meta: new { step, stepFast });
         return false;
     }
 
     public bool AddFloatInput(string label, ref float value, string? expr = null)
     {
-        if (_isImGui) return InScope && RenderChanged(ImGui.InputFloat(label, ref value));
+        if (_isImGui) return InScope && RenderChanged(ImGui.InputFloat(Uid(label), ref value));
         StoreAndBind(label, "floatInput", value, expr);
         return false;
     }
 
     public bool AddTextInput(string label, ref string value, string? expr = null)
     {
-        if (_isImGui) return InScope && RenderChanged(ImGui.InputText(label, ref value, 256));
+        if (_isImGui) return InScope && RenderChanged(ImGui.InputText(Uid(label), ref value, 256));
         StoreAndBind(label, "textInput", value ?? "", expr);
         return false;
     }
