@@ -22,9 +22,6 @@ public static class ImGuiOverlayState
     /// <summary>当前 active tab ID</summary>
     public static string ActiveTab { get; set; } = string.Empty;
 
-    /// <summary>ACR 持久化设置值（checkbox/slider/dropdown/intInput 的值）</summary>
-    public static Dictionary<string, object> ControlValues { get; set; } = [];
-
     /// <summary>QT 芯片列表</summary>
     public static List<QtData> Qts { get; set; } = [];
 
@@ -50,25 +47,5 @@ public static class ImGuiOverlayState
         {
             ActiveTab = controls.FirstOrDefault(c => c.Type == "tab")?.Id ?? string.Empty;
         }
-    }
-
-    /// <summary>更新控件值（ACRLifecycle 调用）</summary>
-    public static void UpdateControlValues(Dictionary<string, object> values)
-    {
-        ControlValues = values;
-    }
-
-    /// <summary>获取控件当前值</summary>
-    public static T GetValue<T>(string id, T defaultValue)
-    {
-        if (ControlValues.TryGetValue(id, out var val) && val is T tv)
-            return tv;
-        return defaultValue;
-    }
-
-    /// <summary>设置控件值</summary>
-    public static void SetValue(string id, object value)
-    {
-        ControlValues[id] = value;
     }
 }

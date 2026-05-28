@@ -27,6 +27,8 @@ public static class ACRLifecycle
     private static readonly object _settingsLock = new();
     /// <summary>当 ACR 作者未实现 ISettingsProvider{T} 时的默认 AcrSettings 实例</summary>
     private static AcrSettings? _defaultSettings;
+    /// <summary>当前 ACR 的 UiBuilder 实例（供 ImGui 渲染器用字段绑定）</summary>
+    internal static HiAuRo.UI.UiBuilderImpl? UiBuilder { get; private set; }
     /// <summary>是否正在加载 Rotation</summary>
     public static bool IsLoadingRotation { get; private set; }
 
@@ -268,6 +270,7 @@ public static class ACRLifecycle
         {
             var builder = new HiAuRo.UI.UiBuilderImpl();
             ui.RegisterControls(builder);
+            UiBuilder = builder; // 存储供 ImGui 渲染器用字段绑定
             controls = builder.GetControls();
             var tabCount = controls.Count(c => c.Type == "tab");
             DService.Instance().Log.Information($"[ACR] UI控件收集: {controls.Count}个 (tabs={tabCount} hks={controls.Count(c=>c.Type=="qthotkey")} qts={controls.Count(c=>c.Type=="qttoggle")} mainCtrl={controls.Count(c=>c.Type=="maincontrol")})");
@@ -445,6 +448,7 @@ public static class ACRLifecycle
         ACR.QTHelper.OnChanged -= OnQtChanged;
         ACR.HotkeyHelper.OnExecuted -= OnHkExecuted;
         _defaultSettings = null;
+        UiBuilder = null;
 
         Runner.Unload();
         CurrentEntry = null;

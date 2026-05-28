@@ -79,12 +79,18 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region ref 值控件（IAcrUiBuilder，ACR 作者用）
 
-    public bool AddCheckbox(string label, ref bool value) => AddBoundCtrl(label, "checkbox", value);
-    public bool AddSlider(string label, float min, float max, ref float value) => AddBoundCtrl(label, "slider", value, Options: new { min, max });
-    public bool AddDropdown(string label, string[] options, ref string value) => AddBoundCtrl(label, "dropdown", value, Options: options);
-    public bool AddIntInput(string label, ref int value, int step = 1, int stepFast = 10) => AddBoundCtrl(label, "intInput", value, Meta: new { step, stepFast });
-    public bool AddFloatInput(string label, ref float value) => AddBoundCtrl(label, "floatInput", value);
-    public bool AddTextInput(string label, ref string value) => AddBoundCtrl(label, "textInput", value ?? "");
+    public bool AddCheckbox(string label, ref bool value)
+        => AddBoundCtrl(label, "checkbox", value);
+    public bool AddSlider(string label, float min, float max, ref float value)
+        => AddBoundCtrl(label, "slider", value, Options: new { min, max });
+    public bool AddDropdown(string label, string[] options, ref string value)
+        => AddBoundCtrl(label, "dropdown", value, Options: options);
+    public bool AddIntInput(string label, ref int value, int step = 1, int stepFast = 10)
+        => AddBoundCtrl(label, "intInput", value, Meta: new { step, stepFast });
+    public bool AddFloatInput(string label, ref float value)
+        => AddBoundCtrl(label, "floatInput", value);
+    public bool AddTextInput(string label, ref string value)
+        => AddBoundCtrl(label, "textInput", value ?? "");
 
     #endregion
 
@@ -134,6 +140,9 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region 内部
 
+    /// <summary>字段绑定：控件ID → 字段所属对象</summary>
+    internal Dictionary<string, object> Bindings { get; } = [];
+
     private bool AddCtrl(string label, string type, object? value, object? Options = null, object? Meta = null)
     {
         _controls.Add(new UiControlDef("ctrl_" + label, type, CurrentParent, label, value, Options, Meta));
@@ -142,10 +151,31 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     private bool AddBoundCtrl<T>(string label, string type, T value, object? Options = null, object? Meta = null)
     {
-        // ImGui 模式：即时渲染在 Task 3 实现
-        // 当前先收集定义
-        _controls.Add(new UiControlDef("ctrl_" + label, type, CurrentParent, label, value, Options, Meta));
+        AddCtrl(label, type, value, Options, Meta);
         return false;
+    }
+
+    /// <summary>从控件定义和绑定中读取值（供 ImGui 渲染器使用）</summary>
+    internal static object GetBoundValue(UiControlDef ctrl, UiBuilderImpl builder)
+    {
+        // 从 acrsettings 中读取字段值
+        var settings = Runtime.ACRLifecycle.GetCurrentSettings();
+        if (settings == null) return ctrl.Value ?? 0;
+        var t = settings.GetType();
+        var f = t.GetField(ctrl.Label, BindingFlags.Public | BindingFlags.Instance);
+        if (f != null) return f.GetValue(settings) ?? ctrl.Value ?? 0;
+        return ctrl.Value ?? 0;
+    }
+
+    /// <summary>向字段写入值（供 ImGui 渲染器使用）</summary>
+    internal static void SetBoundValue(UiControlDef ctrl, UiBuilderImpl builder, object val)
+    {
+        var settings = Runtime.ACRLifecycle.GetCurrentSettings();
+        if (settings == null) return;
+        var t = settings.GetType();
+        var f = t.GetField(ctrl.Label, BindingFlags.Public | BindingFlags.Instance);
+        if (f != null)
+            f.SetValue(settings, Convert.ChangeType(val, f.FieldType));
     }
 
     #endregion

@@ -143,7 +143,8 @@ public sealed class OverlayStatusBar : OverlayBase
                     else if (tab.Id == "__hk_setup__")
                         DrawHotkeySetup();
                     else
-                        ImGuiWidgetRenderer.Render(controls, tab.Id);
+                        ImGuiWidgetRenderer.Render(controls, tab.Id,
+                            HiAuRo.Runtime.ACRLifecycle.UiBuilder);
                 }
                 ImGui.EndChild();
 
