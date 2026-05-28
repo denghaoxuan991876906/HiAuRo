@@ -101,16 +101,16 @@ public sealed class OverlayStatusBar : OverlayBase
         ImGui.SetCursorPosX(ContentOffset.X);
         if (ImGui.BeginTabBar($"##statusTabs_{_tabBarVersion}"))
         {
-            // 内置 tabs
-            if (ImGui.BeginTabItem("QT设置")) { DrawQtSetup(); ImGui.EndTabItem(); }
-            if (ImGui.BeginTabItem("热键设置")) { DrawHotkeySetup(); ImGui.EndTabItem(); }
-
-            // ACR tabs（AddTab 直接调用 BeginTabItem，不需要创建新 tab bar）
+            // ACR 自定义 tabs（AddTab 直接调用 BeginTabItem）
             if (HiAuRo.Runtime.ACRLifecycle.CurrentEntry != null)
             {
                 var imBuilder = new HiAuRo.UI.UiBuilderImpl(isImGui: true);
                 HiAuRo.Runtime.ACRLifecycle.CurrentEntry.GetRotationUI()?.RegisterControls(imBuilder);
             }
+
+            // 内置 tabs
+            if (ImGui.BeginTabItem("QT设置")) { DrawQtSetup(); ImGui.EndTabItem(); }
+            if (ImGui.BeginTabItem("热键设置")) { DrawHotkeySetup(); ImGui.EndTabItem(); }
 
             ImGui.EndTabBar();
         }
