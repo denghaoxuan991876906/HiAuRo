@@ -13,11 +13,13 @@ public static class HotkeyHelper
     /// <summary>热键执行事件。参数: (resolverId, label)</summary>
     public static event Action<string, string>? OnExecuted;
 
-    /// <summary>注册热键解析器（仅供 UiBuilderImpl 内部使用）</summary>
+    /// <summary>注册热键解析器（仅供 UiBuilderImpl 内部使用），同 ID 不重复添加</summary>
     internal static void Register(IHotkeyResolver resolver)
     {
         lock (_lock)
         {
+            if (_resolvers.Any(r => r.Id == resolver.Id))
+                return;
             _resolvers.Add(resolver);
             _keyBindings.TryAdd(resolver.Id, resolver.DefaultKey);
         }
