@@ -1,6 +1,5 @@
 using HiAuRo.ACR;
 using System.Linq;
-using System.Numerics;
 using System.Reflection;
 using System.Text.Json;
 
@@ -9,101 +8,62 @@ namespace HiAuRo.UI;
 public sealed class UiBuilderImpl : IAcrUiBuilder
 {
     private readonly bool _isImGui;
+    private readonly string? _activeTab;
     private readonly List<UiControlDef> _controls = [];
     private string _currentTab = string.Empty;
     private string _currentGroup = string.Empty;
 
-    /// <summary>Web 模式绑定：控件 ID → 字段名（从 CallerArgumentExpression 解析）</summary>
     internal readonly Dictionary<string, string> Bindings = [];
 
     private string CurrentParent => string.IsNullOrEmpty(_currentGroup) ? _currentTab : _currentGroup;
 
-    public UiBuilderImpl(bool isImGui) => _isImGui = isImGui;
     public UiBuilderImpl() : this(false) { }
+    public UiBuilderImpl(bool isImGui, string? activeTab = null) { _isImGui = isImGui; _activeTab = activeTab; }
+
+    private bool InScope => !_isImGui || _activeTab == null || _currentTab == _activeTab;
+
     public List<UiControlDef> GetControls() => [.. _controls];
 
-    public void Clear()
-    {
-        _controls.Clear();
-        Bindings.Clear();
-        _currentTab = string.Empty;
-        _currentGroup = string.Empty;
-    }
-
     #region 结构
-
-    private bool _tabVisible;
 
     public void AddTab(string title)
     {
         EndTab();
         _currentTab = "tab_" + title;
         _currentGroup = string.Empty;
-        if (_isImGui)
-        {
-            _tabVisible = ImGui.BeginTabItem(title);
-        }
-        else
-        {
-            _controls.Add(new UiControlDef(_currentTab, "tab", null, title, null));
-        }
+        _controls.Add(new UiControlDef(_currentTab, "tab", null, title, null));
     }
 
-    public void EndTab()
-    {
-        if (_isImGui && !string.IsNullOrEmpty(_currentTab))
-            ImGui.EndTabItem();
-        _currentTab = string.Empty;
-        _currentGroup = string.Empty;
-        _tabVisible = false;
-    }
-
-    /// <summary>结束 tab bar（ImGui 模式，由调用方管理 tab bar 时调用）</summary>
-    public void Finish()
-    {
-        if (_isImGui)
-        {
-            EndTab();
-        }
-    }
+    public void EndTab() { _currentTab = string.Empty; _currentGroup = string.Empty; }
 
     public void AddGroup(string title)
     {
         _currentGroup = "grp_" + title;
-        if (_isImGui)
-        {
-            if (!_tabVisible) return;
-            ImGuiLib.ComponentLibrary.Label(title);
-            ImGui.Spacing();
-        }
-        else
-        {
-            _controls.Add(new UiControlDef(_currentGroup, "group", _currentTab, title, null));
-        }
+        if (_isImGui) { if (InScope) { ImGuiLib.ComponentLibrary.Label(title); ImGui.Spacing(); } }
+        else _controls.Add(new UiControlDef(_currentGroup, "group", _currentTab, title, null));
     }
 
     public void AddSeparator()
     {
-        if (_isImGui) { if (_tabVisible) ImGui.Separator(); }
+        if (_isImGui) { if (InScope) ImGui.Separator(); }
         else _controls.Add(new UiControlDef("__sep__", "separator", CurrentParent, string.Empty, null));
     }
 
     public void AddSameLine()
     {
-        if (_isImGui) { if (_tabVisible) ImGui.SameLine(); }
+        if (_isImGui) { if (InScope) ImGui.SameLine(); }
         else _controls.Add(new UiControlDef("__sameline__", "sameLine", CurrentParent, string.Empty, null));
     }
 
     public void AddMainControl(bool showPause = true, bool showSave = true)
     {
-        if (!_isImGui)
-            _controls.Add(new UiControlDef("__main__", "mainControl", null, string.Empty, true,
-                Meta: new { showPause, showSave }));
+        if (!_isImGui) _controls.Add(new UiControlDef("__main__", "mainControl", null, string.Empty, true,
+            Meta: new { showPause, showSave }));
     }
 
     public void AddLabel(string text)
     {
-        if (_isImGui) { if (_tabVisible) ImGuiLib.ComponentLibrary.Label(text); }
+        if (_isImGui) { if (InScope) ImGuiLib.ComponentLibrary.Label(text); }
         else _controls.Add(new UiControlDef("lbl_" + text, "label", CurrentParent, text, null));
     }
 
@@ -116,42 +76,30 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region 无 ref 值控件（IUiBuilder，Trigger 系统用）
 
-    public bool AddCheckbox(string label, bool value) { if (!_isImGui) AddCtrl(label, "checkbox", value); return false; }
-    public bool AddSlider(string label, float min, float max, float value) { if (!_isImGui) AddCtrl(label, "slider", value, Options: new { min, max }); return false; }
-    public bool AddDropdown(string label, string[] options, string value) { if (!_isImGui) AddCtrl(label, "dropdown", value, Options: options); return false; }
-    public bool AddIntInput(string label, int value, int step = 1, int stepFast = 10) { if (!_isImGui) AddCtrl(label, "intInput", value, Meta: new { step, stepFast }); return false; }
-    public bool AddFloatInput(string label, float value) { if (!_isImGui) AddCtrl(label, "floatInput", value); return false; }
-    public bool AddTextInput(string label, string value) { if (!_isImGui) AddCtrl(label, "textInput", value ?? ""); return false; }
+    public bool AddCheckbox(string label, bool value) { WebOnly(() => AddCtrl(label, "checkbox", value)); return false; }
+    public bool AddSlider(string label, float min, float max, float value) { WebOnly(() => AddCtrl(label, "slider", value, Options: new { min, max })); return false; }
+    public bool AddDropdown(string label, string[] options, string value) { WebOnly(() => AddCtrl(label, "dropdown", value, Options: options)); return false; }
+    public bool AddIntInput(string label, int value, int step = 1, int stepFast = 10) { WebOnly(() => AddCtrl(label, "intInput", value, Meta: new { step, stepFast })); return false; }
+    public bool AddFloatInput(string label, float value) { WebOnly(() => AddCtrl(label, "floatInput", value)); return false; }
+    public bool AddTextInput(string label, string value) { WebOnly(() => AddCtrl(label, "textInput", value ?? "")); return false; }
+
+    private void WebOnly(System.Action a) { if (!_isImGui) a(); }
 
     #endregion
 
-    #region ref 值控件（IAcrUiBuilder，ACR 作者用）—— ImGui 即时渲染，ref 直接读写字段
+    #region ref 值控件（IAcrUiBuilder，ACR 作者用）
 
     public bool AddCheckbox(string label, ref bool value, string? expr = null)
     {
-        if (_isImGui)
-        {
-            if (!_tabVisible) return false;
-            var changed = ImGui.Checkbox(label, ref value);
-            if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
-            return changed;
-        }
-        var id = AddCtrl(label, "checkbox", value);
-        StoreBinding(id, expr);
+        if (_isImGui) return InScope && RenderChanged(ImGui.Checkbox(label, ref value));
+        StoreAndBind(label, "checkbox", value, expr);
         return false;
     }
 
     public bool AddSlider(string label, float min, float max, ref float value, string? expr = null)
     {
-        if (_isImGui)
-        {
-            if (!_tabVisible) return false;
-            var changed = ImGui.SliderFloat(label, ref value, min, max);
-            if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
-            return changed;
-        }
-        var id = AddCtrl(label, "slider", value, Options: new { min, max });
-        StoreBinding(id, expr);
+        if (_isImGui) return InScope && RenderChanged(ImGui.SliderFloat(label, ref value, min, max));
+        StoreAndBind(label, "slider", value, expr, Options: new { min, max });
         return false;
     }
 
@@ -159,59 +107,37 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     {
         if (_isImGui)
         {
-            if (!_tabVisible) return false;
-            var idx = Array.IndexOf(options, value);
-            if (idx < 0) idx = 0;
-            var changed = ImGui.Combo(label, ref idx, options, options.Length);
-            if (changed) { value = options[idx]; Runtime.ACRLifecycle.MarkSettingsDirty(); }
-            return changed;
+            if (!InScope) return false;
+            var idx = System.Array.IndexOf(options, value); if (idx < 0) idx = 0;
+            if (ImGui.Combo(label, ref idx, options, options.Length)) { value = options[idx]; Runtime.ACRLifecycle.MarkSettingsDirty(); return true; }
+            return false;
         }
-        var id = AddCtrl(label, "dropdown", value, Options: options);
-        StoreBinding(id, expr);
+        StoreAndBind(label, "dropdown", value, expr, Options: options);
         return false;
     }
 
     public bool AddIntInput(string label, ref int value, int step = 1, int stepFast = 10, string? expr = null)
     {
-        if (_isImGui)
-        {
-            if (!_tabVisible) return false;
-            var changed = ImGui.InputInt(label, ref value, step, stepFast);
-            if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
-            return changed;
-        }
-        var id = AddCtrl(label, "intInput", value, Meta: new { step, stepFast });
-        StoreBinding(id, expr);
+        if (_isImGui) return InScope && RenderChanged(ImGui.InputInt(label, ref value, step, stepFast));
+        StoreAndBind(label, "intInput", value, expr, Meta: new { step, stepFast });
         return false;
     }
 
     public bool AddFloatInput(string label, ref float value, string? expr = null)
     {
-        if (_isImGui)
-        {
-            if (!_tabVisible) return false;
-            var changed = ImGui.InputFloat(label, ref value);
-            if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
-            return changed;
-        }
-        var id = AddCtrl(label, "floatInput", value);
-        StoreBinding(id, expr);
+        if (_isImGui) return InScope && RenderChanged(ImGui.InputFloat(label, ref value));
+        StoreAndBind(label, "floatInput", value, expr);
         return false;
     }
 
     public bool AddTextInput(string label, ref string value, string? expr = null)
     {
-        if (_isImGui)
-        {
-            if (!_tabVisible) return false;
-            var changed = ImGui.InputText(label, ref value, 256);
-            if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
-            return changed;
-        }
-        var id = AddCtrl(label, "textInput", value ?? "");
-        StoreBinding(id, expr);
+        if (_isImGui) return InScope && RenderChanged(ImGui.InputText(label, ref value, 256));
+        StoreAndBind(label, "textInput", value ?? "", expr);
         return false;
     }
+
+    private static bool RenderChanged(bool changed) { if (changed) Runtime.ACRLifecycle.MarkSettingsDirty(); return changed; }
 
     #endregion
 
@@ -265,24 +191,19 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     private string AddCtrl(string label, string type, object? value, object? Options = null, object? Meta = null)
     {
-        var id = "ctrl_" + label + Guid.NewGuid().ToString("N")[..8];
+        var id = "ctrl_" + label + System.Guid.NewGuid().ToString("N")[..8];
         _controls.Add(new UiControlDef(id, type, CurrentParent, label, value, Options, Meta));
         return id;
     }
 
-    /// <summary>从 CallerArgumentExpression 解析字段名并存储绑定</summary>
-    private void StoreBinding(string id, string? expr)
+    private void StoreAndBind(string label, string type, object? value, string? expr, object? Options = null, object? Meta = null)
     {
+        var id = AddCtrl(label, type, value, Options, Meta);
         if (string.IsNullOrEmpty(expr)) return;
-        // expr 如 "BLM_Setting.Instance.test1" → 取最后一段 "test1" 作为字段名
         var dot = expr.LastIndexOf('.');
-        if (dot >= 0)
-            Bindings[id] = expr[(dot + 1)..];
-        else
-            Bindings[id] = expr;
+        Bindings[id] = dot >= 0 ? expr[(dot + 1)..] : expr;
     }
 
-    /// <summary>Web 模式写回：根据控件 ID 找到绑定字段，反射写入 settings</summary>
     public static void WriteBack(UiBuilderImpl builder, string controlId, object rawValue)
     {
         if (!builder.Bindings.TryGetValue(controlId, out var fieldName)) return;
@@ -290,12 +211,7 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
         if (settings == null) return;
         var field = settings.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.Instance);
         if (field == null) return;
-        try
-        {
-            field.SetValue(settings, Convert.ChangeType(rawValue, field.FieldType));
-            Runtime.ACRLifecycle.MarkSettingsDirty();
-        }
-        catch { }
+        try { field.SetValue(settings, System.Convert.ChangeType(rawValue, field.FieldType)); Runtime.ACRLifecycle.MarkSettingsDirty(); } catch { }
     }
 
     #endregion
