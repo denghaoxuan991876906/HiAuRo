@@ -75,6 +75,7 @@ public static class ACRLifecycle
     public static void Update()
     {
         CheckJobSwitch();
+        CheckAutoSave();
 
         var state = CombatContext.CurrentState;
         if (state == CombatContext.State.Idle || state == CombatContext.State.Zoning)
@@ -466,36 +467,50 @@ public static class ACRLifecycle
         ACR.MainControlHelper.Reset();
     }
 
-    private static DateTime _lastQtSave = DateTime.MinValue;
-    private const int QtSaveDebounceMs = 1000; // 最多每秒存一次
+    private static DateTime _lastAutoSave = DateTime.MinValue;
+    private const int AutoSaveDebounceMs = 1000; // 设置变更后最多 1 秒自动保存
+    private static volatile bool _settingsDirty;
+
+    /// <summary>
+    /// 标记设置已变更，将在下一帧通过 Update 自动保存（防抖 1 秒）
+    /// 所有设置变更点应调用此方法而非直接 Save()
+    /// </summary>
+    public static void MarkSettingsDirty()
+    {
+        _settingsDirty = true;
+    }
+
+    /// <summary>在 Update 中检查并执行防抖自动保存</summary>
+    private static void CheckAutoSave()
+    {
+        if (!_settingsDirty) return;
+        if ((DateTime.UtcNow - _lastAutoSave).TotalMilliseconds < AutoSaveDebounceMs)
+            return;
+
+        _settingsDirty = false;
+        _lastAutoSave = DateTime.UtcNow;
+
+        try
+        {
+            var settings = GetCurrentSettings();
+            if (settings != null)
+                settings.Save();
+        }
+        catch (Exception ex)
+        {
+            DService.Instance().Log.Warning($"[ACR] 自动保存失败: {ex.Message}");
+        }
+    }
 
     private static void OnQtChanged(string id, bool value)
     {
-        var author = CurrentAuthor;
-        var jobId = CurrentJobId;
-        if (string.IsNullOrEmpty(author) || jobId == 0) return;
-
-        if ((DateTime.UtcNow - _lastQtSave).TotalMilliseconds < QtSaveDebounceMs)
-            return;
-        _lastQtSave = DateTime.UtcNow;
-
-        Task.Run(() =>
+        var settings = GetCurrentSettings();
+        if (settings != null)
         {
-            try
-            {
-                var settings = GetCurrentSettings();
-                if (settings != null)
-                {
-                    var qtAll = ACR.QTHelper.GetAll();
-                    settings.QtValues = qtAll.ToDictionary(q => q.Id, q => q.Value);
-                    settings.Save();
-                }
-            }
-            catch (Exception ex)
-            {
-                DService.Instance().Log.Warning($"[ACR] QtSettings 保存失败: {ex.Message}");
-            }
-        });
+            var qtAll = ACR.QTHelper.GetAll();
+            settings.QtValues = qtAll.ToDictionary(q => q.Id, q => q.Value);
+        }
+        MarkSettingsDirty();
     }
 
     private static void OnHkExecuted(string id, string label) { } // 占位，绑定/可见性由前端 saveUiSettings 维护
@@ -512,9 +527,10 @@ public static class ACRLifecycle
         return _defaultSettings;
     }
 
-    /// <summary>宿主 save handler —— 保存当前 AcrSettings（包括 ISettingsProvider 和默认实例）</summary>
+    /// <summary>宿主 save handler —— 手动保存按钮立即写磁盘</summary>
     private static void HostSaveAllSettings()
     {
+        _settingsDirty = false;
         var settings = GetCurrentSettings();
         if (settings != null)
             settings.Save();
