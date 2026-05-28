@@ -1,14 +1,10 @@
 using HiAuRo.ACR;
 using System.Linq;
-using System.Reflection;
+using System.Numerics;
+using System.Text.Json;
 
 namespace HiAuRo.UI;
 
-/// <summary>
-/// IUiBuilder / IAcrUiBuilder 实现
-/// - ImGui 模式 (_isImGui=true): 值控件即时渲染 ImGui 控件，ref 直接读写字段
-/// - Web 模式 (_isImGui=false): 收集控件定义，发送到前端
-/// </summary>
 public sealed class UiBuilderImpl : IAcrUiBuilder
 {
     private readonly bool _isImGui;
@@ -19,10 +15,9 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     private string CurrentParent => string.IsNullOrEmpty(_currentGroup) ? _currentTab : _currentGroup;
 
     public UiBuilderImpl(bool isImGui) => _isImGui = isImGui;
-    public UiBuilderImpl() : this(false) { } // 默认 Web 模式，向后兼容
+    public UiBuilderImpl() : this(false) { }
     public List<UiControlDef> GetControls() => [.. _controls];
 
-    /// <summary>清空控件列表（ImGui 模式下每帧调用前重置）</summary>
     public void Clear()
     {
         _controls.Clear();
@@ -32,65 +27,168 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region 结构
 
+    private int _tabBarId;
+
     public void AddTab(string title)
     {
         EndTab();
         _currentTab = "tab_" + title;
         _currentGroup = string.Empty;
-        _controls.Add(new UiControlDef(_currentTab, "tab", null, title, null));
+        if (_isImGui)
+        {
+            if (_tabBarId == 0) { _tabBarId = 1; ImGui.BeginTabBar("##acr_tab_bar"); }
+            ImGui.BeginTabItem(title);
+        }
+        else
+        {
+            _controls.Add(new UiControlDef(_currentTab, "tab", null, title, null));
+        }
     }
 
-    public void EndTab() { _currentTab = string.Empty; _currentGroup = string.Empty; }
+    public void EndTab()
+    {
+        if (_isImGui && !string.IsNullOrEmpty(_currentTab))
+            ImGui.EndTabItem();
+        _currentTab = string.Empty;
+        _currentGroup = string.Empty;
+    }
+
+    /// <summary>关闭 tab bar（ImGui 模式下在 RegisterControls 结束时调用）</summary>
+    public void Finish()
+    {
+        if (_isImGui && _tabBarId > 0)
+        {
+            ImGui.EndTabBar();
+            _tabBarId = 0;
+        }
+    }
 
     public void AddGroup(string title)
     {
         _currentGroup = "grp_" + title;
-        _controls.Add(new UiControlDef(_currentGroup, "group", _currentTab, title, null));
+        if (_isImGui)
+        {
+            ImGuiLib.ComponentLibrary.Label(title);
+            ImGui.Spacing();
+        }
+        else
+        {
+            _controls.Add(new UiControlDef(_currentGroup, "group", _currentTab, title, null));
+        }
     }
 
-    public void AddSeparator() =>
-        _controls.Add(new UiControlDef("__sep__", "separator", CurrentParent, string.Empty, null));
+    public void AddSeparator()
+    {
+        if (_isImGui) ImGui.Separator();
+        else _controls.Add(new UiControlDef("__sep__", "separator", CurrentParent, string.Empty, null));
+    }
 
-    public void AddSameLine() =>
-        _controls.Add(new UiControlDef("__sameline__", "sameLine", CurrentParent, string.Empty, null));
+    public void AddSameLine()
+    {
+        if (_isImGui) ImGui.SameLine();
+        else _controls.Add(new UiControlDef("__sameline__", "sameLine", CurrentParent, string.Empty, null));
+    }
 
-    public void AddMainControl(bool showPause = true, bool showSave = true) =>
-        _controls.Add(new UiControlDef("__main__", "mainControl", null, string.Empty, true,
-            Meta: new { showPause, showSave }));
+    public void AddMainControl(bool showPause = true, bool showSave = true)
+    {
+        if (!_isImGui)
+            _controls.Add(new UiControlDef("__main__", "mainControl", null, string.Empty, true,
+                Meta: new { showPause, showSave }));
+    }
 
-    public void AddLabel(string text) =>
-        _controls.Add(new UiControlDef("lbl_" + text, "label", CurrentParent, text, null));
+    public void AddLabel(string text)
+    {
+        if (_isImGui) ImGuiLib.ComponentLibrary.Label(text);
+        else _controls.Add(new UiControlDef("lbl_" + text, "label", CurrentParent, text, null));
+    }
 
-    public void AddTooltip(string targetId, string tooltip) =>
-        _controls.Add(new UiControlDef($"__tip__{targetId}", "tooltip", CurrentParent, string.Empty, tooltip));
+    public void AddTooltip(string targetId, string tooltip)
+    {
+        if (!_isImGui) _controls.Add(new UiControlDef($"__tip__{targetId}", "tooltip", CurrentParent, string.Empty, tooltip));
+    }
 
     #endregion
 
     #region 无 ref 值控件（IUiBuilder，Trigger 系统用）
 
-    public bool AddCheckbox(string label, bool value) => AddCtrl(label, "checkbox", value);
-    public bool AddSlider(string label, float min, float max, float value) => AddCtrl(label, "slider", value, Options: new { min, max });
-    public bool AddDropdown(string label, string[] options, string value) => AddCtrl(label, "dropdown", value, Options: options);
-    public bool AddIntInput(string label, int value, int step = 1, int stepFast = 10) => AddCtrl(label, "intInput", value, Meta: new { step, stepFast });
-    public bool AddFloatInput(string label, float value) => AddCtrl(label, "floatInput", value);
-    public bool AddTextInput(string label, string value) => AddCtrl(label, "textInput", value ?? "");
+    public bool AddCheckbox(string label, bool value) => _isImGui ? false : AddCtrl(label, "checkbox", value);
+    public bool AddSlider(string label, float min, float max, float value) => _isImGui ? false : AddCtrl(label, "slider", value, Options: new { min, max });
+    public bool AddDropdown(string label, string[] options, string value) => _isImGui ? false : AddCtrl(label, "dropdown", value, Options: options);
+    public bool AddIntInput(string label, int value, int step = 1, int stepFast = 10) => _isImGui ? false : AddCtrl(label, "intInput", value, Meta: new { step, stepFast });
+    public bool AddFloatInput(string label, float value) => _isImGui ? false : AddCtrl(label, "floatInput", value);
+    public bool AddTextInput(string label, string value) => _isImGui ? false : AddCtrl(label, "textInput", value ?? "");
 
     #endregion
 
-    #region ref 值控件（IAcrUiBuilder，ACR 作者用）
+    #region ref 值控件（IAcrUiBuilder，ACR 作者用）—— ImGui 即时渲染，ref 直接读写字段
 
     public bool AddCheckbox(string label, ref bool value)
-        => AddBoundCtrl(label, "checkbox", value);
+    {
+        if (_isImGui)
+        {
+            var changed = ImGui.Checkbox(label, ref value);
+            if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
+            return changed;
+        }
+        return AddCtrl(label, "checkbox", value);
+    }
+
     public bool AddSlider(string label, float min, float max, ref float value)
-        => AddBoundCtrl(label, "slider", value, Options: new { min, max });
+    {
+        if (_isImGui)
+        {
+            var changed = ImGui.SliderFloat(label, ref value, min, max);
+            if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
+            return changed;
+        }
+        return AddCtrl(label, "slider", value, Options: new { min, max });
+    }
+
     public bool AddDropdown(string label, string[] options, ref string value)
-        => AddBoundCtrl(label, "dropdown", value, Options: options);
+    {
+        if (_isImGui)
+        {
+            var idx = Array.IndexOf(options, value);
+            if (idx < 0) idx = 0;
+            var changed = ImGui.Combo(label, ref idx, options, options.Length);
+            if (changed) { value = options[idx]; Runtime.ACRLifecycle.MarkSettingsDirty(); }
+            return changed;
+        }
+        return AddCtrl(label, "dropdown", value, Options: options);
+    }
+
     public bool AddIntInput(string label, ref int value, int step = 1, int stepFast = 10)
-        => AddBoundCtrl(label, "intInput", value, Meta: new { step, stepFast });
+    {
+        if (_isImGui)
+        {
+            var changed = ImGui.InputInt(label, ref value, step, stepFast);
+            if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
+            return changed;
+        }
+        return AddCtrl(label, "intInput", value, Meta: new { step, stepFast });
+    }
+
     public bool AddFloatInput(string label, ref float value)
-        => AddBoundCtrl(label, "floatInput", value);
+    {
+        if (_isImGui)
+        {
+            var changed = ImGui.InputFloat(label, ref value);
+            if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
+            return changed;
+        }
+        return AddCtrl(label, "floatInput", value);
+    }
+
     public bool AddTextInput(string label, ref string value)
-        => AddBoundCtrl(label, "textInput", value ?? "");
+    {
+        if (_isImGui)
+        {
+            var changed = ImGui.InputText(label, ref value, 256);
+            if (changed) Runtime.ACRLifecycle.MarkSettingsDirty();
+            return changed;
+        }
+        return AddCtrl(label, "textInput", value ?? "");
+    }
 
     #endregion
 
@@ -140,42 +238,10 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
 
     #region 内部
 
-    /// <summary>字段绑定：控件ID → 字段所属对象</summary>
-    internal Dictionary<string, object> Bindings { get; } = [];
-
     private bool AddCtrl(string label, string type, object? value, object? Options = null, object? Meta = null)
     {
         _controls.Add(new UiControlDef("ctrl_" + label, type, CurrentParent, label, value, Options, Meta));
         return false;
-    }
-
-    private bool AddBoundCtrl<T>(string label, string type, T value, object? Options = null, object? Meta = null)
-    {
-        AddCtrl(label, type, value, Options, Meta);
-        return false;
-    }
-
-    /// <summary>从控件定义和绑定中读取值（供 ImGui 渲染器使用）</summary>
-    internal static object GetBoundValue(UiControlDef ctrl, UiBuilderImpl builder)
-    {
-        // 从 acrsettings 中读取字段值
-        var settings = Runtime.ACRLifecycle.GetCurrentSettings();
-        if (settings == null) return ctrl.Value ?? 0;
-        var t = settings.GetType();
-        var f = t.GetField(ctrl.Label, BindingFlags.Public | BindingFlags.Instance);
-        if (f != null) return f.GetValue(settings) ?? ctrl.Value ?? 0;
-        return ctrl.Value ?? 0;
-    }
-
-    /// <summary>向字段写入值（供 ImGui 渲染器使用）</summary>
-    internal static void SetBoundValue(UiControlDef ctrl, UiBuilderImpl builder, object val)
-    {
-        var settings = Runtime.ACRLifecycle.GetCurrentSettings();
-        if (settings == null) return;
-        var t = settings.GetType();
-        var f = t.GetField(ctrl.Label, BindingFlags.Public | BindingFlags.Instance);
-        if (f != null)
-            f.SetValue(settings, Convert.ChangeType(val, f.FieldType));
     }
 
     #endregion

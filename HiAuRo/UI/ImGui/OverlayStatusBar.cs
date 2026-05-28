@@ -14,12 +14,8 @@ public sealed class OverlayStatusBar : OverlayBase
 {
     private readonly Action _saveConfig;
     private Vector2 _lastExpandedSize = new(400, 320);
-    private string _activeTabId = string.Empty;
     private int _tabBarVersion;
     private bool _wasExpanded;
-    private List<UiControlDef> _allTabs = [];
-    private List<UiControlDef>? _cachedControlsRef;
-    private int _cachedControlsCount;
 
     /// <summary>无边距</summary>
     protected override Vector2 ContentPadding => Vector2.Zero;
@@ -95,64 +91,34 @@ public sealed class OverlayStatusBar : OverlayBase
         DrawBar();
         ImGui.Spacing();
 
-        var controls = ImGuiOverlayState.Controls;
-        if (controls.Count == 0)
+        if (HiAuRo.Runtime.ACRLifecycle.CurrentEntry == null)
         {
             ImGui.SetCursorPosX(ContentOffset.X);
             ImGui.TextColored(Theme.Colors.TextSecondary, "等待 ACR 加载...");
             return;
         }
 
-        // 仅在控件列表变化时重建 tab 缓存
-        if (!ReferenceEquals(controls, _cachedControlsRef) || controls.Count != _cachedControlsCount)
-        {
-            _cachedControlsRef = controls;
-            _cachedControlsCount = controls.Count;
-            _allTabs = [.. controls.Where(c => c.Type == "tab"), .. _builtinTabs];
-        }
-
-        var allTabs = _allTabs;
-        var activeTab = ImGuiOverlayState.ActiveTab;
-
-        if (activeTab != _activeTabId)
-            _tabBarVersion++;
-
         ImGui.SetCursorPosX(ContentOffset.X);
+        // 内置 QT/HK 设置 tabs
         if (ImGui.BeginTabBar($"##statusTabs_{_tabBarVersion}"))
         {
-            foreach (var tab in allTabs)
+            if (ImGui.BeginTabItem("QT设置"))
             {
-                if (!ImGui.BeginTabItem(tab.Label))
-                    continue;
-
-                _activeTabId = tab.Id;
-                if (activeTab != tab.Id)
-                    ImGuiOverlayState.ActiveTab = tab.Id;
-
-                using var framePad = new ImRaii.StyleDisposable();
-                framePad.Push(ImGuiStyleVar.FramePadding, Theme.PaddingSM);
-                ImGui.Indent(ContentOffset.X);
-
-                // 内容区域：水平滚动+宽度约束，防止控件溢出窗口
-                var childSize = new Vector2(-1, -1);
-                if (ImGui.BeginChild($"##acrContent_{tab.Id}", childSize, false,
-                        ImGuiWindowFlags.None))
-                {
-                    if (tab.Id == "__qt_setup__")
-                        DrawQtSetup();
-                    else if (tab.Id == "__hk_setup__")
-                        DrawHotkeySetup();
-                    else
-                        ImGuiWidgetRenderer.Render(controls, tab.Id,
-                            HiAuRo.Runtime.ACRLifecycle.UiBuilder);
-                }
-                ImGui.EndChild();
-
-                ImGui.Unindent(ContentOffset.X);
+                DrawQtSetup();
+                ImGui.EndTabItem();
+            }
+            if (ImGui.BeginTabItem("热键设置"))
+            {
+                DrawHotkeySetup();
                 ImGui.EndTabItem();
             }
             ImGui.EndTabBar();
         }
+        // ACR 设置区域：ImGui 即时模式，每帧调用 RegisterControls
+        // ref 重载直接渲染 ImGui 控件，ref 直接读写字段，无需 label 匹配
+        var imBuilder = new HiAuRo.UI.UiBuilderImpl(isImGui: true);
+        HiAuRo.Runtime.ACRLifecycle.CurrentEntry?.GetRotationUI()?.RegisterControls(imBuilder);
+        imBuilder.Finish();
 #if DEBUG
         }
         finally
