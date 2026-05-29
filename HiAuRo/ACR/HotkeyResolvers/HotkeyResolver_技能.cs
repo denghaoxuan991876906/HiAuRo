@@ -13,7 +13,10 @@ public sealed class HotkeyResolver_技能 : IHotkeyResolver
     public string Id { get; }
     public string Label { get; }
     public string DefaultKey { get; }
-    public uint IconId => LuminaWrapper.GetActionIconID(_spellId);
+    public uint IconId => LuminaWrapper.GetActionIconID(CurrentSpellId);
+
+    /// <summary>当前实际释放的技能 ID，支持占星出卡等动态变化技能。</summary>
+    private uint CurrentSpellId => _spellId.GetActionChange();
 
     /// <param name="id">热键 ID（如 "Pot_爆发药"）</param>
     /// <param name="label">显示名称</param>
@@ -30,6 +33,6 @@ public sealed class HotkeyResolver_技能 : IHotkeyResolver
     public void Execute()
     {
         OmenTools.OmenService.UseActionManager.Instance().UseAction(
-            ActionType.Action, _spellId, 0, 0, 0, 0);
+            ActionType.Action, CurrentSpellId, 0, 0, 0, 0);
     }
 }
