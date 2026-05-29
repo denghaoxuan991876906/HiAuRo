@@ -32,8 +32,13 @@ public static class ACRLifecycle
     /// <summary>是否正在加载 Rotation</summary>
     public static bool IsLoadingRotation { get; private set; }
 
-    /// <summary>外部 ACR: JobId → (Factory, SettingDir)</summary>
-    private static readonly Dictionary<uint, (Func<IRotationEntry> Factory, string SettingDir)> _acrRegistry = [];
+    /// <summary>ACR 注册项</summary>
+    internal record AcrRegistryEntry(IRotationEntry Entry, string SettingDir);
+
+    /// <summary>外部 ACR: JobId → 多条注册项</summary>
+    private static readonly Dictionary<uint, List<AcrRegistryEntry>> _acrRegistry = [];
+    /// <summary>每个职业当前激活的 ACR 索引（默认 0）</summary>
+    private static readonly Dictionary<uint, int> _activeAcrIndices = [];
     /// <summary>外部 ALC 引用（用于 Reload 卸载）</summary>
     private static readonly List<AssemblyLoadContext> _externalAlcs = [];
 
@@ -41,15 +46,49 @@ public static class ACRLifecycle
     private static bool _resetCalled;
 
     /// <summary>注册外部 ACR</summary>
-    public static void RegisterExternal(uint jobId, Func<IRotationEntry> factory, string settingDir)
+    public static void RegisterExternal(uint jobId, IRotationEntry entry, string settingDir)
     {
-        _acrRegistry[jobId] = (factory, settingDir);
+        if (!_acrRegistry.TryGetValue(jobId, out var list))
+        {
+            list = [];
+            _acrRegistry[jobId] = list;
+        }
+        list.Add(new AcrRegistryEntry(entry, settingDir));
+        if (!_activeAcrIndices.ContainsKey(jobId))
+            _activeAcrIndices[jobId] = 0;
     }
 
     /// <summary>注册外部 ALC</summary>
     public static void RegisterContext(AssemblyLoadContext alc)
     {
         _externalAlcs.Add(alc);
+    }
+
+    /// <summary>获取某职业所有已注册 ACR</summary>
+    public static IReadOnlyList<AcrRegistryEntry> GetRegisteredAcrs(uint jobId)
+    {
+        _acrRegistry.TryGetValue(jobId, out var list);
+        return list?.AsReadOnly() ?? (IReadOnlyList<AcrRegistryEntry>)Array.Empty<AcrRegistryEntry>();
+    }
+
+    /// <summary>获取某职业当前激活的 ACR 索引</summary>
+    public static int GetActiveAcrIndex(uint jobId)
+    {
+        return _activeAcrIndices.TryGetValue(jobId, out var idx) ? idx : 0;
+    }
+
+    /// <summary>切换某职业的 ACR（若为当前职业则立即加载）</summary>
+    public static void SetActiveAcr(uint jobId, int newIndex)
+    {
+        if (!_acrRegistry.TryGetValue(jobId, out var list) || newIndex < 0 || newIndex >= list.Count)
+            return;
+        _activeAcrIndices[jobId] = newIndex;
+
+        if (HiAuRo.Data.IsReady && Data.Me.ClassJob == jobId && jobId != 0)
+        {
+            UnloadRotation();
+            LoadRotation(list[newIndex].Entry, list[newIndex].SettingDir);
+        }
     }
 
     /// <summary>强制下一帧重新检查职业（用于加载后触发首次匹配）</summary>
@@ -63,6 +102,7 @@ public static class ACRLifecycle
     {
         UnloadRotation();
         _acrRegistry.Clear();
+        _activeAcrIndices.Clear();
         foreach (var alc in _externalAlcs)
         {
             try { alc.Unload(); }
@@ -116,10 +156,12 @@ public static class ACRLifecycle
 
         DService.Instance().Log.Information($"[ACR] 职业切换: {_lastJob} → {currentJob}");
 
-        if (_acrRegistry.TryGetValue(currentJob, out var reg))
+        if (_acrRegistry.TryGetValue(currentJob, out var list) && list.Count > 0)
         {
-            DService.Instance().Log.Information($"[ACR] 找到匹配ACR: {reg.SettingDir}");
-            LoadRotation(reg.Factory(), reg.SettingDir);
+            var idx = Math.Clamp(GetActiveAcrIndex(currentJob), 0, list.Count - 1);
+            var reg = list[idx];
+            DService.Instance().Log.Information($"[ACR] 找到匹配ACR: idx={idx} {reg.SettingDir}");
+            LoadRotation(reg.Entry, reg.SettingDir);
         }
         else
         {
@@ -171,7 +213,7 @@ public static class ACRLifecycle
         UnloadRotation();
 
         _acrRegistry.Clear();
-
+        _activeAcrIndices.Clear();
         // 卸载所有外部 ALC
         foreach (var alc in _externalAlcs)
         {
@@ -443,6 +485,7 @@ public static class ACRLifecycle
 
     private static void UnloadRotation()
     {
+        CurrentEntry?.OnExitRotation();
         if (Plugin.Instance != null)
             Plugin.Instance._uiManager?.RemoveCustomWindows();
         DService.Instance().Log.Information($"[ACR] UnloadRotation: {CurrentAcrName}");
