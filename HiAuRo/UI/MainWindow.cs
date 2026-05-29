@@ -1172,7 +1172,7 @@ public sealed class MainWindow : Window
         {
             ImGui.Text($"等级区间: Lv.{rotation.MinLevel} - Lv.{rotation.MaxLevel}");
             ImGui.Spacing();
-            ImGui.Text($"互娱类型: {DisplayAcrType(ACRLifecycle.CurrentEntry?.AcrType ?? AcrType.PvE)}");
+            ImGui.Text($"互娱类型: {DisplayAcrType(rotation.AcrType)}");
             ImGui.Spacing();
             if (!string.IsNullOrEmpty(rotation.Description))
             {
