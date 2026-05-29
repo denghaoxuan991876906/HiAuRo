@@ -5,7 +5,6 @@ namespace HiAuRo.ACR;
 /// </summary>
 public enum AcrType
 {
-    Both,
     PvE,
     PvP,
     通用
