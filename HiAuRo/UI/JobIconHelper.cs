@@ -39,7 +39,7 @@ public static class JobIconHelper
     public static void DrawJobIcon(uint classJobRowId, float size = 32f)
     {
         var handle = GetJobIconHandle(classJobRowId);
-        if ((nint)handle == 0) return;
-        ImGui.Image(handle, new Vector2(size, size));
+        if (handle != (nint)0)
+            ImGui.Image(handle, new Vector2(size, size));
     }
 }
