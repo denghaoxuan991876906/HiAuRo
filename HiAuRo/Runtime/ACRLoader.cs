@@ -52,11 +52,7 @@ public static class ACRLoader
                                 var settingDir = Setting.SettingMgr.GetAcrDir(authorName);
                                 foreach (var job in entry.TargetJobs)
                                 {
-                                    ACRLifecycle.RegisterExternal((uint)job, () =>
-                                    {
-                                        // 每次工厂调用时创建新实例（支持 ALC 内多职业）
-                                        return (IRotationEntry)Activator.CreateInstance(type)!;
-                                    }, settingDir);
+                                    ACRLifecycle.RegisterExternal((uint)job, entry, settingDir);
                                 }
 
                                 DService.Instance().Log.Information($"[ACRLoader] {authorName}/{Path.GetFileName(dllPath)} → {type.Name} [{string.Join(",", entry.TargetJobs)}]");
