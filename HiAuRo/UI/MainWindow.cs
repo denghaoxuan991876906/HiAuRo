@@ -227,7 +227,7 @@ public sealed class MainWindow : Window
         using var contentRounding = new ImRaii.StyleDisposable();
         contentRounding.Push(ImGuiStyleVar.ChildRounding, Theme.RadiusMD);
         ImGui.BeginChild("##ContentPanel", new Vector2(-1, midHeight), false,
-            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+            ImGuiWindowFlags.NoScrollbar);
         DrawContent();
         ImGui.EndChild();
 
