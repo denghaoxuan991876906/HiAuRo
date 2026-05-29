@@ -1143,11 +1143,7 @@ public sealed class MainWindow : Window
 
         var items = registered
             .Where(r => r.Entry != null)
-            .Select((r, i) =>
-            {
-                var t = i == activeIndex && rotation != null ? rotation.AcrType : r.Entry.AcrType;
-                return $"{r.Entry.AuthorName} ({DisplayAcrType(t)})";
-            })
+            .Select(r => $"{r.Entry.AuthorName} ({DisplayAcrType(r.Entry.AcrType)})")
             .ToArray();
         var previewValue = items[Math.Clamp(activeIndex, 0, items.Length - 1)];
 
@@ -1177,7 +1173,7 @@ public sealed class MainWindow : Window
         {
             ImGui.Text($"等级区间: Lv.{rotation.MinLevel} - Lv.{rotation.MaxLevel}");
             ImGui.Spacing();
-            ImGui.Text($"互娱类型: {DisplayAcrType(rotation.AcrType)}");
+            ImGui.Text($"互娱类型: {DisplayAcrType(ACRLifecycle.CurrentEntry?.AcrType ?? AcrType.PvE)}");
             ImGui.Spacing();
             if (!string.IsNullOrEmpty(rotation.Description))
             {
