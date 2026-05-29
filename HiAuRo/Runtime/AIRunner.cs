@@ -290,6 +290,34 @@ public sealed class AIRunner
                 }
             }
 
+            // 起手序列（受 blockBuild 影响）
+            if (!blockBuild && CurrentRotation?.Opener != null)
+            {
+                if (OpenerMgr.CurrentState == OpenerMgr.State.NotStarted)
+                    OpenerMgr.Start(CurrentRotation.Opener);
+
+                if (OpenerMgr.CurrentState == OpenerMgr.State.Running)
+                {
+                    if (!SlotExecutor.IsExecuting)
+                    {
+                        var slot = OpenerMgr.PeekCurrentSlot();
+                        if (slot != null)
+                            SlotExecutor.StartSlot(slot);
+                        else
+                            OpenerMgr.Advance();
+                    }
+
+                    if (SlotExecutor.IsExecuting)
+                    {
+                        var completed = SlotExecutor.ExecuteStep();
+                        if (completed)
+                            OpenerMgr.Advance();
+                    }
+
+                    return; // 阻断 AILoop
+                }
+            }
+
             // 执行队列中待处理的 Slot（受 blockBuild 影响，优先于 AI 循环）
             if (ProcessSpellQueue(blockBuild))
                 return;
