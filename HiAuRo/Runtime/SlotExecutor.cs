@@ -58,10 +58,20 @@ public sealed class SlotExecutor
             return true;
         }
 
-        // 超时 → 跳过当前 action
+        var spell = _currentSlot.Actions[0].Spell;
+
+        // GCD 技能：等待 GCD 就绪（不适用超时）
+        if (!spell.IsAbility() && !GCDHelper.IsGCDReady())
+            return false;
+
+        // 能力技：等待间隔就绪（不适用超时）
+        if (spell.IsAbility() && !Data.Combat.AbilityIntervalElapsed)
+            return false;
+
+        // 超时 → 跳过（仅在条件满足后 UseAction 反复失败时生效）
         if (Environment.TickCount64 >= _slotBreakTime)
         {
-            DService.Instance().Log.Debug($"[SlotExec] 超时跳过: {_currentSlot.Actions[0].Spell.Name}");
+            DService.Instance().Log.Debug($"[SlotExec] 超时跳过: {spell.Name}");
             _currentSlot.Actions.RemoveAt(0);
 
             if (_currentSlot.Actions.Count == 0)
@@ -74,22 +84,17 @@ public sealed class SlotExecutor
             return false;
         }
 
-        var spell = _currentSlot.Actions[0].Spell;
-
-        // GCD 技能：等待 GCD 就绪
-        if (!spell.IsAbility() && !GCDHelper.IsGCDReady())
-            return false;
-
-        // 能力技：等待间隔就绪
-        if (spell.IsAbility() && !Data.Combat.AbilityIntervalElapsed)
-            return false;
-
         // 释放条件满足，尝试 UseAction
         var targetId = ResolveTarget(spell);
         var targetName = GetTargetNameById(targetId);
         var actionType = SpellCategoryToActionType(spell.SpellCategory);
 
         DService.Instance().Log.Debug($"[SlotExec] UseAction: {spell.Name}({spell.Id}) TargetType={spell.TargetType} TargetId={targetId:X}({targetName}) ActionType={actionType}");
+
+        // GCD 技能：提前挂起，确保 OnPostUseAction（同步触发）能匹配
+        if (!spell.IsAbility())
+            _pendingAfterSpell = (_currentSlot, spell);
+
         var useResult = UseActionManager.Instance().UseAction(actionType, spell.Id, targetId, 0, 0, 0);
         DService.Instance().Log.Debug($"[SlotExec] UseAction result={useResult}");
 
@@ -99,15 +104,9 @@ public sealed class SlotExecutor
 
             if (spell.IsAbility())
             {
-                // 能力技：立即确认
                 _runner.EventHandler?.OnSpellCastSuccess(_currentSlot, spell);
                 _runner.EventHandler?.AfterSpell(_currentSlot, spell);
                 Data.Combat.LastAbilityUseTime = Environment.TickCount64;
-            }
-            else
-            {
-                // GCD 技能：挂起，等 OnPostUseAction 确认后触发 AfterSpell
-                _pendingAfterSpell = (_currentSlot, spell);
             }
 
             // 移除已完成的 action
@@ -120,10 +119,11 @@ public sealed class SlotExecutor
             }
 
             _slotBreakTime = Environment.TickCount64 + _currentSlot.MaxDuration;
-            return false; // 还有后续 action
+            return false;
         }
 
-        // UseAction 失败，下帧重试
+        // UseAction 失败，清除挂起（下帧重试）
+        _pendingAfterSpell = null;
         return false;
     }
 
