@@ -196,9 +196,12 @@ public sealed class AIRunner
                 return;
             }
 
+            // Opener 推进：在所有状态下均执行（倒计时结束后立即开始，不依赖战斗状态）
+            ExecuteOpenerIfRunning();
+            if (SlotExecutor.IsExecuting) return;
+
             if (state == CombatContext.State.Idle || state == CombatContext.State.Zoning)
             {
-                Data.Objects.Refresh();
                 UpdateCountDown();
                 ProcessSpellQueue(blockBuild);
                 AiLoop.GetNextSlot(blockBuild: true);
@@ -292,32 +295,11 @@ public sealed class AIRunner
                 }
             }
 
-            // 起手序列（受 blockBuild 影响）
-            if (!blockBuild && CurrentRotation?.Opener != null)
+            // 起手序列：NotStarted 也可能在战斗中首次触发
+            if (!blockBuild && CurrentRotation?.Opener != null
+                && OpenerMgr.CurrentState == OpenerMgr.State.NotStarted)
             {
-                if (OpenerMgr.CurrentState == OpenerMgr.State.NotStarted)
-                    OpenerMgr.Start(CurrentRotation.Opener);
-
-                if (OpenerMgr.CurrentState == OpenerMgr.State.Running)
-                {
-                    if (!SlotExecutor.IsExecuting)
-                    {
-                        var slot = OpenerMgr.PeekCurrentSlot();
-                        if (slot != null)
-                            SlotExecutor.StartSlot(slot);
-                        else
-                            OpenerMgr.Advance();
-                    }
-
-                    if (SlotExecutor.IsExecuting)
-                    {
-                        var completed = SlotExecutor.ExecuteStep();
-                        if (completed)
-                            OpenerMgr.Advance();
-                    }
-
-                    return; // 阻断 AILoop
-                }
+                OpenerMgr.Start(CurrentRotation.Opener);
             }
 
             // 执行队列中待处理的 Slot（受 blockBuild 影响，优先于 AI 循环）
@@ -379,6 +361,29 @@ public sealed class AIRunner
         {
             Hi.Debug("[AIRunner] 倒计时结束, 自动启动 OpenerMgr");
             OpenerMgr.Start(CurrentRotation.Opener);
+        }
+    }
+
+    /// <summary>如果 opener 已启动，推进执行（不依赖战斗状态）</summary>
+    private void ExecuteOpenerIfRunning()
+    {
+        if (CurrentRotation?.Opener == null) return;
+        if (OpenerMgr.CurrentState != OpenerMgr.State.Running) return;
+
+        if (!SlotExecutor.IsExecuting)
+        {
+            var slot = OpenerMgr.PeekCurrentSlot();
+            if (slot != null)
+                SlotExecutor.StartSlot(slot);
+            else
+                OpenerMgr.Advance();
+        }
+
+        if (SlotExecutor.IsExecuting)
+        {
+            var completed = SlotExecutor.ExecuteStep();
+            if (completed)
+                OpenerMgr.Advance();
         }
     }
 
