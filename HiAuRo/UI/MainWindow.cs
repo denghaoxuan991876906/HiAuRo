@@ -1138,11 +1138,17 @@ public sealed class MainWindow : Window
         ImGui.Separator();
         ImGui.Spacing();
 
+        var rotation = ACRLifecycle.Runner.CurrentRotation;
+        var activeIndex = ACRLifecycle.GetActiveAcrIndex(currentJob);
+
         var items = registered
             .Where(r => r.Entry != null)
-            .Select(r => $"{r.Entry.AuthorName} ({DisplayAcrType(r.Entry.AcrType)})")
+            .Select((r, i) =>
+            {
+                var t = i == activeIndex && rotation != null ? rotation.AcrType : r.Entry.AcrType;
+                return $"{r.Entry.AuthorName} ({DisplayAcrType(t)})";
+            })
             .ToArray();
-        var activeIndex = ACRLifecycle.GetActiveAcrIndex(currentJob);
         var previewValue = items[Math.Clamp(activeIndex, 0, items.Length - 1)];
 
         ImGui.Text("当前 ACR:");
@@ -1167,7 +1173,6 @@ public sealed class MainWindow : Window
         ImGui.Separator();
         ImGui.Spacing();
 
-        var rotation = ACRLifecycle.Runner.CurrentRotation;
         if (rotation != null)
         {
             ImGui.Text($"等级区间: Lv.{rotation.MinLevel} - Lv.{rotation.MaxLevel}");
