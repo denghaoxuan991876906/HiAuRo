@@ -1,4 +1,6 @@
 scripts/
+__pycache__/
+*.pyc
 .fantasticonrc.js
 scripts/font-gen/output/
 /HiAuRo/obj
