@@ -779,51 +779,6 @@ public sealed class MainWindow : Window
         ImGui.Separator();
         changed |= ImGui.Checkbox("Debug 日志", ref debug);
 
-        // ── 目标选择器 ──
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.Text("目标选择器");
-        ImGui.Separator();
-
-        var tgtEnabled = _config.TargetSelectorEnabled;
-        changed |= ImGui.Checkbox("启用目标选择器", ref tgtEnabled);
-
-        var tgtCountdown = _config.TargetAutoSelectOnCountdown;
-        changed |= ImGui.Checkbox("倒计时时自动选择目标（仅副本生效）", ref tgtCountdown);
-
-        var tgtMode = (int)_config.TargetSelectMode;
-        var tgtModeNames = Enum.GetNames<TargetSelectMode>();
-        ImGui.TextColored(Theme.Colors.TextPrimary, "选择逻辑");
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(180);
-        if (ImGui.Combo("##TargetSelectMode", ref tgtMode, tgtModeNames, tgtModeNames.Length))
-        {
-            _config.TargetSelectMode = (TargetSelectMode)tgtMode;
-        }
-
-        var tgtRange = _config.TargetSearchRange;
-        ImGui.TextColored(Theme.Colors.TextPrimary, "索敌范围");
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(160);
-        changed |= ImGui.SliderFloat("##tgt_range", ref tgtRange, 5f, 50f, "%.0f");
-        ImGui.SameLine();
-        ImGui.TextColored(Theme.Colors.TextSecondary, "yalms");
-
-        var tgtKeep = _config.TargetKeepCurrent;
-        changed |= ImGui.Checkbox("有目标时不自动切换目标", ref tgtKeep);
-
-        var tgtNoDeath = _config.TargetDisableOnDeath;
-        changed |= ImGui.Checkbox("死亡自动禁用目标选择器", ref tgtNoDeath);
-
-        var tgtNoDummies = _config.TargetExcludeDummies;
-        changed |= ImGui.Checkbox("排除木人", ref tgtNoDummies);
-
-        var tgtNoNonHostile = _config.TargetExcludeNonHostile;
-        changed |= ImGui.Checkbox("排除非敌对目标", ref tgtNoNonHostile);
-
-        var tgtPreferAggro = _config.TargetPreferAggroMarked;
-        changed |= ImGui.Checkbox("优先选中带有攻击头标的敌人", ref tgtPreferAggro);
-
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Text("触发器目录同步 (GitHub)");
@@ -850,15 +805,6 @@ public sealed class MainWindow : Window
             _config.AoeCount = aoe;
             _config.AttackRange = range;
             _config.DebugEnabled = debug;
-            _config.TargetSelectorEnabled = tgtEnabled;
-            _config.TargetAutoSelectOnCountdown = tgtCountdown;
-            _config.TargetSelectMode = (TargetSelectMode)tgtMode;
-            _config.TargetSearchRange = tgtRange;
-            _config.TargetKeepCurrent = tgtKeep;
-            _config.TargetDisableOnDeath = tgtNoDeath;
-            _config.TargetExcludeDummies = tgtNoDummies;
-            _config.TargetExcludeNonHostile = tgtNoNonHostile;
-            _config.TargetPreferAggroMarked = tgtPreferAggro;
             _config.GitHubToken = ghToken.Length > 0 ? ghToken : null;
             _config.CatalogRepo = ghRepo;
             _config.CatalogBranch = ghBranch;
@@ -1237,6 +1183,65 @@ public sealed class MainWindow : Window
         else
         {
             ImGui.TextColored(Theme.Colors.TextTertiary, "ACR 未加载");
+        }
+
+        // ── 目标选择器 ──
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Text("目标选择器");
+        ImGui.Separator();
+
+        var tgtChanged = false;
+        var tgtEnabled = _config.TargetSelectorEnabled;
+        tgtChanged |= ImGui.Checkbox("启用目标选择器", ref tgtEnabled);
+
+        var tgtCountdown = _config.TargetAutoSelectOnCountdown;
+        tgtChanged |= ImGui.Checkbox("倒计时时自动选择目标（仅副本生效）", ref tgtCountdown);
+
+        var tgtMode = (int)_config.TargetSelectMode;
+        var tgtModeNames = Enum.GetNames<TargetSelectMode>();
+        ImGui.TextColored(Theme.Colors.TextPrimary, "选择逻辑");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(180);
+        if (ImGui.Combo("##TargetSelectMode", ref tgtMode, tgtModeNames, tgtModeNames.Length))
+        {
+            _config.TargetSelectMode = (TargetSelectMode)tgtMode;
+        }
+
+        var tgtRange = _config.TargetSearchRange;
+        ImGui.TextColored(Theme.Colors.TextPrimary, "索敌范围");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(160);
+        tgtChanged |= ImGui.SliderFloat("##tgt_range", ref tgtRange, 5f, 50f, "%.0f");
+        ImGui.SameLine();
+        ImGui.TextColored(Theme.Colors.TextSecondary, "yalms");
+
+        var tgtKeep = _config.TargetKeepCurrent;
+        tgtChanged |= ImGui.Checkbox("有目标时不自动切换目标", ref tgtKeep);
+
+        var tgtNoDeath = _config.TargetDisableOnDeath;
+        tgtChanged |= ImGui.Checkbox("死亡自动禁用目标选择器", ref tgtNoDeath);
+
+        var tgtNoDummies = _config.TargetExcludeDummies;
+        tgtChanged |= ImGui.Checkbox("排除木人", ref tgtNoDummies);
+
+        var tgtNoNonHostile = _config.TargetExcludeNonHostile;
+        tgtChanged |= ImGui.Checkbox("排除非敌对目标", ref tgtNoNonHostile);
+
+        var tgtPreferAggro = _config.TargetPreferAggroMarked;
+        tgtChanged |= ImGui.Checkbox("优先选中带有攻击头标的敌人", ref tgtPreferAggro);
+
+        if (tgtChanged)
+        {
+            _config.TargetSelectorEnabled = tgtEnabled;
+            _config.TargetAutoSelectOnCountdown = tgtCountdown;
+            _config.TargetSearchRange = tgtRange;
+            _config.TargetKeepCurrent = tgtKeep;
+            _config.TargetDisableOnDeath = tgtNoDeath;
+            _config.TargetExcludeDummies = tgtNoDummies;
+            _config.TargetExcludeNonHostile = tgtNoNonHostile;
+            _config.TargetPreferAggroMarked = tgtPreferAggro;
+            _saveConfig();
         }
     }
 
@@ -1729,9 +1734,25 @@ public sealed class MainWindow : Window
     private static void DrawRecording()
     {
         ImGui.Spacing();
-        ImGui.Text("副本录制状态");
 
         var recorder = EncounterRecorder.Instance;
+        var config = PluginConfig.Instance;
+        var enabled = config.RecordingEnabled;
+        if (ImGui.Checkbox("启用副本录制", ref enabled))
+        {
+            config.RecordingEnabled = enabled;
+            config.Save();
+
+            if (!enabled && recorder.IsRecording)
+            {
+                recorder.ForceStop();
+                Hi.Print("录制已停止");
+            }
+        }
+
+        ImGui.Spacing();
+        ImGui.Text("副本录制状态");
+
         var isRecording = recorder.IsRecording;
 
         if (isRecording)
