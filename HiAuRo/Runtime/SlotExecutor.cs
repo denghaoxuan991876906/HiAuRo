@@ -60,13 +60,19 @@ public sealed class SlotExecutor
 
         var spell = _currentSlot.Actions[0].Spell;
 
-        // GCD 技能：等待 GCD 就绪（不适用超时）
+        // GCD 技能：等待 GCD 就绪
         if (!spell.IsAbility() && !GCDHelper.IsGCDReady())
+        {
+            _slotBreakTime = Environment.TickCount64 + _currentSlot.MaxDuration;
             return false;
+        }
 
-        // 能力技：等待间隔就绪（不适用超时）
+        // 能力技：等待间隔就绪
         if (spell.IsAbility() && !Data.Combat.AbilityIntervalElapsed)
+        {
+            _slotBreakTime = Environment.TickCount64 + _currentSlot.MaxDuration;
             return false;
+        }
 
         // 超时 → 跳过（仅在条件满足后 UseAction 反复失败时生效）
         if (Environment.TickCount64 >= _slotBreakTime)
