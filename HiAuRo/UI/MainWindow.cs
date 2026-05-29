@@ -1192,7 +1192,10 @@ public sealed class MainWindow : Window
         ImGui.Separator();
         ImGui.Spacing();
 
-        var items = registered.Select(r => $"{r.Entry.AuthorName} ({DisplayAcrType(r.Entry.AcrType)})").ToArray();
+        var items = registered
+            .Where(r => r.Entry != null)
+            .Select(r => $"{r.Entry.AuthorName} ({DisplayAcrType(r.Entry.AcrType)})")
+            .ToArray();
         var activeIndex = ACRLifecycle.GetActiveAcrIndex(currentJob);
         var previewValue = items[Math.Clamp(activeIndex, 0, items.Length - 1)];
 
