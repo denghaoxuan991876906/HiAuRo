@@ -13,7 +13,8 @@ HiAuRo v1 核心框架已全部完成，包含以下模块：
 | ACR 抽象 | IRotationEntry/SlotResolver/Opener/Sequence/Trigger/Hotkey/QT/UI | ✅ |
 | 执行轴 | 条件驱动执行控制（async AST + WaitCond + Roslyn 脚本） | ✅ |
 | 事实轴 | Boss 时间线 JSON 建模（阶段 + Sync 校准 + 分支切换） | ✅ |
-| 决策层 | 消费事实轴 + 贪心分配减伤/治疗 | ✅ |
+| 辅助轴 | 安全坐标计算脚本，始终运行，配合事实轴驱动角色移动 | ✅ |
+| 决策层 | 消费事实轴 + 贪心分配减伤/治疗 + 移动协调 | ✅ |
 | 创作工具 | 可视化编辑器（执行轴/事实轴/辅助轴） | ✅ |
 | HiAuRo.Helper | 21 职业辅助库（独立仓库，自动更新） | ✅ |
 

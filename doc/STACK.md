@@ -17,6 +17,7 @@
 | HttpListener (System.Net) | .NET 内置 HTTP + WebSocket 服务器 |
 | Microsoft.CodeAnalysis.CSharp | Roslyn，执行轴 C# 脚本动态编译 |
 | FFXIVClientStructs | 游戏数据结构（通过 OmenTools 间接引用） |
+| VNavmesh | 寻路插件（角色移动驱动的底层能力，通过 IPC 调用） |
 
 ## 悬浮窗渲染
 
