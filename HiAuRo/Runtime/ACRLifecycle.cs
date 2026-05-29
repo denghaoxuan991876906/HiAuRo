@@ -33,7 +33,7 @@ public static class ACRLifecycle
     public static bool IsLoadingRotation { get; private set; }
 
     /// <summary>ACR 注册项</summary>
-    internal record AcrRegistryEntry(IRotationEntry Entry, string SettingDir);
+    public record AcrRegistryEntry(IRotationEntry Entry, string SettingDir);
 
     /// <summary>外部 ACR: JobId → 多条注册项</summary>
     private static readonly Dictionary<uint, List<AcrRegistryEntry>> _acrRegistry = [];
