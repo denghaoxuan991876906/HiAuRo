@@ -12,6 +12,7 @@ public static class HelperUpdater
     private const string RepoOwner = "denghaoxuan991876906";
     private const string RepoName = "HiAuRo.Helper";
     private const string DllName = "HiAuRo.Helper.dll";
+    private const string LocalDevMarkerName = "HiAuRo.Helper.localdev";
 
     private static readonly HttpClient _http = new()
     {
@@ -21,6 +22,8 @@ public static class HelperUpdater
 
     private static string StoreDir => Path.Combine(
         DService.Instance().PI.ConfigDirectory.FullName, "Helper");
+
+    private static string LocalDevMarkerPath => Path.Combine(StoreDir, LocalDevMarkerName);
 
     private static AssemblyLoadContext? _alc;
     private static Assembly? _helperAsm;
@@ -58,6 +61,13 @@ public static class HelperUpdater
     public static async Task CheckAndUpdateAsync()
     {
         var localDll = Path.Combine(StoreDir, DllName);
+        if (ShouldUseLocalDevHelper(localDll))
+        {
+            DService.Instance().Log.Information("[HelperUpdater] 检测到本地开发版 Helper，跳过在线更新");
+            LoadDll(localDll);
+            return;
+        }
+
         try
         {
             // 直接下载 latest release DLL，无需调用 GitHub API（避免 403 rate limit）
@@ -86,7 +96,22 @@ public static class HelperUpdater
         }
     }
 
-    /// <summary>下载 latest release DLL（直接链接，不走 API，不受 rate limit 限制）</summary>
+    /// <summary>判断当前缓存是否为本地构建的 Helper，避免开发调试时被在线版本覆盖。</summary>
+    private static bool ShouldUseLocalDevHelper(string localDll)
+    {
+        if (!File.Exists(localDll) || !File.Exists(LocalDevMarkerPath))
+            return false;
+
+        var hostPath = typeof(HelperUpdater).Assembly.Location;
+        if (string.IsNullOrWhiteSpace(hostPath) || !File.Exists(hostPath))
+            return true;
+
+        var helperTime = File.GetLastWriteTimeUtc(localDll);
+        var hostTime = File.GetLastWriteTimeUtc(hostPath);
+        return helperTime >= hostTime;
+    }
+
+    /// <summary>下载 latest release DLL（直接链接，不走 API，不受 rate limit 限制）。</summary>
     private static async Task<bool> DownloadLatestDll(string destPath)
     {
         // GitHub 支持 /releases/latest/download/ 直接重定向到最新 release 的 asset
