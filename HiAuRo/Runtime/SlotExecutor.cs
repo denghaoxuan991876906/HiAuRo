@@ -14,6 +14,7 @@ public sealed class SlotExecutor
     // === 状态机 ===
     private Slot? _currentSlot;
     private long _slotBreakTime;
+    private long _gcdDebounce; // GCD 释放后短暂阻止下一个 GCD（等游戏更新计时器）
 
     /// <summary>等待恢复执行的 Slot 队列（BeforeSpell 插入时保存当前 Slot）</summary>
     private readonly Stack<Slot> _pendingSlots = new();
@@ -61,10 +62,13 @@ public sealed class SlotExecutor
         var spell = _currentSlot.Actions[0].Spell;
 
         // GCD 技能：等待 GCD 就绪
-        if (!spell.IsAbility() && !GCDHelper.IsGCDReady())
+        if (!spell.IsAbility())
         {
-            _slotBreakTime = Environment.TickCount64 + _currentSlot.MaxDuration;
-            return false;
+            if (Environment.TickCount64 < _gcdDebounce || !GCDHelper.IsGCDReady())
+            {
+                _slotBreakTime = Environment.TickCount64 + _currentSlot.MaxDuration;
+                return false;
+            }
         }
 
         // 能力技：等待间隔就绪
@@ -113,6 +117,10 @@ public sealed class SlotExecutor
                 _runner.EventHandler?.OnSpellCastSuccess(_currentSlot, spell);
                 _runner.EventHandler?.AfterSpell(_currentSlot, spell);
                 Data.Combat.LastAbilityUseTime = Environment.TickCount64;
+            }
+            else
+            {
+                _gcdDebounce = Environment.TickCount64 + 2000;
             }
 
             // 移除已完成的 action
