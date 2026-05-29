@@ -14,7 +14,7 @@ public sealed class SlotExecutor
     // === 状态机 ===
     private Slot? _currentSlot;
     private long _slotBreakTime;
-    private long _gcdDebounce; // GCD 释放后短暂阻止下一个 GCD（等游戏更新计时器）
+    private long _gcdJustUsedTimestamp; // GCD 释放后等游戏确认 GCD 已生效
 
     /// <summary>等待恢复执行的 Slot 队列（BeforeSpell 插入时保存当前 Slot）</summary>
     private readonly Stack<Slot> _pendingSlots = new();
@@ -64,15 +64,28 @@ public sealed class SlotExecutor
         // GCD 技能：等待 GCD 就绪
         if (!spell.IsAbility())
         {
-            if (Environment.TickCount64 < _gcdDebounce || !GCDHelper.IsGCDReady())
+            // 刚释放过 GCD，等待游戏确认 GCD 计时器已激活（IsActive 从 false 变 true）
+            if (_gcdJustUsedTimestamp > 0)
+            {
+                if (GCDHelper.IsGCDActive())
+                    _gcdJustUsedTimestamp = 0; // GCD 已生效，放行到正常就绪检查
+                else if (Environment.TickCount64 - _gcdJustUsedTimestamp < 500)
+                {
+                    _slotBreakTime = Environment.TickCount64 + _currentSlot.MaxDuration;
+                    return false;
+                }
+                _gcdJustUsedTimestamp = 0; // 超时保护，放行
+            }
+
+            if (!GCDHelper.IsGCDReady())
             {
                 _slotBreakTime = Environment.TickCount64 + _currentSlot.MaxDuration;
                 return false;
             }
         }
 
-        // 能力技：等待间隔就绪
-        if (spell.IsAbility() && !Data.Combat.AbilityIntervalElapsed)
+        // 能力技：等待间隔就绪 + 动画锁释放
+        if (spell.IsAbility() && (!Data.Combat.AbilityIntervalElapsed || !GCDHelper.CanUseOffGcd()))
         {
             _slotBreakTime = Environment.TickCount64 + _currentSlot.MaxDuration;
             return false;
@@ -120,7 +133,7 @@ public sealed class SlotExecutor
             }
             else
             {
-                _gcdDebounce = Environment.TickCount64 + 2000;
+                _gcdJustUsedTimestamp = Environment.TickCount64;
             }
 
             // 移除已完成的 action

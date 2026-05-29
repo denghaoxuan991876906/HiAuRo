@@ -44,6 +44,16 @@ public static class GCDHelper
         return am->AnimationLock <= 0f;
     }
 
+    /// <summary>GCD 计时器是否已激活（RecastDetail.IsActive）</summary>
+    public static unsafe bool IsGCDActive()
+    {
+        var am = ActionManager.Instance();
+        if (am == null) return false;
+        var recastGroup = am->GetRecastGroup((int)ActionType.Action, 9);
+        var detail = am->GetRecastGroupDetail(recastGroup);
+        return detail != null && detail->IsActive;
+    }
+
     /// <summary>GCD 是否就绪</summary>
     public static bool IsGCDReady() => GetGCDCooldown() <= 0;
 }

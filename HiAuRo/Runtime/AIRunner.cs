@@ -174,7 +174,14 @@ public sealed class AIRunner
             Data.Objects.Refresh();
 
             // 目标选择器 —— 所有状态下均工作
-            if (PluginConfig.Instance.TargetSelectorEnabled)
+            // 倒计时时自动选择目标（仅副本生效）：无视 TargetSelectorEnabled，只要倒计时开始且无目标就自动选
+            var doAutoTarget = PluginConfig.Instance.TargetSelectorEnabled
+                || (PluginConfig.Instance.TargetAutoSelectOnCountdown
+                    && Data.Combat.IsInInstanceArea
+                    && ReadCountdown() > 0
+                    && Data.Target.Current == null);
+
+            if (doAutoTarget)
             {
                 if (PluginConfig.Instance.TargetKeepCurrent)
                 {
@@ -547,8 +554,7 @@ public sealed class AIRunner
     private bool TryResolveTarget()
     {
         var cfg = PluginConfig.Instance;
-
-        if (!cfg.TargetSelectorEnabled) return false;
+        // 注: TargetSelectorEnabled 由调用者检查，此处不重复（倒计时路径需要独立于此开关）
 
         // 有目标且设置为不切换，跳过
         if (cfg.TargetKeepCurrent && Data.Target.Current != null) return true;
