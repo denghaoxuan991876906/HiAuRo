@@ -108,7 +108,8 @@ public sealed class MainWindow : Window
     private static readonly (string Name, string Icon, string[] Tabs)[] _modules = new[]
     {
         ("主控", IconHelper.Icons.Settings, new[] { "状态", "设置", "窗口设置" }),
-        ("调试", IconHelper.Icons.Bug, new[] { "Debug", "ACR Debug", "日志" }),
+        ("ACR",  IconHelper.Icons.Settings, new[] { "ACR列表", "ACR Debug" }),
+        ("调试", IconHelper.Icons.Bug, new[] { "Debug", "日志" }),
         ("时间轴", IconHelper.Icons.Clock, new[] { "录制", "事实轴", "执行轴", "辅助轴" }),
     };
 
@@ -564,8 +565,9 @@ public sealed class MainWindow : Window
             case "状态":       DrawStatus(); break;
             case "设置":       DrawSettings(); break;
             case "窗口设置":   DrawOverlaySettings(); break;
-            case "Debug":      DrawDebug(); break;
+            case "ACR列表":    DrawAcrList(); break;
             case "ACR Debug":  DrawAcrDebug(); break;
+            case "Debug":      DrawDebug(); break;
             case "日志":       DrawLog(); break;
             case "录制":       DrawRecording(); break;
             case "事实轴":     DrawFactAxisTab(); break;
@@ -1156,6 +1158,93 @@ public sealed class MainWindow : Window
             ImGui.SameLine(); ImGui.Text(_dbgTargetMostCanTarget_Result);
         }
     }
+
+    /// <summary>ACR 列表 —— 职业图标 + 下拉切换 + Build 后详情</summary>
+    private void DrawAcrList()
+    {
+        ImGui.Spacing();
+
+        if (!HiAuRo.Data.IsReady)
+        {
+            ImGui.Text("等待角色加载...");
+            return;
+        }
+
+        var currentJob = Data.Me.ClassJob;
+        if (currentJob == 0)
+        {
+            ImGui.Text("非战斗职业，ACR 不可用");
+            return;
+        }
+
+        var registered = ACRLifecycle.GetRegisteredAcrs(currentJob);
+        if (registered.Count == 0)
+        {
+            ImGui.Text("当前职业无可用 ACR");
+            return;
+        }
+
+        JobIconHelper.DrawJobIcon(currentJob, 32f);
+        ImGui.SameLine();
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8);
+        ImGui.Text(((Jobs)currentJob).ToString());
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        var items = registered.Select(r => $"{r.Entry.AuthorName} ({DisplayAcrType(r.Entry.AcrType)})").ToArray();
+        var activeIndex = ACRLifecycle.GetActiveAcrIndex(currentJob);
+        var previewValue = items[Math.Clamp(activeIndex, 0, items.Length - 1)];
+
+        ImGui.Text("当前 ACR:");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(200);
+        if (ImGui.BeginCombo("##acrSelector", previewValue))
+        {
+            for (var i = 0; i < items.Length; i++)
+            {
+                var isSelected = i == activeIndex;
+                if (ImGui.Selectable(items[i], isSelected))
+                {
+                    ACRLifecycle.SetActiveAcr(currentJob, i);
+                }
+                if (isSelected)
+                    ImGui.SetItemDefaultFocus();
+            }
+            ImGui.EndCombo();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        var rotation = ACRLifecycle.Runner.CurrentRotation;
+        if (rotation != null)
+        {
+            ImGui.Text($"等级区间: Lv.{rotation.MinLevel} - Lv.{rotation.MaxLevel}");
+            ImGui.Spacing();
+            ImGui.Text($"互娱类型: {DisplayAcrType(rotation.AcrType)}");
+            ImGui.Spacing();
+            if (!string.IsNullOrEmpty(rotation.Description))
+            {
+                ImGui.Text("简介:");
+                ImGui.TextWrapped(rotation.Description);
+            }
+        }
+        else
+        {
+            ImGui.TextColored(Theme.Colors.TextTertiary, "ACR 未加载");
+        }
+    }
+
+    /// <summary>AcrType 转为显示文字</summary>
+    private static string DisplayAcrType(AcrType type) => type switch
+    {
+        AcrType.PvE => "PvE",
+        AcrType.PvP => "PvP",
+        AcrType.通用 => "通用",
+        _ => type.ToString()
+    };
 
     private void DrawAcrDebug()
     {
