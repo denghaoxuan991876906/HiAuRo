@@ -21,6 +21,16 @@ jobs:
       - name: Install dependencies
         run: pip3 install openai
 
+      - name: Check secrets
+        env:
+          KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::warning::DEEPSEEK_API_KEY is NOT set in repo secrets"
+          else
+            echo "DEEPSEEK_API_KEY is set (${#KEY} chars)"
+          fi
+
       - name: Run AI Review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
