@@ -39,10 +39,12 @@ DService.Init → LoadConfig → BrowsingwayPluginInit
 
 ## 构建
 
-所有构建在 Windows 环境执行，WSL 下必须通过 `cmd.exe /c` 转发：
-
 ```bash
-cmd.exe /c "dotnet build E:\DalamudPlugins\HiAuRo\HiAuRo\HiAuRo.csproj -c Debug -nologo"
+# 在 Windows CMD 中执行
+E:\DalamudPlugins\HiAuRo\build.cmd
+
+# WSL 下通过 cmd.exe 转发
+cmd.exe /c "E:\DalamudPlugins\HiAuRo\build.cmd"
 ```
 
-构建后自动将 `HiAuRo.Sdk.nupkg` 输出到 `E:\DalamudPlugins\local-nuget-feed\`（通过 `tools/nuspec_pack.py`）。Browsingway (CEF 渲染器) 和 OmenTools 是外部依赖。
+构建后自动将 `HiAuRo.Sdk.nupkg` 输出到 `E:\DalamudPlugins\local-nuget-feed\`。Browsingway (CEF 渲染器) 和 OmenTools 是外部依赖。

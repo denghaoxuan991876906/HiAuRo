@@ -15,6 +15,11 @@
     <LocalNuGetFeed Condition="'$(LocalNuGetFeed)' == ''">E:\DalamudPlugins\local-nuget-feed\</LocalNuGetFeed>
   </PropertyGroup>
 
+  <!-- DALAMUD_HOME 自动检测（Windows 环境已预设，WSL 手动指定） -->
+  <PropertyGroup>
+    <DALAMUD_HOME Condition="'$(DALAMUD_HOME)' == '' And '$(APPDATA)' != ''">$(APPDATA)\XIVLauncherCN\addon\Hooks\dev\</DALAMUD_HOME>
+  </PropertyGroup>
+
   <!-- 编译时注入 Dev-时间戳 到 AssemblyInformationalVersion -->
   <Target Name="SetDevVersion" BeforeTargets="BeforeBuild">
     <PropertyGroup>

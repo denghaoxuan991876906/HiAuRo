@@ -55,11 +55,11 @@ ACR 的 `.csproj` 中 SDK 引用改为浮动版本：
 所有构建必须在 Windows 环境中执行：
 
 ```bash
-# WSL 下通过 cmd.exe 转发
-cmd.exe /c "dotnet build E:\DalamudPlugins\HiAuRo\HiAuRo.slnx -c Debug -nologo"
+# Windows CMD 直接执行
+E:\DalamudPlugins\HiAuRo\build.cmd
 
-# ACR 秒级恢复
-cmd.exe /c "dotnet build E:\DalamudPlugins\MyACR\嗨呀\嗨呀.csproj -c Debug -nologo"
+# WSL 下通过 cmd.exe 转发
+cmd.exe /c "E:\DalamudPlugins\HiAuRo\build.cmd"
 ```
 
 ## 版本升级
