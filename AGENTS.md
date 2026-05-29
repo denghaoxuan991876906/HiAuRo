@@ -6,12 +6,13 @@ HiAuRo is a FFXIV Dalamud **全栈战斗辅助框架** (.NET 10, Dalamud.NET.Sdk
 
 ## Build & Verify
 
-**所有构建必须在 Windows 环境中执行。** 使用项目根目录的 `build.cmd`：
+**所有构建必须在 Windows 环境中执行。** 使用项目根目录的构建脚本：
 
 ```
 E:\DalamudPlugins\HiAuRo\build.cmd
 ```
 
+WSL 下直接执行 `./build.sh`（自动通过 cmd.exe 转发到 Windows）。
 构建流程：HiAuRo 框架 → 自动打包 SDK 到本地 NuGet 源。
 
 WSL 下通过 cmd.exe 转发：`cmd.exe /c "E:\DalamudPlugins\HiAuRo\build.cmd"`

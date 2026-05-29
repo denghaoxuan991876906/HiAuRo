@@ -1,14 +1,7 @@
 @echo off
-:: HiAuRo local dev build script
-:: Usage: build.cmd
-
-dotnet build %~dp0HiAuRo.slnx -c Debug -nologo
-if %ERRORLEVEL% NEQ 0 (
-    echo [FAIL] HiAuRo build failed
-    exit /b %ERRORLEVEL%
-)
-
-:: 清理 NuGet 缓存，确保 ACR 拿到最新的本地包
-rmdir /s /q "%USERPROFILE%\.nuget\packages\hiauro.sdk" 2>nul
-
-echo Build succeeded
+:: HiAuRo local dev build (Windows CMD -> bash)
+set "SH=%~dp0build.sh"
+set "SH=%SH:\=/%"
+where bash >nul 2>nul && bash "%SH%" && exit /b 0
+echo [ERROR] bash not found. Install Git Bash or WSL.
+exit /b 1

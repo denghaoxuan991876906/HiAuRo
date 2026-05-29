@@ -40,11 +40,11 @@ DService.Init → LoadConfig → BrowsingwayPluginInit
 ## 构建
 
 ```bash
-# 在 Windows CMD 中执行
-E:\DalamudPlugins\HiAuRo\build.cmd
+# Windows CMD
+build.cmd
 
-# WSL 下通过 cmd.exe 转发
-cmd.exe /c "E:\DalamudPlugins\HiAuRo\build.cmd"
+# WSL
+./build.sh
 ```
 
 构建后自动将 `HiAuRo.Sdk.nupkg` 输出到 `E:\DalamudPlugins\local-nuget-feed\`。Browsingway (CEF 渲染器) 和 OmenTools 是外部依赖。
