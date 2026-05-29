@@ -71,6 +71,7 @@ public sealed class EncounterRecorder
     {
         if (newState == CombatContext.State.InCombat)
         {
+            if (!PluginConfig.Instance.RecordingEnabled) return;
             StartRecording();
         }
         else if (newState == CombatContext.State.OutOfCombat)
@@ -229,6 +230,18 @@ public sealed class EncounterRecorder
             .Select(f => (Path.GetFileName(f), f))
             .OrderByDescending(x => x.Item2)
             .ToArray();
+    }
+
+    /// <summary>强制停止录制并保存</summary>
+    public void ForceStop()
+    {
+        bool shouldSave;
+        lock (_lock) { shouldSave = _current != null; }
+        if (shouldSave)
+        {
+            _clock.Pause();
+            SaveRecord();
+        }
     }
 
     #endregion

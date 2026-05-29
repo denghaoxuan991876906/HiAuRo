@@ -150,6 +150,9 @@ public sealed class PluginConfig : SettingsBase
     public bool TargetExcludeDummies { get; set; } = true;
     /// <summary>排除非敌对目标</summary>
     public bool TargetExcludeNonHostile { get; set; } = true;
+
+    /// <summary>启用副本录制</summary>
+    public bool RecordingEnabled { get; set; } = true;
 }
 
 /// <summary>CEF 悬浮窗设置</summary>
