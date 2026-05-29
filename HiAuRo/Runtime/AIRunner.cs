@@ -78,6 +78,7 @@ public sealed class AIRunner
         if (CurrentRotation?.Opener != null)
         {
             CountDownHandler.SetExecutor(SlotExecutor);
+            Hi.Debug("[AIRunner] CountDownHandler.SetExecutor 完成, 开始 InitCountDown");
             CurrentRotation.Opener.InitCountDown(CountDownHandler);
         }
 
@@ -186,8 +187,17 @@ public sealed class AIRunner
                 }
             }
 
+            // SlotExecutor 有正在执行的 Slot → 继续推进
+            if (SlotExecutor.IsExecuting)
+            {
+                SlotExecutor.ExecuteStep();
+                return;
+            }
+
             if (state == CombatContext.State.Idle || state == CombatContext.State.Zoning)
             {
+                Data.Objects.Refresh();
+                UpdateCountDown();
                 ProcessSpellQueue(blockBuild);
                 AiLoop.GetNextSlot(blockBuild: true);
                 return;
@@ -274,69 +284,9 @@ public sealed class AIRunner
 
                         var slot = new Slot();
                         slot.Add(execOutput.ForceSpell);
-                        SlotExecutor.ExecuteSlot(slot);
+                        SlotExecutor.StartSlot(slot);
                         return;
                     }
-
-                    // 消费帧（跳过正常循环）
-                    if (execOutput.ConsumeFrame)
-                        return;
-                }
-
-                // 检查 Rotation 全局触发器（扁平列表）
-                if (CurrentRotation?.TriggerConditions.Count > 0 &&
-                    CurrentRotation?.TriggerActions.Count > 0)
-                {
-                    var minCount = Math.Min(CurrentRotation.TriggerConditions.Count,
-                                            CurrentRotation.TriggerActions.Count);
-                    for (int i = 0; i < minCount; i++)
-                    {
-                        if (CurrentRotation.TriggerConditions[i].Handle())
-                        {
-                            CurrentRotation.TriggerActions[i].Handle();
-                            break;
-                        }
-                    }
-                }
-            }
-#if DEBUG
-            PerfMonitor.Record("ExecutionAxis", _aiPt); _aiPt = System.Diagnostics.Stopwatch.GetTimestamp();
-#endif
-            if (ModeSwitch.CurrentMode == ModeSwitch.Mode.FactAxis)
-            {
-                UpdateFactAxis(state);
-            }
-#if DEBUG
-            PerfMonitor.Record("FactAxis", _aiPt); _aiPt = System.Diagnostics.Stopwatch.GetTimestamp();
-#endif
-
-            // --- 辅助轴（始终运行，独立于执行轴/事实轴） ---
-            UpdateAssistAxis(state);
-#if DEBUG
-            PerfMonitor.Record("AssistAxis", _aiPt); _aiPt = System.Diagnostics.Stopwatch.GetTimestamp();
-#endif
-
-            // 起手序列（受 blockBuild 影响）
-            if (!blockBuild && CurrentRotation?.Opener != null && OpenerMgr.CurrentState == OpenerMgr.State.NotStarted)
-            {
-                if (OpenerMgr.Start(CurrentRotation.Opener))
-                {
-                    var openerSlot = OpenerMgr.Update();
-                    if (openerSlot != null)
-                    {
-                        SlotExecutor.ExecuteSlot(openerSlot);
-                        return;
-                    }
-                }
-            }
-
-            if (!blockBuild && OpenerMgr.CurrentState == OpenerMgr.State.Running)
-            {
-                var openerSlot = OpenerMgr.Update();
-                if (openerSlot != null)
-                {
-                    SlotExecutor.ExecuteSlot(openerSlot);
-                    return;
                 }
             }
 
@@ -350,7 +300,7 @@ public sealed class AIRunner
             PerfMonitor.Record("AILoop", _aiPt); _aiPt = System.Diagnostics.Stopwatch.GetTimestamp();
 #endif
             if (nextSlot != null)
-                SlotExecutor.ExecuteSlot(nextSlot);
+                SlotExecutor.StartSlot(nextSlot);
 #if DEBUG
             PerfMonitor.Record("SlotExec", _aiPt);
 #endif
@@ -377,29 +327,19 @@ public sealed class AIRunner
         MovementExecutor.Instance.Reset();
     }
 
-    /// <summary>倒计时阶段检查（通过 IPC 获取游戏倒计时）</summary>
+    /// <summary>倒计时阶段检查</summary>
     private void UpdateCountDown()
     {
-        var cfg = PluginConfig.Instance;
-        var countdownActive = false;
+        if (!CountDownHandler.HasPending) return;
 
         try
         {
-            var pi = DService.Instance().PI;
-            var countdownIpc = pi.GetIpcSubscriber<float>("Countdown.CountdownTimer");
-            var remaining = countdownIpc.InvokeFunc();
-            countdownActive = remaining > 0;
-            CountDownHandler.Update(remaining);
+            var remaining = ReadCountdown();
+            CountDownHandler.Update(remaining * 1000f);
         }
-        catch
+        catch (Exception ex)
         {
-            // IPC 不可用，跳过
-        }
-
-        // 倒计时时自动选择目标（仅副本生效）
-        if (cfg.TargetAutoSelectOnCountdown && countdownActive && Data.Target.Current == null)
-        {
-            TryResolveTarget();
+            Hi.Debug($"[AIRunner] UpdateCountDown 异常: {ex.Message}");
         }
 
         // 倒计时结束 → 自动启动起手序列
@@ -407,9 +347,26 @@ public sealed class AIRunner
             && CurrentRotation?.Opener != null
             && OpenerMgr.CurrentState == OpenerMgr.State.NotStarted)
         {
+            Hi.Debug("[AIRunner] 倒计时结束, 自动启动 OpenerMgr");
             OpenerMgr.Start(CurrentRotation.Opener);
         }
     }
+
+    /// <summary>读取倒计时剩余秒数，0 表示倒计时未开始或已结束</summary>
+    internal static unsafe float ReadCountdown()
+    {
+        var module = FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentModule.Instance();
+        if (module == null) return 0;
+
+        var agent = module->GetAgentByInternalId(FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentId.CountDownSettingDialog);
+        if (agent == null) return 0;
+
+        var countdown = (FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentCountDownSettingDialog*)agent;
+        if (!countdown->Active) return 0;
+
+        return countdown->TimeRemaining;
+    }
+
 
     /// <summary>
     /// 事实轴更新（Phase 7）—— 不控制 ACR，只输出当前战斗事实状态
@@ -435,7 +392,7 @@ public sealed class AIRunner
         {
             var slot = new Slot();
             slot.Add(output.ForceSpell);
-            SlotExecutor.ExecuteSlot(slot);
+            SlotExecutor.StartSlot(slot);
         }
     }
 
@@ -527,7 +484,7 @@ public sealed class AIRunner
                 {
                     var slot = new Slot();
                     slot.Add(spell);
-                    SlotExecutor.ExecuteSlot(slot);
+                    SlotExecutor.StartSlot(slot);
                 }
                 mit.Executed = true;
             }
@@ -547,7 +504,7 @@ public sealed class AIRunner
             if (spell == null) continue;
             var slot = new Slot();
             slot.Add(spell);
-            SlotExecutor.ExecuteSlot(slot);
+            SlotExecutor.StartSlot(slot);
         }
     }
 
@@ -637,7 +594,7 @@ public sealed class AIRunner
         if (queued != null)
         {
             DService.Instance().Log.Debug($"[AIRunner] ProcessSpellQueue: executing {queued.Actions.Count} spell(s)");
-            SlotExecutor.ExecuteSlot(queued);
+            SlotExecutor.StartSlot(queued);
             return true;
         }
         return false;

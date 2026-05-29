@@ -12,10 +12,10 @@ public sealed partial class Spell
     // === 便利构造函数（对齐 AE）===
 
     public Spell() { }
-    public Spell(uint id, SpellTargetType targetType) { Id = id; TargetType = targetType; Name = id.ToString(); }
-    public Spell(uint id, IBattleChara target) { Id = id; TargetType = SpellTargetType.SpecifyTarget; SpecifyTarget = target; Name = id.ToString(); }
-    public Spell(uint id, Func<IBattleChara> getTargetFunc) { Id = id; TargetType = SpellTargetType.DynamicTarget; GetDynamicTarget = () => getTargetFunc(); Name = id.ToString(); }
-    public Spell(uint id, Vector3 pos) { Id = id; TargetType = SpellTargetType.Location; UsePos = pos; Name = id.ToString(); }
+    public Spell(uint id, SpellTargetType targetType) { Id = id; TargetType = targetType; }
+    public Spell(uint id, IBattleChara target) { Id = id; TargetType = SpellTargetType.SpecifyTarget; SpecifyTarget = target; }
+    public Spell(uint id, Func<IBattleChara> getTargetFunc) { Id = id; TargetType = SpellTargetType.DynamicTarget; GetDynamicTarget = () => getTargetFunc(); }
+    public Spell(uint id, Vector3 pos) { Id = id; TargetType = SpellTargetType.Location; UsePos = pos; }
     public Spell(uint itemId, bool isHq) { Id = itemId; SpellCategory = SpellCategory.Potion; TargetType = SpellTargetType.Self; Hq = isHq; Name = $"Item_{itemId}"; }
 
     /// <summary>链式：不使用 GCD 优化偏移</summary>

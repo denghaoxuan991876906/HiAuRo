@@ -1,4 +1,5 @@
 using HiAuRo.ACR;
+using HiAuRo.Runtime;
 
 namespace HiAuRo.Execution.Triggers.Cond;
 
@@ -14,12 +15,8 @@ public sealed class TriggerCond_倒计时 : ITriggerCond
     {
         try
         {
-            var pi = DService.Instance().PI;
-            var countdownIpc = pi.GetIpcSubscriber<float>("Countdown.CountdownTimer");
-            var remaining = countdownIpc.InvokeFunc();
-
+            var remaining = AIRunner.ReadCountdown();
             if (remaining <= 0) return false;
-
             return Math.Abs(remaining - TimeLeftSec) <= 0.5f;
         }
         catch

@@ -138,6 +138,9 @@ public static class EventSystem
                 HiAuRo.ACR.SpellHistoryHelper.RecordSpell(actionId);
             }
 
+            // 通知 SlotExecutor 确认 GCD 技能释放（触发 AfterSpell）
+            ACRLifecycle.Runner?.SlotExecutor?.NotifySpellUsed(actionId);
+
             DService.Instance().Log.Information($"[EventSystem] 技能成功: id={actionId} type={actionType} target={targetId:X} LastCombo={LastComboSpellId} LastCompleted={LastCompletedActionId}");
             Action<uint>[] completedSnapshot;
             lock (_lock) { completedSnapshot = _onActionCompletedHandlers.ToArray(); }

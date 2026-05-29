@@ -20,8 +20,8 @@ public interface IRotationEventHandler
     /// <summary>读条判定成功后（读条快结束、可滑步的时间点）</summary>
     void OnSpellCastSuccess(Slot slot, Spell spell);
 
-    /// <summary>技能使用前</summary>
-    void BeforeSpell(Slot slot, Spell spell);
+    /// <summary>Slot 开始执行前触发。返回非 null 时，返回的 Slot 插入到当前 Slot 前面先执行。</summary>
+    Slot? BeforeSpell(Slot slot);
 
     /// <summary>技能使用后（DoT刷新后记录是否强化等）</summary>
     void AfterSpell(Slot slot, Spell spell);

@@ -14,9 +14,9 @@ public static class SlotHelper
         ACRLifecycle.Runner.SpellQueue.Enqueue(slot);
     }
 
-    /// <summary>立即执行 Slot（仅主线程调用，阻塞直到执行完毕或超时）</summary>
+    /// <summary>立即执行 Slot（跨帧模式，等待释放条件后执行）</summary>
     public static void Execute(Slot slot)
     {
-        ACRLifecycle.Runner.SlotExecutor.ExecuteSlot(slot);
+        ACRLifecycle.Runner.SlotExecutor.StartSlot(slot);
     }
 }

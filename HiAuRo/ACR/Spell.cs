@@ -17,7 +17,17 @@ public sealed partial class Spell
     };
 
     public uint Id { get; init; }
-    public string Name { get; init; } = string.Empty;
+    private string _name = string.Empty;
+    public string Name
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(_name)) return _name;
+            _name = SpellHelper.GetActionRow(Id)?.Name.ToString() ?? Id.ToString();
+            return _name;
+        }
+        init => _name = value;
+    }
     public SpellTargetType TargetType { get; init; } = SpellTargetType.Target;
     public SpellCategory SpellCategory { get; init; } = SpellCategory.Default;
     public SpellType Type { get; init; } = SpellType.RealGcd;

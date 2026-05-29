@@ -5,82 +5,133 @@ using ActionTypeFF = FFXIVClientStructs.FFXIV.Client.Game.ActionType;
 namespace HiAuRo.Runtime;
 
 /// <summary>
-/// Slot/SlotAction 执行引擎
+/// Slot 执行引擎 —— 跨帧状态机，逐个 action 等待释放条件后执行
 /// </summary>
 public sealed class SlotExecutor
 {
     private readonly AIRunner _runner;
 
-    /// <summary>Initializes a new instance of the <see cref="SlotExecutor"/> class</summary>
+    // === 状态机 ===
+    private Slot? _currentSlot;
+    private long _slotBreakTime;
+
+    /// <summary>等待恢复执行的 Slot 队列（BeforeSpell 插入时保存当前 Slot）</summary>
+    private readonly Stack<Slot> _pendingSlots = new();
+
+    /// <summary>当前是否有 Slot 正在执行</summary>
+    public bool IsExecuting => _currentSlot != null && _currentSlot.Actions.Count > 0;
+
+    /// <summary>等待 AfterSpell 确认的技能</summary>
+    private (Slot slot, Spell spell)? _pendingAfterSpell;
+
     public SlotExecutor(AIRunner runner)
     {
         _runner = runner;
     }
 
-    /// <summary>执行 Slot</summary>
-    public void ExecuteSlot(Slot slot)
+    /// <summary>开始执行一个 Slot（跨帧模式）。所有 Slot 统一走这个路径。</summary>
+    public void StartSlot(Slot slot)
     {
-        var handler = _runner.EventHandler;
-
-        DService.Instance().Log.Debug($"[SlotExec] 开始执行 Slot, Actions={slot.Actions.Count}");
-
-        foreach (var action in slot.Actions)
+        // BeforeSpell：Slot 开始前触发，ACR 作者可插入新 Slot
+        var insertSlot = _runner.EventHandler?.BeforeSpell(slot);
+        if (insertSlot != null)
         {
-            var spell = action.Spell;
-
-            if (spell.Id == 0)
-            {
-                DService.Instance().Log.Debug("[SlotExec] SpellId=0, 延迟100ms后继续");
-                Coroutine.Instance.WaitAsync(100);
-                continue;
-            }
-
-            switch (action.Wait)
-            {
-                case WaitType.WaitInMs:
-                    DService.Instance().Log.Debug($"[SlotExec] WaitInMs={action.TimeInMs}ms ({spell.Name})");
-                    Coroutine.Instance.WaitAsync(action.TimeInMs);
-                    break;
-                case WaitType.WaitForSndHalfWindow:
-                    var remain = GCDHelper.GetGCDCooldown();
-                    var duration = GCDHelper.GetGCDDuration();
-                    var waitMs = (long)(remain - duration * 0.5f);
-                    if (waitMs > 0)
-                    {
-                        DService.Instance().Log.Debug($"[SlotExec] WaitForSndHalfWindow={waitMs}ms (GCD剩余={remain:F0}ms) ({spell.Name})");
-                        Coroutine.Instance.WaitAsync(waitMs);
-                    }
-                    break;
-            }
-
-            handler?.BeforeSpell(slot, spell);
-
-            if (spell.IsAbility() && !Data.Combat.AbilityIntervalElapsed)
-            {
-                DService.Instance().Log.Debug($"[SlotExec] 能力技间隔未到, 跳过 {spell.Name} ({Environment.TickCount64 - Data.Combat.LastAbilityUseTime}ms < {PluginConfig.Instance.AbilityIntervalMs}ms)");
-                continue;
-            }
-
-            var targetId = ResolveTarget(spell);
-            var targetName = GetTargetNameById(targetId);
-            var actionType = SpellCategoryToActionType(spell.SpellCategory);
-
-            DService.Instance().Log.Debug($"[SlotExec] UseAction: {spell.Name}({spell.Id}) TargetType={spell.TargetType} TargetId={targetId:X}({targetName}) ActionType={actionType}");
-            var useResult = UseActionManager.Instance().UseAction(actionType, spell.Id, targetId, 0, 0, 0);
-            DService.Instance().Log.Debug($"[SlotExec] UseAction result={useResult}");
-
-            if (useResult)
-            {
-                EventSystem.OnUseActionSuccess(spell.Id, spell.Type);
-                handler?.OnSpellCastSuccess(slot, spell);
-                if (spell.IsAbility())
-                    Data.Combat.LastAbilityUseTime = Environment.TickCount64;
-            }
-
-            handler?.AfterSpell(slot, spell);
+            _pendingSlots.Push(slot); // 保存当前 Slot，稍后恢复
+            DService.Instance().Log.Debug($"[SlotExec] BeforeSpell 插入 Slot, 原 Slot 入队");
+            StartSlot(insertSlot); // 递归：先执行插入的 Slot
+            return;
         }
 
-        if (slot.AppendedSequence != null && slot.AppendedSequence.StartCheck() >= 0)
+        _currentSlot = slot;
+        _slotBreakTime = Environment.TickCount64 + slot.MaxDuration;
+        DService.Instance().Log.Debug($"[SlotExec] 开始执行 Slot, Actions={slot.Actions.Count}");
+    }
+
+    /// <summary>每帧调用一次。返回 true 表示 Slot 完成。</summary>
+    public bool ExecuteStep()
+    {
+        if (_currentSlot == null || _currentSlot.Actions.Count == 0)
+        {
+            _currentSlot = null;
+            return true;
+        }
+
+        // 超时 → 跳过当前 action
+        if (Environment.TickCount64 >= _slotBreakTime)
+        {
+            DService.Instance().Log.Debug($"[SlotExec] 超时跳过: {_currentSlot.Actions[0].Spell.Name}");
+            _currentSlot.Actions.RemoveAt(0);
+
+            if (_currentSlot.Actions.Count == 0)
+            {
+                FinishSlot();
+                return true;
+            }
+
+            _slotBreakTime = Environment.TickCount64 + _currentSlot.MaxDuration;
+            return false;
+        }
+
+        var spell = _currentSlot.Actions[0].Spell;
+
+        // GCD 技能：等待 GCD 就绪
+        if (!spell.IsAbility() && !GCDHelper.IsGCDReady())
+            return false;
+
+        // 能力技：等待间隔就绪
+        if (spell.IsAbility() && !Data.Combat.AbilityIntervalElapsed)
+            return false;
+
+        // 释放条件满足，尝试 UseAction
+        var targetId = ResolveTarget(spell);
+        var targetName = GetTargetNameById(targetId);
+        var actionType = SpellCategoryToActionType(spell.SpellCategory);
+
+        DService.Instance().Log.Debug($"[SlotExec] UseAction: {spell.Name}({spell.Id}) TargetType={spell.TargetType} TargetId={targetId:X}({targetName}) ActionType={actionType}");
+        var useResult = UseActionManager.Instance().UseAction(actionType, spell.Id, targetId, 0, 0, 0);
+        DService.Instance().Log.Debug($"[SlotExec] UseAction result={useResult}");
+
+        if (useResult)
+        {
+            EventSystem.OnUseActionSuccess(spell.Id, spell.Type);
+
+            if (spell.IsAbility())
+            {
+                // 能力技：立即确认
+                _runner.EventHandler?.OnSpellCastSuccess(_currentSlot, spell);
+                _runner.EventHandler?.AfterSpell(_currentSlot, spell);
+                Data.Combat.LastAbilityUseTime = Environment.TickCount64;
+            }
+            else
+            {
+                // GCD 技能：挂起，等 OnPostUseAction 确认后触发 AfterSpell
+                _pendingAfterSpell = (_currentSlot, spell);
+            }
+
+            // 移除已完成的 action
+            _currentSlot.Actions.RemoveAt(0);
+
+            if (_currentSlot.Actions.Count == 0)
+            {
+                FinishSlot();
+                return true;
+            }
+
+            _slotBreakTime = Environment.TickCount64 + _currentSlot.MaxDuration;
+            return false; // 还有后续 action
+        }
+
+        // UseAction 失败，下帧重试
+        return false;
+    }
+
+    /// <summary>Slot 完成后处理追加序列</summary>
+    private void FinishSlot()
+    {
+        var slot = _currentSlot;
+        _currentSlot = null;
+
+        if (slot?.AppendedSequence != null && slot.AppendedSequence.StartCheck() >= 0)
         {
             var seqSlot = new Slot();
             foreach (var action in slot.AppendedSequence.Sequence)
@@ -91,6 +142,26 @@ public sealed class SlotExecutor
                 _runner.SpellQueue.Enqueue(seqSlot);
             }
         }
+
+        // 恢复被 BeforeSpell 插入推迟的 Slot
+        if (_pendingSlots.Count > 0)
+        {
+            var pendingSlot = _pendingSlots.Pop();
+            DService.Instance().Log.Debug($"[SlotExec] 恢复被推迟的 Slot, Actions={pendingSlot.Actions.Count}");
+            StartSlot(pendingSlot);
+        }
+    }
+
+    /// <summary>由 OnPostUseAction 调用，确认 GCD 技能释放后触发 AfterSpell</summary>
+    internal void NotifySpellUsed(uint actionId)
+    {
+        if (_pendingAfterSpell.HasValue && _pendingAfterSpell.Value.spell.Id == actionId)
+        {
+            var (slot, spell) = _pendingAfterSpell.Value;
+            _runner.EventHandler?.OnSpellCastSuccess(slot, spell);
+            _runner.EventHandler?.AfterSpell(slot, spell);
+            _pendingAfterSpell = null;
+        }
     }
 
     private static string GetTargetNameById(ulong id)
@@ -98,7 +169,6 @@ public sealed class SlotExecutor
         if (id == 0) return "无目标";
         if (Data.Me.Object?.GameObjectID == id) return "自己";
         if (Data.Target.Current?.GameObjectID == id) return Data.Target.Current.Name.ToString();
-        // 检查队伍成员
         foreach (var pm in Data.Party.All)
         {
             if (pm.Player?.GameObjectID == id)
