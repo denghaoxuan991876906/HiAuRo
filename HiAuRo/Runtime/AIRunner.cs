@@ -1,4 +1,5 @@
 using HiAuRo.ACR;
+using HiAuRo.ACR.Extension;
 using static HiAuRo.Data;
 using HiAuRo.Decision;
 using HiAuRo.Execution;
@@ -76,6 +77,7 @@ public sealed class AIRunner
         // 注册倒计时行为
         if (CurrentRotation?.Opener != null)
         {
+            CountDownHandler.SetExecutor(SlotExecutor);
             CurrentRotation.Opener.InitCountDown(CountDownHandler);
         }
 
@@ -167,11 +169,26 @@ public sealed class AIRunner
                 _lastTerritoryId = territoryId;
             }
 
+            // 对象扫描（各分支都依赖）
+            Data.Objects.Refresh();
+
+            // 目标选择器 —— 所有状态下均工作
+            if (PluginConfig.Instance.TargetSelectorEnabled)
+            {
+                if (PluginConfig.Instance.TargetKeepCurrent)
+                {
+                    if (Data.Target.Current == null)
+                        TryResolveTarget();
+                }
+                else
+                {
+                    TryResolveTarget();
+                }
+            }
+
             if (state == CombatContext.State.Idle || state == CombatContext.State.Zoning)
             {
-                Data.Objects.Refresh();
                 ProcessSpellQueue(blockBuild);
-                // 非战斗也跑 Check（有目标时），blockBuild 阻止实际执行
                 AiLoop.GetNextSlot(blockBuild: true);
                 return;
             }
@@ -179,10 +196,8 @@ public sealed class AIRunner
             if (state != CombatContext.State.InCombat)
             {
                 CurrentRotation?.EventHandler?.OnPreCombat();
-                // 倒计时阶段行为检查
                 UpdateCountDown();
                 ProcessSpellQueue(blockBuild);
-                // 非战斗也跑 Check（有目标时），blockBuild 阻止实际执行
                 AiLoop.GetNextSlot(blockBuild: true);
                 return;
             }
@@ -191,29 +206,17 @@ public sealed class AIRunner
 #if DEBUG
             long _aiPt = System.Diagnostics.Stopwatch.GetTimestamp();
 #endif
-            Data.Objects.Refresh();
-#if DEBUG
-            PerfMonitor.Record("Objects.Refresh", _aiPt); _aiPt = System.Diagnostics.Stopwatch.GetTimestamp();
-#endif
             Data.Party.Refresh();
 #if DEBUG
             PerfMonitor.Record("Party.Refresh", _aiPt); _aiPt = System.Diagnostics.Stopwatch.GetTimestamp();
 #endif
 
-            // 无目标 → 尝试通过 TargetResolvers 自动选择
+            // 目标选择器已在上面执行过，若仍无目标则通知 ACR
             if (Data.Target.Current == null)
             {
-                if (TryResolveTarget())
-                {
-                    DService.Instance().Log.Debug($"[AIRunner] 自动选择目标: {Data.Target.Current?.Name}");
-                    // 目标已选中，继续正常循环
-                }
-                else
-                {
-                    DService.Instance().Log.Debug("[AIRunner] 无目标且未能自动选择, 调用 OnNoTarget");
-                    CurrentRotation?.EventHandler?.OnNoTarget();
-                    return;
-                }
+                DService.Instance().Log.Debug("[AIRunner] 无目标, 调用 OnNoTarget");
+                CurrentRotation?.EventHandler?.OnNoTarget();
+                return;
             }
 
             // 战斗计时器
@@ -377,18 +380,34 @@ public sealed class AIRunner
     /// <summary>倒计时阶段检查（通过 IPC 获取游戏倒计时）</summary>
     private void UpdateCountDown()
     {
-        if (!CountDownHandler.HasPending) return;
+        var cfg = PluginConfig.Instance;
+        var countdownActive = false;
 
         try
         {
             var pi = DService.Instance().PI;
             var countdownIpc = pi.GetIpcSubscriber<float>("Countdown.CountdownTimer");
             var remaining = countdownIpc.InvokeFunc();
+            countdownActive = remaining > 0;
             CountDownHandler.Update(remaining);
         }
         catch
         {
             // IPC 不可用，跳过
+        }
+
+        // 倒计时时自动选择目标（仅副本生效）
+        if (cfg.TargetAutoSelectOnCountdown && countdownActive && Data.Target.Current == null)
+        {
+            TryResolveTarget();
+        }
+
+        // 倒计时结束 → 自动启动起手序列
+        if (CountDownHandler.CountdownFinished
+            && CurrentRotation?.Opener != null
+            && OpenerMgr.CurrentState == OpenerMgr.State.NotStarted)
+        {
+            OpenerMgr.Start(CurrentRotation.Opener);
         }
     }
 
@@ -532,29 +551,83 @@ public sealed class AIRunner
         }
     }
 
-    /// <summary>通过 Rotation.TargetResolvers 自动选择目标</summary>
+    /// <summary>通过 PluginConfig 设置自动选择目标</summary>
     private bool TryResolveTarget()
     {
-        if (CurrentRotation?.TargetResolvers == null || CurrentRotation.TargetResolvers.Count == 0)
-            return false;
+        var cfg = PluginConfig.Instance;
 
-        foreach (var resolver in CurrentRotation.TargetResolvers)
+        if (!cfg.TargetSelectorEnabled) return false;
+
+        // 有目标且设置为不切换，跳过
+        if (cfg.TargetKeepCurrent && Data.Target.Current != null) return true;
+
+        // 死亡自动禁用：自身死亡时跳过
+        if (cfg.TargetDisableOnDeath && Data.Me.Object is { IsDead: true }) return false;
+
+        var self = Data.Me.Object;
+        if (self == null) return false;
+
+        var range = cfg.TargetSearchRange;
+
+        // 从敌人列表中筛选候选目标
+        IBattleChara? best = null;
+        float bestValue = cfg.TargetSelectMode is TargetSelectMode.当前血量百分比最高 or TargetSelectMode.当前血量数值最高 or TargetSelectMode.总血量最高
+            ? float.MinValue : float.MaxValue;
+
+        // 第一轮：若启用攻击头标优先，先筛出有头标的敌人
+        var candidates = new List<IBattleChara>();
+        foreach (var obj in Data.Objects.Enemies)
         {
-            try
+            if (obj is not IBattleChara bc) continue;
+            if (!bc.IsTargetable || bc.IsDead == true) continue;
+            if (cfg.TargetExcludeDummies && bc.IsDummy()) continue;
+            var dist = Data.Me.DistanceToObject3D(bc, false);
+            if (dist > range) continue;
+            candidates.Add(bc);
+        }
+
+        if (cfg.TargetPreferAggroMarked)
+        {
+            var marked = candidates.Where(c => c.IsInEnemiesList()).ToList();
+            if (marked.Count > 0)
+                candidates = marked;
+        }
+
+        foreach (var bc in candidates)
+        {
+            var dist = Data.Me.DistanceToObject3D(bc, false);
+
+            float value = cfg.TargetSelectMode switch
             {
-                if (resolver.ResolveTarget(out var target))
-                {
-                    OmenTools.OmenService.TargetManager.Target = target;
-                    return Data.Target.Current != null;
-                }
-            }
-            catch (Exception ex)
+                TargetSelectMode.当前血量百分比最高 or TargetSelectMode.当前血量百分比最低
+                    => bc.MaxHp > 0 ? (float)bc.CurrentHp / bc.MaxHp : 0f,
+                TargetSelectMode.当前血量数值最高 or TargetSelectMode.当前血量数值最低
+                    => bc.CurrentHp,
+                TargetSelectMode.总血量最高
+                    => bc.MaxHp,
+                TargetSelectMode.距离最近
+                    => dist,
+                _ => dist,
+            };
+
+            bool isBetter = cfg.TargetSelectMode switch
             {
-                DService.Instance().Log.Error($"[AIRunner] TargetResolver 异常: {ex}");
+                TargetSelectMode.当前血量百分比最高 or TargetSelectMode.当前血量数值最高 or TargetSelectMode.总血量最高
+                    => value > bestValue,
+                _ => value < bestValue,
+            };
+
+            if (isBetter || best == null)
+            {
+                bestValue = value;
+                best = bc;
             }
         }
 
-        return false;
+        if (best == null) return false;
+
+        OmenTools.OmenService.TargetManager.Target = best;
+        return Data.Target.Current != null;
     }
 
     internal bool ProcessSpellQueue(bool blockBuild)

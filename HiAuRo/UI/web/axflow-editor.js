@@ -51,6 +51,52 @@ var localTriggers = JSON.parse(localStorage.getItem('hiAutoLocalTriggers') || '{
 var factAxisData = null;
 var factNodeTree = [];
 
+// ==================== Cookie ====================
+
+function setCookie(name, value, days) {
+    var expires = '';
+    if (days) { var d = new Date(); d.setTime(d.getTime() + days * 86400000); expires = '; expires=' + d.toUTCString(); }
+    document.cookie = name + '=' + encodeURIComponent(value) + expires + '; path=/; SameSite=Lax';
+}
+
+function getCookie(name) {
+    var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? decodeURIComponent(match[2]) : null;
+}
+
+// ==================== IndexedDB（持久化 FileSystemFileHandle） ====================
+
+function dbOpen() {
+    return new Promise(function(resolve, reject) {
+        var req = indexedDB.open('HiAuRoEditor', 1);
+        req.onupgradeneeded = function(e) { e.target.result.createObjectStore('handles'); };
+        req.onsuccess = function(e) { resolve(e.target.result); };
+        req.onerror = reject;
+    });
+}
+
+function dbSaveCatalogHandle(handle) {
+    return dbOpen().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('handles', 'readwrite');
+            tx.objectStore('handles').put(handle, 'catalogHandle');
+            tx.oncomplete = function() { db.close(); resolve(); };
+            tx.onerror = function() { db.close(); reject(tx.error); };
+        });
+    });
+}
+
+function dbLoadCatalogHandle() {
+    return dbOpen().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('handles', 'readonly');
+            var r = tx.objectStore('handles').get('catalogHandle');
+            r.onsuccess = function() { db.close(); resolve(r.result); };
+            r.onerror = function() { db.close(); reject(r.error); };
+        });
+    }).catch(function() { return null; });
+}
+
 var paletteVisible = true;
 function togglePalette() {
     var panel = document.getElementById('palettePanel');
@@ -85,6 +131,16 @@ function toggleAxisPanel() {
 // ====== Part 3: Init ======
 
 document.addEventListener('DOMContentLoaded', function() {
+    // 恢复 cookie 状态
+    var savedAxis = getCookie('hiAutoActiveAxis');
+    if (savedAxis && (savedAxis === 'execution' || savedAxis === 'assist')) {
+        currentAxis = savedAxis;
+        document.querySelectorAll('.tab-btn').forEach(function(b) {
+            b.classList.remove('active');
+            if (b.dataset.axis === savedAxis) b.classList.add('active');
+        });
+    }
+
     initToolbar();
     initPalette();
     initDrawflow();
@@ -92,6 +148,8 @@ document.addEventListener('DOMContentLoaded', function() {
     initKeyboard();
     updateInfo();
 
+    // 尝试自动恢复上次加载的触发器库
+    restoreCatalogFromHandle();
 });
 
 function initToolbar() {
@@ -101,6 +159,7 @@ function initToolbar() {
             document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
             btn.classList.add('active');
             currentAxis = btn.dataset.axis;
+            setCookie('hiAutoActiveAxis', currentAxis, 365);
             switchAxis();
         });
     });
@@ -901,6 +960,7 @@ async function pickDirectory() {
     if (!window.showDirectoryPicker) { setStatus('浏览器不支持目录选择', 'err'); return; }
     try {
         dirHandle = await window.showDirectoryPicker();
+        setCookie('hiAutoTimelineDir', dirHandle.name, 365);
         refreshFileList();
     } catch(e) { if (e.name !== 'AbortError') setStatus('目录选择失败', 'err'); }
 }
@@ -987,31 +1047,61 @@ function renderTriggerField(ctrl, val, idx, kind) {
     }
 }
 
-function loadCatalogFile() {
+async function loadCatalogFile() {
+    if (window.showOpenFilePicker) {
+        try {
+            var handles = await window.showOpenFilePicker({ types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }] });
+            var handle = handles[0];
+            var file = await handle.getFile();
+            processCatalog(file);
+            await dbSaveCatalogHandle(handle);
+            setCookie('hiAutoCatalogFile', file.name, 365);
+            return;
+        } catch(e) { if (e.name === 'AbortError') return; }
+    }
+    // 降级：老式 <input type="file">
     var input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
     input.onchange = function() {
         var file = this.files[0];
         if (!file) return;
-        var reader = new FileReader();
-        reader.onload = function() {
-            try {
-                var catalog = JSON.parse(reader.result);
-                var conds = catalog.conditions || [];
-                var acts = catalog.actions || [];
-                conds.forEach(function(c) { c.category = 'catalog'; });
-                acts.forEach(function(a) { a.category = 'catalog'; });
-                localTriggers.conditions = conds.concat(localTriggers.conditions || []);
-                localTriggers.actions = acts.concat(localTriggers.actions || []);
-                localStorage.setItem('hiAutoLocalTriggers', JSON.stringify(localTriggers));
-                setStatus('已加载触发器库: ' + conds.length + ' 条件, ' + acts.length + ' 动作', 'ok');
-                renderProps();
-            } catch(e) { setStatus('JSON解析失败: ' + e.message, 'err'); }
-        };
-        reader.readAsText(file);
+        processCatalog(file);
+        setCookie('hiAutoCatalogFile', file.name, 365);
     };
     input.click();
+}
+
+function processCatalog(file) {
+    var reader = new FileReader();
+    reader.onload = function() {
+        try {
+            var catalog = JSON.parse(reader.result);
+            var conds = catalog.conditions || [];
+            var acts = catalog.actions || [];
+            conds.forEach(function(c) { c.category = 'catalog'; });
+            acts.forEach(function(a) { a.category = 'catalog'; });
+            localTriggers.conditions = conds.concat(localTriggers.conditions || []);
+            localTriggers.actions = acts.concat(localTriggers.actions || []);
+            localStorage.setItem('hiAutoLocalTriggers', JSON.stringify(localTriggers));
+            setStatus('已加载触发器库: ' + conds.length + ' 条件, ' + acts.length + ' 动作', 'ok');
+            renderProps();
+        } catch(e) { setStatus('JSON解析失败: ' + e.message, 'err'); }
+    };
+    reader.readAsText(file);
+}
+
+async function restoreCatalogFromHandle() {
+    try {
+        var handle = await dbLoadCatalogHandle();
+        if (!handle) return;
+        var perm = await handle.queryPermission({ mode: 'read' });
+        if (perm !== 'granted') return;
+        var file = await handle.getFile();
+        processCatalog(file);
+        setCookie('hiAutoCatalogFile', file.name, 365);
+        return true;
+    } catch(e) { return false; }
 }
 
 function addTriggerCond() {

@@ -129,6 +129,27 @@ public sealed class PluginConfig : SettingsBase
     public bool ExecutionAxisAutoLoad { get; set; } = true;
     /// <summary>辅助轴 — 进副本自动加载时间轴</summary>
     public bool AssistAxisAutoLoad { get; set; } = false;
+
+    // ── 目标选择器 ──
+
+    /// <summary>倒计时时自动选择目标（仅在副本生效）</summary>
+    public bool TargetAutoSelectOnCountdown { get; set; }
+    /// <summary>启用目标选择器</summary>
+    public bool TargetSelectorEnabled { get; set; }
+    /// <summary>选择逻辑</summary>
+    public TargetSelectMode TargetSelectMode { get; set; } = TargetSelectMode.距离最近;
+    /// <summary>索敌范围 (yalms)</summary>
+    public float TargetSearchRange { get; set; } = 30f;
+    /// <summary>有目标时不自动切换</summary>
+    public bool TargetKeepCurrent { get; set; }
+    /// <summary>死亡自动禁用</summary>
+    public bool TargetDisableOnDeath { get; set; }
+    /// <summary>优先选中带攻击头标的敌人</summary>
+    public bool TargetPreferAggroMarked { get; set; }
+    /// <summary>排除木人</summary>
+    public bool TargetExcludeDummies { get; set; } = true;
+    /// <summary>排除非敌对目标</summary>
+    public bool TargetExcludeNonHostile { get; set; } = true;
 }
 
 /// <summary>CEF 悬浮窗设置</summary>
@@ -186,6 +207,23 @@ public enum MovementMode
     TP,
     /// <summary>NavMesh 寻路 + TP 兜底</summary>
     NavMesh_TP兜底
+}
+
+/// <summary>目标选择逻辑</summary>
+public enum TargetSelectMode
+{
+    /// <summary>当前血量百分比最高</summary>
+    当前血量百分比最高,
+    /// <summary>当前血量百分比最低</summary>
+    当前血量百分比最低,
+    /// <summary>当前血量数值最高</summary>
+    当前血量数值最高,
+    /// <summary>当前血量数值最低</summary>
+    当前血量数值最低,
+    /// <summary>总血量最高</summary>
+    总血量最高,
+    /// <summary>距离最近</summary>
+    距离最近,
 }
 
 /// <summary>自动切换模式</summary>

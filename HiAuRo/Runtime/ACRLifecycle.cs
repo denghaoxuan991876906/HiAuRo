@@ -86,8 +86,9 @@ public static class ACRLifecycle
 
         if (HiAuRo.Data.IsReady && Data.Me.ClassJob == jobId && jobId != 0)
         {
-            UnloadRotation();
-            LoadRotation(list[newIndex].Entry, list[newIndex].SettingDir);
+            var entry = list[newIndex].Entry;
+            if (entry == null) return;
+            LoadRotation(entry, list[newIndex].SettingDir);
         }
     }
 
@@ -160,8 +161,11 @@ public static class ACRLifecycle
         {
             var idx = Math.Clamp(GetActiveAcrIndex(currentJob), 0, list.Count - 1);
             var reg = list[idx];
-            DService.Instance().Log.Information($"[ACR] 找到匹配ACR: idx={idx} {reg.SettingDir}");
-            LoadRotation(reg.Entry, reg.SettingDir);
+            if (reg.Entry != null)
+            {
+                DService.Instance().Log.Information($"[ACR] 找到匹配ACR: idx={idx} {reg.SettingDir}");
+                LoadRotation(reg.Entry, reg.SettingDir);
+            }
         }
         else
         {

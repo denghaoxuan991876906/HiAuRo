@@ -7,6 +7,10 @@ public static class Hi
     public static void Print(string msg) =>
         DService.Instance().Chat.Print($"[HiAuRo] {msg}");
 
+    /// <summary>打印错误聊天消息（红色）</summary>
+    public static void PrintError(string msg) =>
+        DService.Instance().Chat.PrintError($"[HiAuRo] {msg}");
+
     /// <summary>输出调试日志</summary>
     public static void Debug(string msg) =>
         DService.Instance().Log.Debug($"[HiAuRo] {msg}");

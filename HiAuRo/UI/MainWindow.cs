@@ -777,6 +777,51 @@ public sealed class MainWindow : Window
         ImGui.Separator();
         changed |= ImGui.Checkbox("Debug 日志", ref debug);
 
+        // ── 目标选择器 ──
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Text("目标选择器");
+        ImGui.Separator();
+
+        var tgtEnabled = _config.TargetSelectorEnabled;
+        changed |= ImGui.Checkbox("启用目标选择器", ref tgtEnabled);
+
+        var tgtCountdown = _config.TargetAutoSelectOnCountdown;
+        changed |= ImGui.Checkbox("倒计时时自动选择目标（仅副本生效）", ref tgtCountdown);
+
+        var tgtMode = (int)_config.TargetSelectMode;
+        var tgtModeNames = Enum.GetNames<TargetSelectMode>();
+        ImGui.TextColored(Theme.Colors.TextPrimary, "选择逻辑");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(180);
+        if (ImGui.Combo("##TargetSelectMode", ref tgtMode, tgtModeNames, tgtModeNames.Length))
+        {
+            _config.TargetSelectMode = (TargetSelectMode)tgtMode;
+        }
+
+        var tgtRange = _config.TargetSearchRange;
+        ImGui.TextColored(Theme.Colors.TextPrimary, "索敌范围");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(160);
+        changed |= ImGui.SliderFloat("##tgt_range", ref tgtRange, 5f, 50f, "%.0f");
+        ImGui.SameLine();
+        ImGui.TextColored(Theme.Colors.TextSecondary, "yalms");
+
+        var tgtKeep = _config.TargetKeepCurrent;
+        changed |= ImGui.Checkbox("有目标时不自动切换目标", ref tgtKeep);
+
+        var tgtNoDeath = _config.TargetDisableOnDeath;
+        changed |= ImGui.Checkbox("死亡自动禁用目标选择器", ref tgtNoDeath);
+
+        var tgtNoDummies = _config.TargetExcludeDummies;
+        changed |= ImGui.Checkbox("排除木人", ref tgtNoDummies);
+
+        var tgtNoNonHostile = _config.TargetExcludeNonHostile;
+        changed |= ImGui.Checkbox("排除非敌对目标", ref tgtNoNonHostile);
+
+        var tgtPreferAggro = _config.TargetPreferAggroMarked;
+        changed |= ImGui.Checkbox("优先选中带有攻击头标的敌人", ref tgtPreferAggro);
+
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Text("触发器目录同步 (GitHub)");
@@ -803,6 +848,15 @@ public sealed class MainWindow : Window
             _config.AoeCount = aoe;
             _config.AttackRange = range;
             _config.DebugEnabled = debug;
+            _config.TargetSelectorEnabled = tgtEnabled;
+            _config.TargetAutoSelectOnCountdown = tgtCountdown;
+            _config.TargetSelectMode = (TargetSelectMode)tgtMode;
+            _config.TargetSearchRange = tgtRange;
+            _config.TargetKeepCurrent = tgtKeep;
+            _config.TargetDisableOnDeath = tgtNoDeath;
+            _config.TargetExcludeDummies = tgtNoDummies;
+            _config.TargetExcludeNonHostile = tgtNoNonHostile;
+            _config.TargetPreferAggroMarked = tgtPreferAggro;
             _config.GitHubToken = ghToken.Length > 0 ? ghToken : null;
             _config.CatalogRepo = ghRepo;
             _config.CatalogBranch = ghBranch;
@@ -1290,6 +1344,12 @@ public sealed class MainWindow : Window
         var flags = PluginConfig.Instance.FactAxis;
         bool changed = false;
 
+        ImGui.Text("编辑器");
+        ImGui.Separator();
+        if (ImGui.Button("打开事实轴编辑器"))
+            OpenEditor("fact-editor.html");
+        ImGui.Spacing();
+
         ImGui.Text("观测");
         ImGui.Separator();
         { var v = flags.Observe; changed |= ImGui.Checkbox("时间线观测", ref v); flags.Observe = v; }
@@ -1365,7 +1425,15 @@ public sealed class MainWindow : Window
     {
         var config = PluginConfig.Instance;
         var axis = Execution.ExecutionAxis.Instance;
-        var port = Plugin.Instance._uiManager?.WebServerPort ?? 5678;
+
+        ImGui.Text("编辑器");
+        ImGui.Separator();
+        if (ImGui.Button("打开 axflow 编辑器"))
+            OpenEditor("axflow-editor.html");
+        ImGui.SameLine();
+        if (ImGui.Button("打开通用编辑器"))
+            OpenEditor("editor.html");
+        ImGui.Spacing();
 
         // === 轴信息 ===
         if (axis.Initialized)
@@ -1480,28 +1548,18 @@ public sealed class MainWindow : Window
                 axis.AutoLoadTimeline();
         }
 
-        // 打开编辑器
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.Text("编辑器");
-        ImGui.Separator();
-        if (ImGui.Button("打开 axflow 编辑器"))
-        {
-            try { System.Diagnostics.Process.Start("explorer.exe", $"http://localhost:{port}/axflow-editor.html"); }
-            catch { }
-        }
-        if (ImGui.Button("打开通用编辑器"))
-        {
-            try { System.Diagnostics.Process.Start("explorer.exe", $"http://localhost:{port}/editor.html"); }
-            catch { }
-        }
     }
 
     private void DrawAssistAxisTab()
     {
         var config = PluginConfig.Instance;
         var axis = Execution.AssistAxis.Instance;
-        var port = Plugin.Instance._uiManager?.WebServerPort ?? 5678;
+
+        ImGui.Text("编辑器");
+        ImGui.Separator();
+        if (ImGui.Button("打开编辑器"))
+            OpenEditor("editor.html", "axis=assist");
+        ImGui.Spacing();
 
         // === 轴信息 ===
         if (axis.Initialized)
@@ -1574,16 +1632,6 @@ public sealed class MainWindow : Window
                 axis.LoadAssistTimeline();
         }
 
-        // 打开编辑器
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.Text("编辑器");
-        ImGui.Separator();
-        if (ImGui.Button("打开编辑器"))
-        {
-            try { System.Diagnostics.Process.Start("explorer.exe", $"http://localhost:{port}/editor.html?axis=assist"); }
-            catch { }
-        }
     }
 
     private static void DrawRecording()
@@ -1803,6 +1851,14 @@ public sealed class MainWindow : Window
 
             ImGui.EndTable();
         }
+    }
+
+    private static void OpenEditor(string fileName, string? query = null)
+    {
+        var port = Plugin.Instance?._uiManager?.WebServerPort ?? 5678;
+        var url = $"http://localhost:{port}/{fileName}";
+        if (query != null) url += "?" + query;
+        try { System.Diagnostics.Process.Start("explorer.exe", url); } catch { }
     }
 
 }
