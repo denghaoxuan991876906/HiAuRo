@@ -64,9 +64,10 @@ public sealed class AILoop_Normal : IAILoop
             return null;
         }
 
-        bool isGcdReady = GCDHelper.IsGCDReady();
+        bool isGcdReady = GCDHelper.CanUseGCD();
         bool isOffGcdWindow = GCDHelper.CanUseOffGcd();
-        float gcdRemain = isGcdReady ? 0 : GCDHelper.GetGCDCooldown();
+        bool is2ndAbWindow = GCDHelper.Is2ndAbilityTime();
+        float gcdRemain = GCDHelper.GetGCDCooldown();
 
         // ── 第一遍：遍历所有 Resolver，执行 Check()，记录结果 ──
         if (_checkResults.Length != _resolvers.Count)
@@ -109,8 +110,8 @@ public sealed class AILoop_Normal : IAILoop
             {
                 SlotMode.Gcd    => isGcdReady,
                 SlotMode.OffGcd => isOffGcdWindow
-                    && Data.Combat.AbilityCountInGcd < Data.Combat.MaxAbilityTimesInGcd
-                    && Data.Combat.AbilityIntervalElapsed,
+                    && Data.Combat.AbilityIntervalElapsed
+                    && Data.Combat.AbilityCountInGcd < Data.Combat.MaxAbilityTimesInGcd,
                 SlotMode.Always => true,
                 _              => false
             };
@@ -133,7 +134,7 @@ public sealed class AILoop_Normal : IAILoop
                 info.BuiltSlot = true;
                 info.BuiltSkills = string.Join(",", slot.Actions.Select(a => a.Spell.Name));
 
-                DService.Instance().Log.Debug($"[AILoop] Build: {resolverName} → {slot.Actions.Count}个技能 = [{string.Join(", ", slot.Actions.Select(a => $"{a.Spell.Name}({a.Spell.Id})"))}] (GCD={isGcdReady} oGCD={isOffGcdWindow} GCDr={gcdRemain:F0}ms ab={Data.Combat.AbilityCountInGcd}/{Data.Combat.MaxAbilityTimesInGcd})");
+                DService.Instance().Log.Debug($"[AILoop] Build: {resolverName} → {slot.Actions.Count}个技能 = [{string.Join(", ", slot.Actions.Select(a => $"{a.Spell.Name}({a.Spell.Id})"))}] (GCD={isGcdReady} oGCD={isOffGcdWindow} GCDr={gcdRemain:F0}ms 2ndAb={is2ndAbWindow} ab={Data.Combat.AbilityCountInGcd}/{Data.Combat.MaxAbilityTimesInGcd})");
 
                 if (data.Mode == SlotMode.Gcd)
                     Data.Combat.AbilityCountInGcd = 0;

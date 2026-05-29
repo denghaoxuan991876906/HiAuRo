@@ -30,13 +30,18 @@ public static class GCDHelper
         return am->GetRecastTimeForGroup(recastGroup) * 1000f;
     }
 
-    /// <summary>是否可在 oGCD 窗口插入能力技</summary>
-    public static bool CanUseOffGcd()
+    /// <summary>GCD 是否可预输入 (剩余时间 &lt;= ActionQueueInMs)</summary>
+    public static bool CanUseGCD() => GetGCDCooldown() <= PluginConfig.Instance.ActionQueueInMs;
+
+    /// <summary>是否进入二段能力技窗口 (GCD剩余 &lt;= 阈值, 默认1000ms)</summary>
+    public static bool Is2ndAbilityTime(float timeInMs = 1000f) => GetGCDCooldown() <= timeInMs;
+
+    /// <summary>动画锁释放后即可插入 oGCD</summary>
+    public static unsafe bool CanUseOffGcd()
     {
-        var remaining = GetGCDCooldown();
-        var duration = GetGCDDuration();
-        var elapsed = duration - remaining;
-        return remaining < 750f || elapsed > 1500f;
+        var am = ActionManager.Instance();
+        if (am == null) return true;
+        return am->AnimationLock <= 0f;
     }
 
     /// <summary>GCD 是否就绪</summary>
