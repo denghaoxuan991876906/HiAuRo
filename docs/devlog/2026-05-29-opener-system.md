@@ -104,7 +104,7 @@ BeforeSpell（每次尝试前调用）
 AE（`E:\DalamudPlugins\AEAssist 国服 1024\AEAssistCNVersion\AEAssist`）的实现：
 - `Slot.Run()` — 逐个 action 执行，失败重试（100ms），超时跳过
 - `SlotAction.Run()` — GCD 技能异步等待 GCD 就绪后再释放
-- `BeforeSpell` — 每次尝试前调用
+- `BeforeSpell` — Slot 开始前触发，可返回新 Slot 插入
 - `AfterSpell` — `Spell.Cast` 成功后调用
 - `MemApiCountdown` — 通过 `Countdown.Instance` 读取游戏内存
 

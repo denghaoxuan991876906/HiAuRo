@@ -30,16 +30,18 @@ public sealed class SlotExecutor
     }
 
     /// <summary>开始执行一个 Slot（跨帧模式）。所有 Slot 统一走这个路径。</summary>
-    public void StartSlot(Slot slot)
+    public void StartSlot(Slot slot, bool skipBeforeSpell = false)
     {
-        // BeforeSpell：Slot 开始前触发，ACR 作者可插入新 Slot
-        var insertSlot = _runner.EventHandler?.BeforeSpell(slot);
-        if (insertSlot != null)
+        if (!skipBeforeSpell)
         {
-            _pendingSlots.Push(slot); // 保存当前 Slot，稍后恢复
-            DService.Instance().Log.Debug($"[SlotExec] BeforeSpell 插入 Slot, 原 Slot 入队");
-            StartSlot(insertSlot); // 递归：先执行插入的 Slot
-            return;
+            var insertSlot = _runner.EventHandler?.BeforeSpell(slot);
+            if (insertSlot != null)
+            {
+                _pendingSlots.Push(slot);
+                DService.Instance().Log.Debug($"[SlotExec] BeforeSpell 插入 Slot, 原 Slot 入队");
+                StartSlot(insertSlot);
+                return;
+            }
         }
 
         _currentSlot = slot;
@@ -148,7 +150,7 @@ public sealed class SlotExecutor
         {
             var pendingSlot = _pendingSlots.Pop();
             DService.Instance().Log.Debug($"[SlotExec] 恢复被推迟的 Slot, Actions={pendingSlot.Actions.Count}");
-            StartSlot(pendingSlot);
+            StartSlot(pendingSlot, skipBeforeSpell: true);
         }
     }
 

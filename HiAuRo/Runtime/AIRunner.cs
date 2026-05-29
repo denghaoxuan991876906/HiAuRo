@@ -190,7 +190,9 @@ public sealed class AIRunner
             // SlotExecutor 有正在执行的 Slot → 继续推进
             if (SlotExecutor.IsExecuting)
             {
-                SlotExecutor.ExecuteStep();
+                var completed = SlotExecutor.ExecuteStep();
+                if (completed && OpenerMgr.CurrentState == OpenerMgr.State.Running)
+                    OpenerMgr.Advance();
                 return;
             }
 
