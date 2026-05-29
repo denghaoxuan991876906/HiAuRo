@@ -9,6 +9,9 @@ public interface IRotationEntry
     /// <summary>作者名</summary>
     string AuthorName { get; }
 
+    /// <summary>ACR 适用场景类型（PvE / PvP / 通用）</summary>
+    AcrType AcrType => AcrType.PvE;
+
     /// <summary>false=HiAuRo IUiBuilder / true=ACR 自带 HTML</summary>
     bool UseCustomUi { get; }
 

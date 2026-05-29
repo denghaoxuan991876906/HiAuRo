@@ -7,5 +7,6 @@ public enum AcrType
 {
     Both,
     PvE,
-    PvP
+    PvP,
+    通用
 }
