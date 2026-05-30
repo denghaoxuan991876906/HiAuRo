@@ -74,13 +74,9 @@ public sealed class AIRunner
             AiLoop = new AILoop_Normal(CurrentRotation.SlotResolvers);
         }
 
-        // 注册倒计时行为
+        // 注册倒计时行为（每次起手前由 UpdateCountDown 懒注册，此处仅注入 Executor）
         if (CurrentRotation?.Opener != null)
-        {
             CountDownHandler.SetExecutor(SlotExecutor);
-            Hi.Debug("[AIRunner] CountDownHandler.SetExecutor 完成, 开始 InitCountDown");
-            CurrentRotation.Opener.InitCountDown(CountDownHandler);
-        }
 
         // 注册 Rotation 级热键处理器
         if (CurrentRotation?.HotkeyEventHandlers != null)
@@ -199,7 +195,7 @@ public sealed class AIRunner
             {
                 var completed = SlotExecutor.ExecuteStep();
                 if (completed && OpenerMgr.CurrentState == OpenerMgr.State.Running)
-                    OpenerMgr.Advance();
+                    AdvanceOpener();
                 return;
             }
 
@@ -349,11 +345,20 @@ public sealed class AIRunner
     /// <summary>倒计时阶段检查</summary>
     private void UpdateCountDown()
     {
+        var remaining = ReadCountdown();
+
+        // 倒计时开始事件：Reset + 注册
+        if (remaining > 0 && !CountDownHandler.WasActive)
+        {
+            CountDownHandler.Reset();
+            if (CurrentRotation?.Opener != null)
+                CurrentRotation.Opener.InitCountDown(CountDownHandler);
+        }
+
         if (!CountDownHandler.HasPending) return;
 
         try
         {
-            var remaining = ReadCountdown();
             CountDownHandler.Update(remaining * 1000f);
         }
         catch (Exception ex)
@@ -371,6 +376,14 @@ public sealed class AIRunner
         }
     }
 
+    /// <summary>推进 opener，完成后 Reset CountDownHandler</summary>
+    private void AdvanceOpener()
+    {
+        OpenerMgr.Advance();
+        if (OpenerMgr.CurrentState == OpenerMgr.State.Finished)
+            CountDownHandler.Reset();
+    }
+
     /// <summary>如果 opener 已启动，推进执行（不依赖战斗状态）</summary>
     private void ExecuteOpenerIfRunning()
     {
@@ -383,14 +396,14 @@ public sealed class AIRunner
             if (slot != null)
                 SlotExecutor.StartSlot(slot);
             else
-                OpenerMgr.Advance();
+                AdvanceOpener();
         }
 
         if (SlotExecutor.IsExecuting)
         {
             var completed = SlotExecutor.ExecuteStep();
             if (completed)
-                OpenerMgr.Advance();
+                AdvanceOpener();
         }
     }
 

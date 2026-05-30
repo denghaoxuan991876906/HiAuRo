@@ -1,5 +1,6 @@
 using System.Numerics;
 using OmenTools.Dalamud.Services.ObjectTable.Abstractions.ObjectKinds;
+using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace HiAuRo.ACR;
 
@@ -125,12 +126,22 @@ public sealed partial class Spell
 
 public static class SpellExtensions
 {
-    /// <summary>是否为能力技——从游戏数据 ActionCategory 自动判断，不依赖手动 SpellType</summary>
-    public static bool IsAbility(this Spell spell)
+    /// <summary>是否为能力技——通过 recast group 判断是否与 GCD 共享计时器，不依赖 SpellType</summary>
+    public static unsafe bool IsAbility(this Spell spell)
     {
-        if (spell.Type == SpellType.Ability) return true;
         if (spell.Id == 0) return false;
-        var row = SpellHelper.GetActionRow(spell.Id);
-        return row.HasValue && row.Value.ActionCategory.RowId != 0;
+
+        // 非战斗动作不触发 GCD，直接视为能力技
+        if (spell.SpellCategory is SpellCategory.Sprint or SpellCategory.Potion or SpellCategory.Item or SpellCategory.LimitBreak)
+            return true;
+
+        var am = ActionManager.Instance();
+        if (am == null) return false;
+
+        // 用初始攻击(Action ID=9)获取 GCD recast group 作为基准
+        var gcdGroup = am->GetRecastGroup((int)ActionType.Action, 9);
+        var spellGroup = am->GetRecastGroup((int)ActionType.Action, spell.Id);
+
+        return spellGroup != 0 && spellGroup != gcdGroup;
     }
 }

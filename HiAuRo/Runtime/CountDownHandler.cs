@@ -19,6 +19,9 @@ public sealed class CountDownHandler
     /// <summary>倒计时是否曾经活跃（用于区分"从未有过倒计时"和"倒计时刚结束"）</summary>
     private bool _countdownWasActive;
 
+    /// <summary>上一帧倒计时是否活跃（用于检测倒计时开始事件）</summary>
+    public bool WasActive => _countdownWasActive;
+
     /// <summary>倒计时是否已结束</summary>
     public bool CountdownFinished { get; private set; }
 
