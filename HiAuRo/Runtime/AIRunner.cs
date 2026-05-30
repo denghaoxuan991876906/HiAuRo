@@ -347,10 +347,11 @@ public sealed class AIRunner
     {
         var remaining = ReadCountdown();
 
-        // 倒计时开始事件：Reset + 注册
+        // 倒计时开始事件：整个 opener 状态重置
         if (remaining > 0 && !CountDownHandler.WasActive)
         {
             CountDownHandler.Reset();
+            OpenerMgr.Reset();
             if (CurrentRotation?.Opener != null)
                 CurrentRotation.Opener.InitCountDown(CountDownHandler);
         }
