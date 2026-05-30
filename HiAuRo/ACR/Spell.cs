@@ -126,19 +126,27 @@ public sealed partial class Spell
 
 public static class SpellExtensions
 {
-    /// <summary>是否为能力技——通过 recast group 判断是否与 GCD 共享计时器，不依赖 SpellType</summary>
+    /// <summary>是否为能力技——ActionCategory 区分 GCD/oGCD，recast group 兜底</summary>
     public static unsafe bool IsAbility(this Spell spell)
     {
         if (spell.Id == 0) return false;
 
-        // 非战斗动作不触发 GCD，直接视为能力技
         if (spell.SpellCategory is SpellCategory.Sprint or SpellCategory.Potion or SpellCategory.Item or SpellCategory.LimitBreak)
             return true;
 
+        // 优先用 ActionCategory：AutoAttack(1)/Spell(2)/Weaponskill(3) = GCD, Ability(4) = oGCD
+        var row = SpellHelper.GetActionRow(spell.Id);
+        if (row.HasValue)
+        {
+            var cat = row.Value.ActionCategory.RowId;
+            if (cat == 4) return true;   // Ability → oGCD
+            if (cat is 2 or 3) return false; // Spell / Weaponskill → GCD
+        }
+
+        // 兜底：recast group 比对（版本升级 ActionCategory 枚举可能变化）
         var am = ActionManager.Instance();
         if (am == null) return false;
 
-        // 用初始攻击(Action ID=9)获取 GCD recast group 作为基准
         var gcdGroup = am->GetRecastGroup((int)ActionType.Action, 9);
         var spellGroup = am->GetRecastGroup((int)ActionType.Action, spell.Id);
 
