@@ -46,6 +46,11 @@ sealed class HiAuRoContextImpl
         return ACR.AuraHelper.GetAuraTimeLeft(Data.Me.Object, buffId);
     }
 
+    public float GetStatusTimeLeftOnTarget(uint statusId)
+    {
+        return ACR.AuraHelper.GetAuraTimeLeft(Data.Target.Current, statusId);
+    }
+
     public int GetAuraStackCount(uint buffId)
     {
         if (Data.Me.Object is not IBattleChara bc) return 0;
@@ -184,6 +189,7 @@ static class EmitProxy
                 ("OnHasStatusOnTarget",      typeof(Func<uint, bool>)),
                 ("OnGetGauge",               typeof(Func<Type, object?>)),
                 ("OnGetAuraTimeLeft",        typeof(Func<uint, float>)),
+                ("OnGetStatusTimeLeftOnTarget", typeof(Func<uint, float>)),
                 ("OnGetAuraStackCount",      typeof(Func<uint, int>)),
                 ("OnGetCharges",             typeof(Func<uint, float>)),
                 ("OnGetCooldownRemaining",   typeof(Func<uint, float>)),
@@ -220,6 +226,7 @@ static class EmitProxy
                 ("HasStatus",              "OnHasStatus",              1),
                 ("HasStatusOnTarget",      "OnHasStatusOnTarget",      1),
                 ("GetAuraTimeLeft",        "OnGetAuraTimeLeft",        1),
+                ("GetStatusTimeLeftOnTarget","OnGetStatusTimeLeftOnTarget",1),
                 ("GetAuraStackCount",      "OnGetAuraStackCount",      1),
                 ("GetCharges",             "OnGetCharges",             1),
                 ("GetCooldownRemaining",   "OnGetCooldownRemaining",   1),
@@ -275,6 +282,7 @@ static class EmitProxy
             proxyType.GetField("OnHasStatusOnTarget")!.SetValue(null, (Func<uint, bool>)impl.HasStatusOnTarget);
             proxyType.GetField("OnGetGauge")!.SetValue(null, (Func<Type, object?>)impl.GetGauge);
             proxyType.GetField("OnGetAuraTimeLeft")!.SetValue(null, (Func<uint, float>)impl.GetAuraTimeLeft);
+            proxyType.GetField("OnGetStatusTimeLeftOnTarget")!.SetValue(null, (Func<uint, float>)impl.GetStatusTimeLeftOnTarget);
             proxyType.GetField("OnGetAuraStackCount")!.SetValue(null, (Func<uint, int>)impl.GetAuraStackCount);
             proxyType.GetField("OnGetCharges")!.SetValue(null, (Func<uint, float>)impl.GetCharges);
             proxyType.GetField("OnGetCooldownRemaining")!.SetValue(null, (Func<uint, float>)impl.GetCooldownRemaining);

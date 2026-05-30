@@ -125,6 +125,12 @@ public sealed partial class Spell
 
 public static class SpellExtensions
 {
-    public static bool IsAbility(this Spell spell) =>
-        spell.Type == SpellType.Ability;
+    /// <summary>是否为能力技——从游戏数据 ActionCategory 自动判断，不依赖手动 SpellType</summary>
+    public static bool IsAbility(this Spell spell)
+    {
+        if (spell.Type == SpellType.Ability) return true;
+        if (spell.Id == 0) return false;
+        var row = SpellHelper.GetActionRow(spell.Id);
+        return row.HasValue && row.Value.ActionCategory.RowId != 0;
+    }
 }
