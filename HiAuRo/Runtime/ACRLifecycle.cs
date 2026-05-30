@@ -42,6 +42,8 @@ public static class ACRLifecycle
     /// <summary>外部 ALC 引用（用于 Reload 卸载）</summary>
     private static readonly List<AssemblyLoadContext> _externalAlcs = [];
 
+    private static string _configDir = string.Empty;
+    private static volatile bool _pendingReload;
     private static uint _lastJob;
     private static bool _resetCalled;
 
@@ -96,11 +98,16 @@ public static class ACRLifecycle
     public static void ForceRecheck() { _lastJob = 0; }
 
     /// <summary>初始化</summary>
-    public static void Init(string settingRoot) { }
+    public static void Init(string settingRoot)
+    {
+        _configDir = settingRoot;
+        DynModuleWatcher.Start(settingRoot);
+    }
 
     /// <summary>清除静态缓存（插件卸载时调用）</summary>
     public static void Shutdown()
     {
+        DynModuleWatcher.Stop();
         UnloadRotation();
         _acrRegistry.Clear();
         _activeAcrIndices.Clear();
@@ -117,6 +124,7 @@ public static class ACRLifecycle
     /// <summary>每帧由 RuntimeCore 调用</summary>
     public static void Update()
     {
+        CheckPendingReload();
         CheckJobSwitch();
         CheckAutoSave();
 
@@ -209,6 +217,25 @@ public static class ACRLifecycle
             ImGuiOverlayState.UpdateStatus(CurrentAcrName, RuntimeCore.IsRunning,
                 ACR.MainControlHelper.IsPaused, ACR.HotkeyHelper.GetAll(), ACR.QTHelper.GetAll());
         }
+    }
+
+    /// <summary>标记需要重载（由文件监控触发）</summary>
+    internal static void RequestReload()
+    {
+        _pendingReload = true;
+    }
+
+    /// <summary>非战斗时自动执行待定重载</summary>
+    private static void CheckPendingReload()
+    {
+        if (!_pendingReload) return;
+        if (CombatContext.CurrentState == CombatContext.State.InCombat) return;
+        if (Data.Combat.IsInInstanceArea) return;
+        if (Data.Combat.IsBetweenAreas) return;
+
+        _pendingReload = false;
+        DService.Instance().Log.Information("[ACR] DynModuleWatcher 触发自动重载");
+        Reload();
     }
 
     /// <summary>热重载</summary>
