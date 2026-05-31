@@ -47,7 +47,6 @@ public sealed class SlotExecutor
 
         _currentSlot = slot;
         _slotBreakTime = Environment.TickCount64 + slot.MaxDuration;
-        DService.Instance().Log.Debug($"[SlotExec] 开始执行 Slot, Actions={slot.Actions.Count}");
     }
 
     /// <summary>每帧调用一次。返回 true 表示 Slot 完成。</summary>
