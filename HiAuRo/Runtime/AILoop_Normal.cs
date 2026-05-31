@@ -48,7 +48,12 @@ public sealed class AILoop_Normal : IAILoop
         }
 
         if (Data.Target.Current == null)
+        {
+            // 无目标时跳过 Check，同时清除上次的 check 结果避免 Build 读到脏数据
+            if (_checkResults.Length == _resolvers.Count)
+                Array.Fill(_checkResults, -99);
             return;
+        }
 
         if (_checkResults.Length != _resolvers.Count)
             _checkResults = new int[_resolvers.Count];
