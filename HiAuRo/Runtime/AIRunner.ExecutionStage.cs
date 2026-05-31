@@ -60,19 +60,6 @@ public sealed partial class AIRunner
                     stack.Push(PrioritySlotStack.Priority.SpellQueue, queued);
             }
 
-            // AiLoop 正常循环 —— 仅战斗中触发
-            if (state == CombatContext.State.InCombat && !blockBuild && AiLoop != null)
-            {
-                var aiSlot = AiLoop.Build(blockBuild: false);
-                if (aiSlot != null)
-                    stack.Push(PrioritySlotStack.Priority.AiLoop, aiSlot);
-            }
-
-            // ── 统一调度：取本帧最高优先级 Slot 执行 ──
-            var picked = stack.Pop();
-            if (picked != null)
-                SlotExecutor.StartSlot(picked);
-
             // ── 推进（所有状态下都运行）──
             if (SlotExecutor.IsExecuting)
             {
@@ -89,6 +76,18 @@ public sealed partial class AIRunner
             if (decisions.CanPauseAck) return;
 
             if (decisions.ExecAxis?.PauseAcr == true) return;
+
+            // AiLoop Build + 统一调度（仅在 SlotExecutor 空闲时）
+            if (!blockBuild && AiLoop != null)
+            {
+                var aiSlot = AiLoop.Build(blockBuild: false);
+                if (aiSlot != null)
+                    stack.Push(PrioritySlotStack.Priority.AiLoop, aiSlot);
+            }
+
+            var picked = stack.Pop();
+            if (picked != null)
+                SlotExecutor.StartSlot(picked);
 
             // 注意：ForceTarget（无 ForceSpell 时）仅在无 Slot 执行时生效
             if (decisions.ExecAxis?.ForceTarget != null)
