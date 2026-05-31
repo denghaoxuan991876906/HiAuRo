@@ -38,7 +38,13 @@ public sealed class OverlayHotkeyPanel : OverlayBase
     {
         var hotkeys = ImGuiOverlayState.Hotkeys;
         var ui = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
-        _visibleCount = hotkeys.Count(h => ui?.HkVisible.GetValueOrDefault("hk_" + h.Label, true) ?? true);
+        if (ui?.ShowHotkeyPanel == false)
+        {
+            _visibleCount = 0;
+            return;
+        }
+
+        _visibleCount = hotkeys.Count(h => ui?.HkVisible.GetValueOrDefault(h.Id, h.DefaultVisible) ?? h.DefaultVisible);
         if (_visibleCount == 0) return;
         var cols = (ui?.HkCols ?? 0) > 0 ? ui!.HkCols : 5;
         var rows = (_visibleCount + cols - 1) / cols;
@@ -73,6 +79,7 @@ public sealed class OverlayHotkeyPanel : OverlayBase
 
         var ui = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
         if (ui == null) return;
+        if (!ui.ShowHotkeyPanel) return;
 
         var cols = ui.HkCols;
         if (cols <= 0) cols = 5;
@@ -93,13 +100,13 @@ public sealed class OverlayHotkeyPanel : OverlayBase
         for (var i = 0; i < hotkeys.Count; i++)
         {
             var hk = hotkeys[i];
-            var visible = ui.HkVisible.GetValueOrDefault("hk_" + hk.Label, true);
+            var visible = ui.HkVisible.GetValueOrDefault(hk.Id, hk.DefaultVisible);
             if (!visible) continue;
 
-            var hkId = "hk_" + hk.Label;
+            var hkId = hk.Id;
             ImGui.PushID(hkId);
 
-            var available = hk.Check() >= 0;
+            var available = hk.Resolver.Check() >= 0;
             ImGui.BeginDisabled(!available);
             var binding = HiAuRo.ACR.HotkeyHelper.GetBinding(hkId) ?? hk.DefaultKey;
 

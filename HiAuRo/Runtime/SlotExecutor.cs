@@ -245,7 +245,8 @@ public sealed class SlotExecutor
     {
         return cat switch
         {
-            SpellCategory.Sprint or SpellCategory.Potion or SpellCategory.Item => ActionTypeFF.Item,
+            SpellCategory.Sprint => ActionTypeFF.GeneralAction,
+            SpellCategory.Potion or SpellCategory.Item => ActionTypeFF.Item,
             SpellCategory.LimitBreak => ActionTypeFF.GeneralAction,
             _ => ActionTypeFF.Action
         };

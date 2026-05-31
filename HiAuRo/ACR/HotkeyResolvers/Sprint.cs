@@ -1,5 +1,7 @@
+using FFXIVClientStructs.FFXIV.Client.Game;
 using HiAuRo.Runtime;
 using OmenTools.Interop.Game.Lumina;
+using OmenTools.OmenService;
 using static HiAuRo.ACR.SpellsDefine;
 
 namespace HiAuRo.ACR.HotkeyResolvers;
@@ -16,7 +18,7 @@ public sealed class HotkeyResolver_Sprint : IHotkeyResolver
 
     public int Check()
     {
-        if (!SpellHelper.CanUseSpell(疾跑)) return -1;
+        if (!UseActionManager.Instance().IsActionOffCooldown(ActionType.GeneralAction, 疾跑)) return -1;
         return 0;
     }
 
@@ -31,6 +33,6 @@ public sealed class HotkeyResolver_Sprint : IHotkeyResolver
             Type = SpellType.Ability,
             SpellCategory = SpellCategory.Sprint
         });
-        ACRLifecycle.Runner.SpellQueue.Enqueue(slot);
+        SlotHelper.Execute(slot);
     }
 }

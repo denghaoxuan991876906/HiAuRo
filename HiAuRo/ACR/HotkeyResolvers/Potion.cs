@@ -1,4 +1,3 @@
-using HiAuRo.Runtime;
 using OmenTools.Interop.Game.Lumina;
 
 namespace HiAuRo.ACR.HotkeyResolvers;
@@ -22,6 +21,6 @@ public sealed class HotkeyResolver_Potion : IHotkeyResolver
     {
         var slot = new Slot();
         slot.Add(Spell.CreatePotion());
-        ACRLifecycle.Runner.SpellQueue.Enqueue(slot);
+        SlotHelper.Execute(slot);
     }
 }

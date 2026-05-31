@@ -147,7 +147,7 @@ public static class ACRLifecycle
     {
         if (Plugin.IsWebUI || CurrentEntry == null) return;
         ImGuiOverlayState.UpdateStatus(CurrentAcrName, RuntimeCore.IsRunning,
-            ACR.MainControlHelper.IsPaused, ACR.HotkeyHelper.GetAll(), ACR.QTHelper.GetAll());
+            ACR.MainControlHelper.IsPaused, ACR.HotkeyHelper.GetAllRegistrations(), ACR.QTHelper.GetAll());
     }
 
     private static void CheckJobSwitch()
@@ -186,14 +186,17 @@ public static class ACRLifecycle
                     job = CurrentAcrName,
                     enabled = RuntimeCore.IsRunning,
                     paused = ACR.MainControlHelper.IsPaused,
-                    hotkeys = ACR.HotkeyHelper.GetAll().Select(r => new
+                    hotkeys = ACR.HotkeyHelper.GetAllRegistrations().Select(r => new
                     {
                         id = r.Id,
                         label = r.Label,
                         iconId = r.IconId,
                         iconUrl = HiAuRo.UI.IconServer.GetIconUrl(r.IconId),
-                        available = r.Check() >= 0,
-                        binding = ACR.HotkeyHelper.GetBinding("hk_" + r.Label)
+                        available = r.Resolver.Check() >= 0,
+                        binding = ACR.HotkeyHelper.GetBinding(r.Id),
+                        defaultVisible = r.DefaultVisible,
+                        isSystem = r.IsSystem,
+                        canDelete = r.CanDelete
                     }).ToList(),
                     qts = ACR.QTHelper.GetAll().Select(q => new
                     {
@@ -210,7 +213,7 @@ public static class ACRLifecycle
         else
         {
             ImGuiOverlayState.UpdateStatus(CurrentAcrName, RuntimeCore.IsRunning,
-                ACR.MainControlHelper.IsPaused, ACR.HotkeyHelper.GetAll(), ACR.QTHelper.GetAll());
+                ACR.MainControlHelper.IsPaused, ACR.HotkeyHelper.GetAllRegistrations(), ACR.QTHelper.GetAll());
         }
     }
 
@@ -404,7 +407,7 @@ public static class ACRLifecycle
         DService.Instance().Log.Information($"[ACR] uiSettings 消息已发送 + 已缓存 (qtVisible={loadedSettings.QtVisible?.Count ?? 0} hkVisible={loadedSettings.HkVisible?.Count ?? 0})");
 
         // 推送完整状态（qt + hotkey 数据）
-        var hotkeyList = ACR.HotkeyHelper.GetAll();
+        var hotkeyList = ACR.HotkeyHelper.GetAllRegistrations();
         var qtList = ACR.QTHelper.GetAll();
         if (Plugin.IsWebUI && Plugin.Instance._uiBridge != null)
         {
@@ -422,8 +425,11 @@ public static class ACRLifecycle
                         label = r.Label,
                         iconId = r.IconId,
                         iconUrl = HiAuRo.UI.IconServer.GetIconUrl(r.IconId),
-                        available = r.Check() >= 0,
-                        binding = ACR.HotkeyHelper.GetBinding("hk_" + r.Label)
+                        available = r.Resolver.Check() >= 0,
+                        binding = ACR.HotkeyHelper.GetBinding(r.Id),
+                        defaultVisible = r.DefaultVisible,
+                        isSystem = r.IsSystem,
+                        canDelete = r.CanDelete
                     }).ToList(),
                     qts = qtList.Select(q => new
                     {
@@ -480,13 +486,13 @@ public static class ACRLifecycle
         }
 
         // 合并 HK 可见性和绑定（用注册时的 DefaultKey 和 defaultVisible）
-        var hkAll = ACR.HotkeyHelper.GetAll();
+        var hkAll = ACR.HotkeyHelper.GetAllRegistrations();
         foreach (var hk in hkAll)
         {
-            var hkId = "hk_" + hk.Label;
+            var hkId = hk.Id;
             if (!loadedSettings.HkVisible.ContainsKey(hkId))
             {
-                var vis = GetControlDefaultVisible(hkId, controls);
+                var vis = GetControlDefaultVisible(hkId, controls, hk.DefaultVisible);
                 loadedSettings.HkVisible[hkId] = vis;
                 needSave = true;
             }
@@ -605,19 +611,19 @@ public static class ACRLifecycle
     private static string GetProviderKey(string author, uint jobId) => $"{author}_{jobId}";
 
     /// <summary>从 UI 控件定义的 Meta 中提取 defaultVisible（未找到则默认 true）</summary>
-    private static bool GetControlDefaultVisible(string id, List<HiAuRo.UI.UiControlDef>? controls)
+    private static bool GetControlDefaultVisible(string id, List<HiAuRo.UI.UiControlDef>? controls, bool fallback = true)
     {
-        if (controls == null) return true;
+        if (controls == null) return fallback;
         var ctrl = controls.FirstOrDefault(c => c.Id == id);
-        if (ctrl?.Meta == null) return true;
+        if (ctrl?.Meta == null) return fallback;
         try
         {
             var metaType = ctrl.Meta.GetType();
             var prop = metaType.GetProperty("defaultVisible");
             if (prop != null)
-                return (bool?)prop.GetValue(ctrl.Meta) ?? true;
+                return (bool?)prop.GetValue(ctrl.Meta) ?? fallback;
         }
         catch { }
-        return true;
+        return fallback;
     }
 }

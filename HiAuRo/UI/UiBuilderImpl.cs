@@ -166,9 +166,17 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
     public void AddQtHotkey(string label, IHotkeyResolver resolver, bool defaultVisible = true)
     {
         var stableId = "hk_" + label;
-        HotkeyHelper.Register(stableId, resolver);
+        HotkeyHelper.Register(stableId, resolver, new HotkeyRegistration(stableId, resolver, defaultVisible, true, false));
         _controls.Add(new UiControlDef(stableId, "qthotkey", CurrentParent, label, resolver.DefaultKey,
-            Meta: new { defaultVisible }));
+            Meta: new { defaultVisible, isSystem = true, canDelete = false, order = 0 }));
+    }
+
+    public void AddHotkey(string label, IHotkeyResolver resolver, bool defaultVisible = false, bool isSystem = false, bool canDelete = true, int order = 1000)
+    {
+        var stableId = "hk_" + label;
+        HotkeyHelper.Register(stableId, resolver, new HotkeyRegistration(stableId, resolver, defaultVisible, isSystem, canDelete, order));
+        _controls.Add(new UiControlDef(stableId, "hotkey", CurrentParent, label, resolver.DefaultKey,
+            Meta: new { defaultVisible, isSystem, canDelete, order }));
     }
 
     public void AddHotkeyRow(IHotkeyResolver[] hotkeyIds)
@@ -177,9 +185,9 @@ public sealed class UiBuilderImpl : IAcrUiBuilder
         {
             var r = hotkeyIds[i];
             var stableId = "hk_" + r.Label;
-            HotkeyHelper.Register(stableId, r);
+            HotkeyHelper.Register(stableId, r, new HotkeyRegistration(stableId, r, true, true, false));
             _controls.Add(new UiControlDef(stableId, "qthotkey", CurrentParent, r.Label, r.DefaultKey,
-                Meta: new { defaultVisible = true }));
+                Meta: new { defaultVisible = true, isSystem = true, canDelete = false, order = 0 }));
             if (i < hotkeyIds.Length - 1)
                 _controls.Add(new UiControlDef("__sameline__", "sameLine", CurrentParent, string.Empty, null));
         }

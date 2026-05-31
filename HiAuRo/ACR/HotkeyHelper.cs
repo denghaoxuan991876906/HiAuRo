@@ -7,7 +7,7 @@ namespace HiAuRo.ACR;
 public static class HotkeyHelper
 {
     private static readonly object _lock = new();
-    private static readonly Dictionary<string, IHotkeyResolver> _resolvers = [];
+    private static readonly Dictionary<string, HotkeyRegistration> _registrations = [];
     private static readonly List<IHotkeyEventHandler> _handlers = [];
     private static readonly Dictionary<string, string> _keyBindings = [];
 
@@ -16,11 +16,29 @@ public static class HotkeyHelper
     /// <summary>注册热键解析器，同 ID 不重复添加</summary>
     internal static void Register(string id, IHotkeyResolver resolver)
     {
+        Register(id, resolver, new HotkeyRegistration(id, resolver));
+    }
+
+    internal static void Register(string id, IHotkeyResolver resolver, HotkeyRegistration registration)
+    {
         lock (_lock)
         {
-            if (_resolvers.ContainsKey(id)) return;
-            _resolvers[id] = resolver;
+            _registrations[id] = registration with { Id = id, Resolver = resolver };
             _keyBindings.TryAdd(id, resolver.DefaultKey);
+        }
+    }
+
+    public static void RegisterHotkey(string id, IHotkeyResolver resolver, bool defaultVisible = false, bool isSystem = false, bool canDelete = true, int order = 0)
+    {
+        Register(id, resolver, new HotkeyRegistration(id, resolver, defaultVisible, isSystem, canDelete, order));
+    }
+
+    public static void UnregisterHotkey(string id)
+    {
+        lock (_lock)
+        {
+            _registrations.Remove(id);
+            _keyBindings.Remove(id);
         }
     }
 
@@ -36,7 +54,7 @@ public static class HotkeyHelper
 
     public static void Clear()
     {
-        lock (_lock) { _resolvers.Clear(); _handlers.Clear(); _keyBindings.Clear(); }
+        lock (_lock) { _registrations.Clear(); _handlers.Clear(); _keyBindings.Clear(); }
     }
 
     public static void SetBinding(string id, string key)
@@ -63,8 +81,9 @@ public static class HotkeyHelper
 
         lock (_lock)
         {
-            foreach (var (id, resolver) in _resolvers)
+            foreach (var (id, registration) in _registrations)
             {
+                var resolver = registration.Resolver;
                 if (_keyBindings.TryGetValue(id, out var boundKey) && boundKey == key)
                 {
                     if (resolver.Check() >= 0)
@@ -97,8 +116,9 @@ public static class HotkeyHelper
         string? executedLabel = null;
         lock (_lock)
         {
-            if (_resolvers.TryGetValue(id, out var resolver))
+            if (_registrations.TryGetValue(id, out var registration))
             {
+                var resolver = registration.Resolver;
                 var c = resolver.Check();
                 if (c >= 0)
                 {
@@ -114,6 +134,49 @@ public static class HotkeyHelper
 
     public static List<IHotkeyResolver> GetAll()
     {
-        lock (_lock) return [.. _resolvers.Values];
+        lock (_lock) return _registrations.Values
+            .OrderBy(x => x.Order)
+            .ThenBy(x => x.Label)
+            .Select(x => x.Resolver)
+            .ToList();
+    }
+
+    public static List<HotkeyRegistration> GetAllRegistrations()
+    {
+        lock (_lock) return _registrations.Values
+            .OrderBy(x => x.Order)
+            .ThenBy(x => x.Label)
+            .ToList();
+    }
+
+    public static HotkeyRegistration? GetRegistration(string id)
+    {
+        lock (_lock) return _registrations.GetValueOrDefault(id);
+    }
+}
+
+public sealed record HotkeyRegistration(
+    string Id,
+    IHotkeyResolver Resolver,
+    bool DefaultVisible = true,
+    bool IsSystem = true,
+    bool CanDelete = false,
+    int Order = 0)
+{
+    public string Label => Resolver.Label;
+    public string DefaultKey => Resolver.DefaultKey;
+    public uint IconId
+    {
+        get
+        {
+            try
+            {
+                return Resolver.IconId;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
     }
 }

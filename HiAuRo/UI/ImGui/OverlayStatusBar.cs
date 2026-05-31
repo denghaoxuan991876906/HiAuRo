@@ -24,12 +24,6 @@ public sealed class OverlayStatusBar : OverlayBase
 
     private static readonly Vector2 _minExpandedSize = new(320, 180);
 
-    private static readonly UiControlDef[] _builtinTabs =
-    [
-        new("__qt_setup__", "tab", null, "QT设置", null),
-        new("__hk_setup__", "tab", null, "热键设置", null),
-    ];
-
     /// <summary>Initializes a new instance of the <see cref="OverlayStatusBar"/> class</summary>
     public OverlayStatusBar(PluginConfig config, Action saveConfig) : base("HiAuRoStatusBar##Overlay", config)
     {
@@ -102,20 +96,33 @@ public sealed class OverlayStatusBar : OverlayBase
         if (ImGui.BeginTabBar($"##statusTabs_{_tabBarVersion}"))
         {
             // ACR 自定义 tabs（从 controls 列表读取 tab 定义）
+            var rotationUi = HiAuRo.Runtime.ACRLifecycle.CurrentEntry?.GetRotationUI();
             var acrTabs = ImGuiOverlayState.Controls.Where(c => c.Type == "tab").ToList();
             foreach (var tab in acrTabs)
             {
                 if (ImGui.BeginTabItem(tab.Label))
                 {
                     var imBuilder = new HiAuRo.UI.UiBuilderImpl(isImGui: true, activeTab: tab.Id);
-                    HiAuRo.Runtime.ACRLifecycle.CurrentEntry?.GetRotationUI()?.RegisterControls(imBuilder);
+                    rotationUi?.RegisterControls(imBuilder);
                     ImGui.EndTabItem();
                 }
             }
 
+            if (rotationUi is HiAuRo.ACR.IRotationImGuiPanelProvider panelProvider)
+            {
+                foreach (var panel in panelProvider.ImGuiPanels.Where(x => x.Placement == HiAuRo.ACR.RotationImGuiPanelPlacement.Tab))
+                {
+                    if (ImGui.BeginTabItem(panel.Label))
+                    {
+                        panel.Draw();
+                        ImGui.EndTabItem();
+                    }
+                }
+            }
+
             // 内置 tabs
-            if (ImGui.BeginTabItem("QT设置")) { DrawQtSetup(); ImGui.EndTabItem(); }
-            if (ImGui.BeginTabItem("热键设置")) { DrawHotkeySetup(); ImGui.EndTabItem(); }
+            if (ImGui.BeginTabItem("QT")) { DrawQtSetup(rotationUi); ImGui.EndTabItem(); }
+            if (ImGui.BeginTabItem("热键")) { DrawHotkeySetup(rotationUi); ImGui.EndTabItem(); }
 
             ImGui.EndTabBar();
         }
@@ -128,7 +135,7 @@ public sealed class OverlayStatusBar : OverlayBase
 #endif
     }
 
-    private static void DrawQtSetup()
+    private static void DrawQtSetup(HiAuRo.ACR.IRotationUI? rotationUi)
     {
         var settings = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
         if (settings == null) return;
@@ -153,12 +160,21 @@ public sealed class OverlayStatusBar : OverlayBase
                 HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
             }
         }
+
+        DrawRotationPanels(rotationUi, HiAuRo.ACR.RotationImGuiPanelPlacement.QtTab);
     }
 
-    private static void DrawHotkeySetup()
+    private static void DrawHotkeySetup(HiAuRo.ACR.IRotationUI? rotationUi)
     {
         var settings = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
         if (settings == null) return;
+        var showHotkeyPanel = settings.ShowHotkeyPanel;
+        if (ImGui.Checkbox("显示热键栏", ref showHotkeyPanel))
+        {
+            settings.ShowHotkeyPanel = showHotkeyPanel;
+            HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
+        }
+
         var cols = settings.HkCols;
         if (cols <= 0) cols = 5;
         if (ComponentLibrary.SliderInt("__hkcols", "每行列数", ref cols, 1, 10))
@@ -179,15 +195,30 @@ public sealed class OverlayStatusBar : OverlayBase
         ComponentLibrary.Label("可见性");
         using var textColor2 = new ImRaii.ColorDisposable();
         textColor2.Push(ImGuiCol.Text, Theme.Colors.TextPrimary);
-        foreach (var hk in ImGuiOverlayState.Hotkeys)
+        foreach (var hk in ImGuiOverlayState.Hotkeys.Where(h => h.IsSystem))
         {
-            var hkId = "hk_" + hk.Label;
-            var vis = settings.HkVisible.GetValueOrDefault(hkId, true);
+            var hkId = hk.Id;
+            var vis = settings.HkVisible.GetValueOrDefault(hkId, hk.DefaultVisible);
             if (ImGui.Checkbox(hk.Label + "##hkvis_" + hkId, ref vis))
             {
                 settings.HkVisible[hkId] = vis;
                 HiAuRo.Runtime.ACRLifecycle.MarkSettingsDirty();
             }
+        }
+
+        DrawRotationPanels(rotationUi, HiAuRo.ACR.RotationImGuiPanelPlacement.HotkeyTab);
+    }
+
+    private static void DrawRotationPanels(HiAuRo.ACR.IRotationUI? rotationUi, HiAuRo.ACR.RotationImGuiPanelPlacement placement)
+    {
+        if (rotationUi is not HiAuRo.ACR.IRotationImGuiPanelProvider panelProvider) return;
+
+        foreach (var panel in panelProvider.ImGuiPanels.Where(x => x.Placement == placement))
+        {
+            ImGui.Separator();
+            if (!string.IsNullOrWhiteSpace(panel.Label))
+                ComponentLibrary.Label(panel.Label);
+            panel.Draw();
         }
     }
 

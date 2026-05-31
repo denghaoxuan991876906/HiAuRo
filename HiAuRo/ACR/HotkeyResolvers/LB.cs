@@ -1,4 +1,3 @@
-using HiAuRo.Runtime;
 using OmenTools.Interop.Game.Lumina;
 using static HiAuRo.ACR.SpellsDefine;
 
@@ -31,6 +30,6 @@ public sealed class HotkeyResolver_LB : IHotkeyResolver
             Type = SpellType.Ability,
             SpellCategory = SpellCategory.LimitBreak
         });
-        ACRLifecycle.Runner.SpellQueue.Enqueue(slot);
+        SlotHelper.Execute(slot);
     }
 }

@@ -12,6 +12,7 @@ public abstract class AcrSettings : SettingsBase
 
     public int HkCols { get; set; }
     public int HkBtnSize { get; set; } = 52;
+    public bool ShowHotkeyPanel { get; set; } = true;
     public Dictionary<string, bool> HkVisible { get; set; } = [];
     public Dictionary<string, string> HkBindings { get; set; } = [];
 

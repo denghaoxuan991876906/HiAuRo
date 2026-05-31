@@ -301,10 +301,9 @@ public partial class Plugin : IDalamudPlugin
             var id = data.Value.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
             if (id == null) { DService.Instance().Log.Warning("[UI] hotkey: id not found in data"); return; }
             if (!RuntimeCore.IsRunning) { DService.Instance().Log.Information($"[UI] hotkey: '{id}' ignored (ACR 未启动)"); return; }
-            var all = HiAuRo.ACR.HotkeyHelper.GetAll();
-            var match = all.FirstOrDefault(r => r.Id == id);
-            if (match == null) { DService.Instance().Log.Warning($"[UI] hotkey: '{id}' not found in {all.Count} registered resolvers"); return; }
-            var check = match.Check();
+            var match = HiAuRo.ACR.HotkeyHelper.GetRegistration(id);
+            if (match == null) { DService.Instance().Log.Warning($"[UI] hotkey: '{id}' not found"); return; }
+            var check = match.Resolver.Check();
             if (check < 0) { DService.Instance().Log.Information($"[UI] hotkey: '{id}' blocked (Check={check})"); return; }
             DService.Instance().Log.Information($"[UI] hotkey: executing '{id}' ({match.Label}) Check={check}");
             // 技能执行必须走 Dalamud 主线程

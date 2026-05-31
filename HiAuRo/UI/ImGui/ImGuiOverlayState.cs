@@ -25,12 +25,12 @@ public static class ImGuiOverlayState
     /// <summary>QT 芯片列表</summary>
     public static List<QtData> Qts { get; set; } = [];
 
-    /// <summary>热键 resolver 列表</summary>
-    public static List<IHotkeyResolver> Hotkeys { get; set; } = [];
+    /// <summary>热键注册列表</summary>
+    public static List<HotkeyRegistration> Hotkeys { get; set; } = [];
 
     /// <summary>更新 ACR 状态（ACRLifecycle 调用）</summary>
     public static void UpdateStatus(string acrName, bool isRunning, bool isPaused,
-        List<IHotkeyResolver> hotkeys, List<QtData> qts)
+        List<HotkeyRegistration> hotkeys, List<QtData> qts)
     {
         AcrName = acrName;
         IsRunning = isRunning;

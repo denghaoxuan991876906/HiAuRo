@@ -33,6 +33,9 @@ public static class ACRLoader
             var found = false;
             foreach (var dllPath in Directory.GetFiles(authorDir, "*.dll"))
             {
+                if (IsHostAssembly(Path.GetFileNameWithoutExtension(dllPath)))
+                    continue;
+
                 try
                 {
                     var dllBytes = File.ReadAllBytes(dllPath);
@@ -84,7 +87,7 @@ public static class ACRLoader
     {
         DService.Instance().Log.Debug($"[ACRLoader] 解析程序集: {name.Name} v{name.Version} (请求者:{ctx.Name})");
 
-        if (_hostPrefixes.Any(p => name.Name?.StartsWith(p) == true))
+        if (IsHostAssembly(name.Name))
         {
             // HiAuRo 自身一定已加载（我们正在执行的代码就是它）
             if (name.Name == "HiAuRo")
@@ -170,6 +173,9 @@ public static class ACRLoader
 
         return null;
     }
+
+    private static bool IsHostAssembly(string? name) =>
+        _hostPrefixes.Any(p => name?.StartsWith(p) == true);
 
     /// <summary>立即解析所有引用程序集，避免战斗中 JIT 惰性解析触发 I/O</summary>
     private static void PreResolveReferences(AssemblyLoadContext alc, Assembly asm, string authorDir)

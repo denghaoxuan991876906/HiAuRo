@@ -27,6 +27,7 @@ public interface IUiBuilder
 
     // === QT / 热键 ===
     void AddQtHotkey(string label, IHotkeyResolver resolver, bool defaultVisible = true);
+    void AddHotkey(string label, IHotkeyResolver resolver, bool defaultVisible = false, bool isSystem = false, bool canDelete = true, int order = 1000);
     void AddTooltip(string targetId, string tooltip);
     void AddHotkeyRow(IHotkeyResolver[] hotkeyIds);
     void AddBuiltinQt(BuiltinQt type, bool? value = null);
