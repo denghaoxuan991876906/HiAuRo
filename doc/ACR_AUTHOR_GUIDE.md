@@ -15,7 +15,7 @@
 5. [事件回调](#5-事件回调)
 6. [工具类速查](#6-工具类速查)（含 6.7 SlotHelper + 6.8 MovementHelper + 6.11 HiAuRo.Helper）
 7. [UI 注册](#7-ui-注册)
-8. [高级特性](#8-高级特性)
+8. [高级特性](#8-高级特性)（含 8.8 身位指示器）
 9. [实战技巧与常见错误](#9-实战技巧与常见错误)
 10. [附录：接口速查表](#10-附录接口速查表)
 
@@ -1195,6 +1195,35 @@ rot.AddCanPauseACRCheck(() =>
 rot.CanUseHighPrioritySlotCheck = () =>
     Data.Combat.IsCasting ? -1 : 0; // 读条时拒绝
 ```
+
+### 8.8 身位指示器 — 在目标脚下显示身位 VFX
+
+ACR 在每个 GCD 构建 Slot 时调用 `PositionalState.Push()`，系统自动在目标脚下显示身位扇形和攻击范围圈。
+
+```csharp
+// 在 Build(Slot slot) 中调用:
+Rendering.PositionalState.Push(
+    Rendering.PositionalDir.Behind,  // 身位方向
+    gcdTimeMs: 2500,                  // GCD 剩余时间 (ms)
+    actionId: spell.Id                // 技能 ID
+);
+```
+
+**PositionalDir 枚举**：
+
+| 值 | 说明 |
+|----|------|
+| `None` | 无身位需求（清除指示器） |
+| `Behind` | 背身位 — 目标后方 90° Fan90 VFX |
+| `Flank` | 侧身位 — 目标左右各 120° Fan120 VFX |
+
+**视觉效果**：
+- 正确身位 → 绿色半透明 `(0, 1, 0, 0.35)`
+- 错误身位 → 红色半透明 `(1, 0, 0, 0.35)`
+- 扇形半径 = `HitboxRadius + 3f`
+- 攻击范围圈 = 1px ImGui 细线圆（绿色命中圈 + 黄色自动攻击圈）
+
+**用户开关**：主控→设置→身位指示器（`ShowPositional` / `ShowTargetHitbox` / `ShowAutoAttackRange`）
 
 ---
 
