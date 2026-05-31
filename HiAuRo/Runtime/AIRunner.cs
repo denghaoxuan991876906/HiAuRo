@@ -292,7 +292,7 @@ public sealed partial class AIRunner
                 {
                     var slot = new Slot();
                     slot.Add(spell);
-                    SlotExecutor.StartSlot(slot);
+                    PrioritySlotStack.Instance.Push(PrioritySlotStack.Priority.FactAxis, slot);
                 }
                 mit.Executed = true;
             }
@@ -392,19 +392,6 @@ public sealed partial class AIRunner
 
         OmenTools.OmenService.TargetManager.Target = best;
         return Data.Target.Current != null;
-    }
-
-    internal bool ProcessSpellQueue(bool blockBuild)
-    {
-        if (blockBuild || !SpellQueue.HasPending()) return false;
-        var queued = SpellQueue.GetNext();
-        if (queued != null)
-        {
-            DService.Instance().Log.Debug($"[AIRunner] ProcessSpellQueue: executing {queued.Actions.Count} spell(s)");
-            SlotExecutor.StartSlot(queued);
-            return true;
-        }
-        return false;
     }
 
     /// <summary>转发游戏事件到当前 ACR 的 EventHandler。线程安全：先捕获 handler 引用再调用，防止 Unload 期间 CurrentRotation 变 null。</summary>

@@ -10,6 +10,8 @@ public sealed partial class AIRunner
     /// <summary>数据刷新阶段 —— 始终执行，不可跳过</summary>
     internal void Refresh(CombatContext.State state)
     {
+        try
+        {
         // 战斗状态切换检测
         if (state != _prevState)
         {
@@ -85,6 +87,11 @@ public sealed partial class AIRunner
 
         _battleTimeMs += (int)(Data.Combat.DeltaTime * 1000);
         EventHandler?.OnBattleUpdate(_battleTimeMs);
+        }
+        catch (Exception ex)
+        {
+            DService.Instance().Log.Error($"[AIRunner.DataStage] Refresh 异常: {ex}");
+        }
     }
 
     internal void ResetState()

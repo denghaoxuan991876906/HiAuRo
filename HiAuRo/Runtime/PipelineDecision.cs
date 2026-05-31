@@ -11,5 +11,4 @@ internal struct PipelineDecision
     public ExecutionOutput? ExecAxis;       // 执行轴产出
     public ExecutionOutput? AssistAxis;     // 辅助轴产出
     public bool CanPauseAck;                // ACR 暂停请求
-    public List<Slot>? FactSlots;           // 事实轴待执行技能列表（复用已有 List 实例，不新增分配）
 }
