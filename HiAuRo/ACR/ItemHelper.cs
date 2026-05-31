@@ -7,6 +7,22 @@ namespace HiAuRo.ACR;
 /// </summary>
 public static class ItemHelper
 {
+    public static uint GetCurrJobPotionItemId() => Data.Me.ClassJob switch
+    {
+        19 or 21 or 32 or 37 => 39727, // Tank: 刚力
+        20 or 22 or 30 or 34 or 39 or 41 => 39728, // Melee: 刚力
+        23 or 31 or 38 => 39727, // Ranged: 刚力
+        25 or 27 or 35 or 42 => 39730, // Caster
+        24 or 28 or 33 or 40 => 39731, // Healer
+        _ => 39727
+    };
+
+    public static uint GetCurrJobPotionActionId(bool isHq = false)
+    {
+        var itemId = GetCurrJobPotionItemId();
+        return isHq ? itemId + 1000000U : itemId;
+    }
+
     /// <summary>使用物品并等待冷却好后再重试一次</summary>
     public static async void ForceUsePotion(uint itemId, bool isHq = false)
     {
@@ -38,21 +54,17 @@ public static class ItemHelper
     /// <summary>检查当前职业爆发药是否可用</summary>
     public static unsafe bool CheckCurrJobPotion(bool isHq = false)
     {
-        // 各职业爆发药 ID（7.0 版本）
-        uint potionId = 0;
-        var jobId = Data.Me.ClassJob;
-        potionId = jobId switch
-        {
-            19 or 21 or 32 or 37 => 39727, // Tank: 刚力
-            20 or 22 or 30 or 34 or 39 or 41 => 39728, // Melee: 刚力
-            23 or 31 or 38 => 39727, // Ranged: 刚力 (共用)
-            25 or 27 or 35 or 42 => 39730, // Caster
-            24 or 28 or 33 or 40 => 39731, // Healer
-            _ => 39727
-        };
+        if (!HasItem(GetCurrJobPotionItemId(), isHq))
+            return false;
 
-        var realId = isHq ? potionId + 1000000U : potionId;
-        return ActionManager.Instance()->GetRecastTimeElapsed(ActionType.Item, realId) == 0;
+        var actionId = GetCurrJobPotionActionId(isHq);
+        return ActionManager.Instance()->GetRecastTimeElapsed(ActionType.Item, actionId) == 0;
+    }
+
+    public static unsafe bool HasItem(uint itemId, bool isHq = false)
+    {
+        var inv = InventoryManager.Instance();
+        return inv != null && inv->GetInventoryItemCount(itemId, isHq, true, true, 0) > 0;
     }
 
     /// <summary>背包空位数量</summary>

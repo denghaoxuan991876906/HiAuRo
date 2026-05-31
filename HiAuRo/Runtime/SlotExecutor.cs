@@ -110,6 +110,7 @@ public sealed class SlotExecutor
         var targetId = ResolveTarget(spell);
         var targetName = GetTargetNameById(targetId);
         var actionType = SpellCategoryToActionType(spell.SpellCategory);
+        var useLocation = spell.UsePos.HasValue || spell.TargetType == SpellTargetType.Location;
 
         DService.Instance().Log.Debug($"[SlotExec] UseAction: {spell.Name}({spell.Id}) TargetType={spell.TargetType} TargetId={targetId:X}({targetName}) ActionType={actionType}");
 
@@ -117,7 +118,9 @@ public sealed class SlotExecutor
         if (!spell.IsAbility())
             _pendingAfterSpell = (_currentSlot, spell);
 
-        var useResult = UseActionManager.Instance().UseAction(actionType, spell.Id, targetId, 0, 0, 0);
+        var useResult = useLocation && spell.UsePos.HasValue
+            ? UseActionManager.Instance().UseActionLocation(actionType, spell.Id, location: spell.UsePos.Value)
+            : UseActionManager.Instance().UseAction(actionType, spell.Id, targetId, 0, 0, 0);
         DService.Instance().Log.Debug($"[SlotExec] UseAction result={useResult}");
 
         if (useResult)
