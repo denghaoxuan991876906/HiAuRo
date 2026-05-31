@@ -13,7 +13,7 @@ namespace HiAuRo.Runtime;
 /// <summary>
 /// AI 主引擎 —— 加载 ACR、调度 IAILoop + SlotExecutor
 /// </summary>
-public sealed class AIRunner
+public sealed partial class AIRunner
 {
     /// <summary>当前 ACR 入口</summary>
     public IRotationEntry? CurrentEntry { get; private set; }
@@ -35,7 +35,6 @@ public sealed class AIRunner
 
     private int _battleTimeMs;
     private bool _loaded;
-    private CombatContext.State _prevFactAxisState;
     // B3: 需求分治 + 去重
     private readonly HashSet<string> _processedHealEventIds = new();
     private readonly HashSet<string> _processedMitEventIds = new();
@@ -50,8 +49,6 @@ public sealed class AIRunner
         public long WindowEndMs { get; } = windowEndMs;
         public bool Executed { get; set; }
     }
-    private CombatContext.State _prevExecAxisState; // 执行轴战斗状态追踪
-    private CombatContext.State _prevAssistAxisState; // 辅助轴战斗状态追踪
     private CombatContext.State _prevState; // 用于检测战斗状态切换
     private uint _lastTerritoryId; // 用于检测切图
 
@@ -147,6 +144,19 @@ public sealed class AIRunner
                 {
                     DService.Instance().Log.Debug("[AIRunner] 进入战斗, 清空旧 SpellQueue");
                     SpellQueue.Clear();
+                    // 轴启动
+                    if (ModeSwitch.CurrentMode == ModeSwitch.Mode.ExecutionAxis)
+                        ExecutionAxis.Instance.Start();
+                    AssistAxis.Instance.Start();
+                    FactTimeline.Instance.Start();
+                }
+                else if (state == CombatContext.State.OutOfCombat || state == CombatContext.State.Idle)
+                {
+                    // 轴停止
+                    if (ModeSwitch.CurrentMode == ModeSwitch.Mode.ExecutionAxis)
+                        ExecutionAxis.Instance.Stop();
+                    AssistAxis.Instance.Stop();
+                    FactTimeline.Instance.Stop();
                 }
             }
             _prevState = state;
@@ -190,18 +200,16 @@ public sealed class AIRunner
                 }
             }
 
-            // SlotExecutor 有正在执行的 Slot → 继续推进
+            // SlotExecutor 有正在执行的 Slot → 继续推进（不 return，不变量操作仍需执行）
             if (SlotExecutor.IsExecuting)
             {
                 var completed = SlotExecutor.ExecuteStep();
                 if (completed && OpenerMgr.CurrentState == OpenerMgr.State.Running)
                     AdvanceOpener();
-                return;
             }
 
             // Opener 推进：在所有状态下均执行（倒计时结束后立即开始，不依赖战斗状态）
             ExecuteOpenerIfRunning();
-            if (SlotExecutor.IsExecuting) return;
 
             if (state == CombatContext.State.Idle || state == CombatContext.State.Zoning)
             {
@@ -229,12 +237,11 @@ public sealed class AIRunner
             PerfMonitor.Record("Party.Refresh", _aiPt); _aiPt = System.Diagnostics.Stopwatch.GetTimestamp();
 #endif
 
-            // 目标选择器已在上面执行过，若仍无目标则通知 ACR
+            // 目标选择器已在上面执行过，若仍无目标则通知 ACR（不 return，不变量仍需执行）
             if (Data.Target.Current == null)
             {
                 DService.Instance().Log.Debug("[AIRunner] 无目标, 调用 OnNoTarget");
                 CurrentRotation?.EventHandler?.OnNoTarget();
-                return;
             }
 
             // 战斗计时器
@@ -244,7 +251,18 @@ public sealed class AIRunner
             PerfMonitor.Record("BattleUpdate", _aiPt); _aiPt = System.Diagnostics.Stopwatch.GetTimestamp();
 #endif
 
-            // ACR 暂停检查
+            // --- 轴更新（每帧不变量：只更新内部状态，不启动 Slot）---
+            ExecutionOutput? execOutput = null;
+            if (ModeSwitch.CurrentMode == ModeSwitch.Mode.ExecutionAxis)
+                execOutput = ExecutionAxis.Instance.Update(_battleTimeMs);
+
+            var assistOutput = AssistAxis.Instance.Update(_battleTimeMs);
+            UpdateFactAxis();
+
+            // --- Slot 构建门控：执行轴/辅助轴/事实轴可继续推进内部状态，但不发起新技能 ---
+            if (SlotExecutor.IsExecuting) return;
+
+            // ACR 暂停检查（仅阻止 Slot 构建，不阻断轴状态更新）
             if (CurrentRotation?.CanPauseACRCheck != null)
             {
                 var pauseResult = CurrentRotation.CanPauseACRCheck();
@@ -255,47 +273,42 @@ public sealed class AIRunner
                 }
             }
 
-            // --- 执行轴检查（Phase 6） ---
-            if (ModeSwitch.CurrentMode == ModeSwitch.Mode.ExecutionAxis)
+            // --- 轴输出应用（仅在 SlotExecutor 空闲时生效）---
+            if (execOutput != null)
             {
-                // 战斗状态变化 → 启停执行轴
-                if (state != _prevExecAxisState)
+                // 暂停 ACR
+                if (execOutput.PauseAcr)
+                    return;
+
+                // 强制切换目标（不受 blockBuild 影响）
+                if (execOutput.ForceTarget != null)
                 {
-                    _prevExecAxisState = state;
-                    if (state == CombatContext.State.InCombat)
-                        ExecutionAxis.Instance.Start();
-                    else if (state == CombatContext.State.OutOfCombat || state == CombatContext.State.Idle)
-                        ExecutionAxis.Instance.Stop();
+                    OmenTools.OmenService.TargetManager.Target = execOutput.ForceTarget;
                 }
 
-                var execOutput = ExecutionAxis.Instance.Update(_battleTimeMs);
-                if (execOutput != null)
+                // 强制释放技能（受 blockBuild 影响）
+                if (execOutput.ForceSpell != null && !blockBuild)
                 {
-                    // 暂停 ACR
-                    if (execOutput.PauseAcr)
-                        return;
-
-                    // 强制切换目标（不受 blockBuild 影响）
-                    if (execOutput.ForceTarget != null)
+                    if (CurrentRotation?.CanUseHighPrioritySlotCheck != null)
                     {
-                        OmenTools.OmenService.TargetManager.Target = execOutput.ForceTarget;
+                        var canUse = CurrentRotation.CanUseHighPrioritySlotCheck();
+                        if (canUse < 0) return;
                     }
 
-                    // 强制释放技能（受 blockBuild 影响）
-                    if (execOutput.ForceSpell != null && !blockBuild)
-                    {
-                        if (CurrentRotation?.CanUseHighPrioritySlotCheck != null)
-                        {
-                            var canUse = CurrentRotation.CanUseHighPrioritySlotCheck();
-                            if (canUse < 0) return;
-                        }
-
-                        var slot = new Slot();
-                        slot.Add(execOutput.ForceSpell);
-                        SlotExecutor.StartSlot(slot);
-                        return;
-                    }
+                    var slot = new Slot();
+                    slot.Add(execOutput.ForceSpell);
+                    SlotExecutor.StartSlot(slot);
+                    return;
                 }
+            }
+
+            // AssistAxis 技能输出
+            if (assistOutput?.ForceSpell != null && !blockBuild)
+            {
+                var slot = new Slot();
+                slot.Add(assistOutput.ForceSpell);
+                SlotExecutor.StartSlot(slot);
+                return;
             }
 
             // 起手序列：NotStarted 也可能在战斗中首次触发
@@ -385,26 +398,30 @@ public sealed class AIRunner
             CountDownHandler.Reset();
     }
 
-    /// <summary>如果 opener 已启动，推进执行（不依赖战斗状态）</summary>
+    /// <summary>如果 opener 已启动，推进执行（不依赖战斗状态）。仅在没有 Slot 正在执行时启动下一个 Slot。</summary>
     private void ExecuteOpenerIfRunning()
     {
         if (CurrentRotation?.Opener == null) return;
         if (OpenerMgr.CurrentState != OpenerMgr.State.Running) return;
 
-        if (!SlotExecutor.IsExecuting)
-        {
-            var slot = OpenerMgr.PeekCurrentSlot();
-            if (slot != null)
-                SlotExecutor.StartSlot(slot);
-            else
-                AdvanceOpener();
-        }
+        // 已有 Slot 在执行（由顶层 IsExecuting 块推进），不重复干预
+        if (SlotExecutor.IsExecuting) return;
 
-        if (SlotExecutor.IsExecuting)
+        var slot = OpenerMgr.PeekCurrentSlot();
+        if (slot != null)
         {
-            var completed = SlotExecutor.ExecuteStep();
-            if (completed)
-                AdvanceOpener();
+            SlotExecutor.StartSlot(slot);
+            // 立即推进刚启动的 Slot
+            if (SlotExecutor.IsExecuting)
+            {
+                var completed = SlotExecutor.ExecuteStep();
+                if (completed)
+                    AdvanceOpener();
+            }
+        }
+        else
+        {
+            AdvanceOpener();
         }
     }
 
@@ -424,48 +441,10 @@ public sealed class AIRunner
     }
 
 
-    /// <summary>
-    /// 事实轴更新（Phase 7）—— 不控制 ACR，只输出当前战斗事实状态
-    /// </summary>
-    /// <summary>
-    /// 辅助轴更新 — 始终运行，独立于执行轴/事实轴
-    /// </summary>
-    private void UpdateAssistAxis(CombatContext.State state)
-    {
-        if (state != _prevAssistAxisState)
-        {
-            _prevAssistAxisState = state;
-            if (state == CombatContext.State.InCombat)
-                AssistAxis.Instance.Start();
-            else if (state == CombatContext.State.OutOfCombat || state == CombatContext.State.Idle)
-                AssistAxis.Instance.Stop();
-        }
-
-        if (state != CombatContext.State.InCombat) return;
-
-        var output = AssistAxis.Instance.Update(_battleTimeMs);
-        if (output?.ForceSpell != null)
-        {
-            var slot = new Slot();
-            slot.Add(output.ForceSpell);
-            SlotExecutor.StartSlot(slot);
-        }
-    }
-
-    private void UpdateFactAxis(CombatContext.State state)
+    /// <summary>事实轴更新（Phase 7）—— 时间线观测 + 决策分配 + 智能层 + 移动执行。Start/Stop 由 Update() 顶层状态转换统一处理。</summary>
+    private void UpdateFactAxis()
     {
         var flags = PluginConfig.Instance.FactAxis;
-
-        if (state != _prevFactAxisState)
-        {
-            _prevFactAxisState = state;
-            if (state == CombatContext.State.InCombat)
-                FactTimeline.Instance.Start();
-            else
-                FactTimeline.Instance.Stop();
-        }
-
-        if (state != CombatContext.State.InCombat) return;
 
         // 时间线观测
         if (flags.Observe)
