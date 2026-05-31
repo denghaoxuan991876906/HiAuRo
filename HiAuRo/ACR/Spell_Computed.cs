@@ -22,7 +22,14 @@ public sealed partial class Spell
     public Spell DontUseGcd() { DontUseGcdOpt = true; return this; }
 
     /// <summary>静态工厂：创建药水 Spell</summary>
-    public static Spell CreatePotion() => new(0, SpellTargetType.Self) { SpellCategory = SpellCategory.Potion };
+    public static Spell CreatePotion() => CreatePotion(false);
+    public static Spell CreatePotion(bool isHq) => new(ItemHelper.GetCurrJobPotionActionId(isHq), SpellTargetType.Self)
+    {
+        SpellCategory = SpellCategory.Potion,
+        Type = SpellType.Ability,
+        Hq = isHq,
+        Name = "爆发药"
+    };
     /// <summary>静态工厂：创建疾跑 Spell</summary>
     public static Spell CreateSprint() => new(3, SpellTargetType.Self) { Type = SpellType.Ability, SpellCategory = SpellCategory.Sprint };
     /// <summary>静态工厂：创建极限技 Spell</summary>
