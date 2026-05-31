@@ -18,7 +18,8 @@ public sealed partial class AIRunner
             if (decisions.ExecAxis?.ForceTarget != null)
                 OmenTools.OmenService.TargetManager.Target = decisions.ExecAxis.ForceTarget;
 
-            if (!blockBuild && CurrentRotation?.Opener != null
+            if (state == CombatContext.State.InCombat && !blockBuild
+                && CurrentRotation?.Opener != null
                 && OpenerMgr.CurrentState == OpenerMgr.State.NotStarted)
             {
                 OpenerMgr.Start(CurrentRotation.Opener);
