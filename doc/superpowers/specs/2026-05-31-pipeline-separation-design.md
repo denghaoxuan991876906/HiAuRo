@@ -104,10 +104,11 @@ void Refresh(CombatContext.State state)
 | `Data.Objects.Refresh()` | O(N) 对象表扫描 → `Enemies/Allies/Party/...` | 总是 |
 | `Data.Party.Refresh()` | 队伍扫描 → `All/Alive/Tanks/Healers/...` | InCombat 时 |
 | `_battleTimeMs += (int)(Data.Combat.DeltaTime * 1000)` | 帧不变量累积 | InCombat 时 |
+| `OnBattleUpdate(battleTimeMs)` | ACR 时钟回调（帧不变量，紧跟累积） | InCombat 时 |
 | 目标选择器 `TryResolveTarget()` | 自动选目标 | 总是 |
 | 无目标通知 `OnNoTarget()` | 通知 ACR，不中断管道 | InCombat + 无目标时 |
 
-`_battleTimeMs` 是 AIRunner 实例字段（partial class 共享），仅 InCombat 累积。非战斗态 DeltaTime 通常为 0，但显式用 if-guard 更安全。
+`_battleTimeMs` 是 AIRunner 实例字段（partial class 共享），仅 InCombat 累积 + 回调。此操作必须在 DataStage — 而非 DecisionStage — 因为它是帧不变量，不能被 DecisionStage 异常路径跳过。
 
 `Data.Objects.Refresh()` 在最前面，确保后续所有代码（含 Idle/Zoning/OutOfCombat 分支）都能读到本帧对象数据。
 
@@ -127,7 +128,6 @@ PipelineDecision Decide()
 
 | 操作 | 说明 |
 |---|---|
-| `OnBattleUpdate(battleTimeMs)` | ACR 回调：告知当前战斗时间 |
 | `CanPauseACRCheck()` | ACR 暂停请求（>0 → CanPauseAck=true） |
 | `ExecutionAxis.Instance.Update(battleTimeMs)` | 执行轴 WaitCond 轮询 → `ExecutionOutput?` |
 | `AssistAxis.Instance.Update(battleTimeMs)` | 辅助轴轮询 → `ExecutionOutput?` |
@@ -170,7 +170,7 @@ struct PipelineDecision   // 注意：非 DecisionOutput，避免与 Decision.De
 原 `GetNextSlot(bool blockBuild)` 拆为两个方法，**保留旧方法**标记 `[Obsolete]` 向后兼容：
 
 - **`CheckAll()`** — DecisionStage 调用  
-  遍历所有 ISlotResolver，调用 `Check()`，结果存入已有 `_debugInfos[_].CheckResult` 数组（复用，零分配）。无目标时仍执行所有 Check（ACR Check 实现应自行处理无目标情况），不触发 Build。
+  遍历所有 ISlotResolver，调用 `Check()`，结果存入已有 `_debugInfos[_].CheckResult` 数组（复用，零分配）。**无目标时跳过所有 Check**（与当前 `GetNextSlot()` 行为一致，ACR Check 实现的隐式前提）。
 
 - **`Build(bool blockBuild)`** — ExecutionStage 调用  
   基于 CheckAll 结果 + GCD 窗口判定，决定是否调用 `Build(Slot)` 组装 Slot。blockBuild 为 true 时跳过 Build。`Data.Combat.AbilityCountInGcd` 等副作用在此阶段处理。
@@ -264,8 +264,8 @@ if (state != CombatContext.State.InCombat) return;
 
 | 阶段 | 异常处理 |
 |---|---|
-| `DataStage.Refresh()` | catch 后跳过本帧执行（Decision/Execution 不运行），下一帧重新读取 |
-| `DecisionStage.Decide()` | catch 后返回空 `PipelineDecision`（所有字段 default），Execution 只推进已有 Slot |
+| `DataStage.Refresh()` | catch 中仍需累积 `_battleTimeMs`（最小不变量，避免计时器断帧），然后跳过本帧 Decision/Execution。下一帧重新读取。若 state == OutOfCombat 则在 catch 中执行 Reset 逻辑 |
+| `DecisionStage.Decide()` | catch 后返回空 `PipelineDecision`（所有字段 default），Execution 只推进已有 Slot，不发起新技能 |
 | `ExecutionStage.Execute()` | catch 后记录日志，下一帧从推进段重新开始 |
 
 ---
@@ -277,8 +277,8 @@ if (state != CombatContext.State.InCombat) return;
 | `Runtime/AIRunner.cs` | 拆为 `DataStage.cs` + `DecisionStage.cs` + `ExecutionStage.cs`（partial class，三个文件） |
 | `Runtime/AILoop_Normal.cs` | `GetNextSlot()` 拆为 `CheckAll()` + `Build(blockBuild)`。原 `GetNextSlot` 保留，标记 `[Obsolete]`，内部委托到 `CheckAll + Build` |
 | `Runtime/IAILoop.cs` | 接口新增 `CheckAll()` + `Build(bool)`，保留 `GetNextSlot`（向后兼容） |
-| `Runtime/ACRLifecycle.cs` | 调用三个 Stage 替代单个 `Runner.Update()` |
-| `Runtime/CombatContext.cs` | 新增 `Data.Combat.BattleTimeMs` 属性（`_battleTimeMs` 迁移到 Data.Combat 静态类，所有 Stage 都可直接读） |
+| `Runtime/ACRLifecycle.cs` | 删除 `_resetCalled` 和 `Runner.Reset()` 调用（重置逻辑移至 DataStage 内部），调用三个 Stage 替代单个 `Runner.Update()` |
+| `Runtime/CombatContext.cs` | 无需变更 |
 
 **不涉及**：ACR 接口（ISlotResolver ↔ Check/Build 签名不变）、轴引擎（ExecutionAxis/AssistAxis 不变）、FactTimeline 接口不变（仅内部决策/执行拆分）
 
@@ -294,9 +294,8 @@ if (state != CombatContext.State.InCombat) return;
 
 ### 迁移步骤
 
-1. 单独 PR，先实现 Stage 拆分 + AiLoop 分离
-2. 事实轴副作用分离（StartSlot → FactSlots 列表）在第二步处理
-3. `_battleTimeMs` 迁移到 `Data.Combat` 作为最终清理步骤
+1. 单独 PR，先实现 Stage 拆分 + AiLoop 分离（事实轴 `StartSlot()` 调用暂时保留在 DecisionStage 中，步骤 2 再移除）
+2. 事实轴副作用分离（StartSlot → FactSlots 列表），`_resetCalled` 逻辑移入 DataStage
 
 ---
 
