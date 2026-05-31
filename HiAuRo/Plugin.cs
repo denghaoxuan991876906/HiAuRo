@@ -11,6 +11,8 @@ using HiAuRo.Setting;
 using HiAuRo.UI;
 using HiAuRo.Decision;
 using HiAuRo.Recording;
+using HiAuRo.Rendering;
+using HiAuRo.Vfx;
 using OmenTools;
 using HiAuRo.ImGuiLib;
 using HiAuRo.Runtime.Intelligence;
@@ -30,6 +32,8 @@ public partial class Plugin : IDalamudPlugin
     public static bool IsWebUI => Instance._uiManager?.IsWebUI ?? false;
     private readonly MainWindow _mainWindow;
     private readonly WindowSystem _windowSystem;
+    private readonly VfxRenderer? _vfxRenderer;
+    private readonly Action _windowDrawAction;
 
     /// <summary>插件实例单例</summary>
     public static Plugin Instance { get; private set; } = null!;
@@ -100,6 +104,8 @@ public partial class Plugin : IDalamudPlugin
             ACR.QTHelper.OnChanged += OnQtChanged;
 
             _windowSystem = new WindowSystem("HiAuRo");
+            _vfxRenderer = new VfxRenderer();
+            DService.Instance().Log.Information($"[VFX] VfxRenderer 初始化完成, IsAvailable={VfxNative.IsAvailable}");
             _uiManager = new UIManager(_config, _pluginInterface, _windowSystem,
                 () => _config.Save(), webRoot);
             _uiManager.Init();
@@ -113,15 +119,25 @@ public partial class Plugin : IDalamudPlugin
             _mainWindow = new MainWindow(_config, () => _config.Save());
             _windowSystem.AddWindow(_mainWindow);
 #if DEBUG
-            _pluginInterface.UiBuilder.Draw += () =>
+            _windowDrawAction = () =>
             {
                 var _uiTotal = System.Diagnostics.Stopwatch.GetTimestamp();
+                var dt = ImGui.GetIO().DeltaTime;
+                _vfxRenderer?.Update(dt);
+                PositionalVfx.Update(dt);
                 _windowSystem.Draw();
                 Infrastructure.PerfMonitor.Record("UI.Total", _uiTotal);
             };
 #else
-            _pluginInterface.UiBuilder.Draw += _windowSystem.Draw;
+            _windowDrawAction = () =>
+            {
+                var dt = ImGui.GetIO().DeltaTime;
+                _vfxRenderer?.Update(dt);
+                PositionalVfx.Update(dt);
+                _windowSystem.Draw();
+            };
 #endif
+            _pluginInterface.UiBuilder.Draw += _windowDrawAction;
             _pluginInterface.UiBuilder.OpenMainUi += () => _mainWindow.IsOpen = !_mainWindow.IsOpen;
             _pluginInterface.UiBuilder.OpenConfigUi += () => _mainWindow.IsOpen = !_mainWindow.IsOpen;
 
@@ -235,10 +251,11 @@ public partial class Plugin : IDalamudPlugin
 
         if (_windowSystem != null)
         {
-            _pluginInterface.UiBuilder.Draw -= _windowSystem.Draw;
+            _pluginInterface.UiBuilder.Draw -= _windowDrawAction;
             _uiManager?.Dispose();
             _windowSystem.RemoveAllWindows();
         }
+        _vfxRenderer?.Dispose();
         Instance = null!;
         PluginConfig.Instance = null!;
 
