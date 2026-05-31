@@ -51,6 +51,7 @@ WSL 下直接执行 `./build.sh`（自动通过 cmd.exe 转发到 Windows）。
 - **Don't iterate `IPartyMember.GameObject` multiple times** — expensive. Resolve once per scan.
 - **Don't classify enemies by `BattleNpcSubKind.Enemy` alone** — some solo-duty allies also carry this flag. Must also check `ObjectKind`, `OwnerId`, `BuddyList`, `IsTargetable`.
 - **Don't add wrapper layers around OmenTools** — DService is already the service locator. `HiAuRo.Data` is a thin forwarding facade, not a repository.
+- **帧不变量饥饿（Frame Invariant Starvation）** — 每帧必须执行的操作（计时累加、数据刷新、轴状态机推进）不得放在可能被跳过的分支中。根本原因是**执行门控和数据累积未解耦**：Slot 执行/起手等门控只能阻止**发起新技能**，不能阻止数据累积和状态刷新。写提前 return 时必须确认不会遮盖不变量操作。
 
 ## OmenTools 即用即取（禁止重复造轮子）
 

@@ -45,7 +45,6 @@ public static class ACRLifecycle
     private static string _configDir = string.Empty;
     private static volatile bool _pendingReload;
     private static uint _lastJob;
-    private static bool _resetCalled;
 
     /// <summary>注册外部 ACR</summary>
     public static void RegisterExternal(uint jobId, IRotationEntry entry, string settingDir)
@@ -118,7 +117,6 @@ public static class ACRLifecycle
         }
         _externalAlcs.Clear();
         _lastJob = 0;
-        _resetCalled = false;
     }
 
     /// <summary>每帧由 RuntimeCore 调用</summary>
@@ -128,23 +126,20 @@ public static class ACRLifecycle
         CheckJobSwitch();
         CheckAutoSave();
 
+        var runner = Runner;
+        if (runner == null || runner.AiLoop == null) return;
+
         var state = CombatContext.CurrentState;
-        if (state == CombatContext.State.Idle || state == CombatContext.State.Zoning)
-        {
-            _resetCalled = false;
-            Runner.Update(); // 非战斗也跑 Check（blockBuild 阻止执行）
-            return;
-        }
 
-        if (state == CombatContext.State.OutOfCombat)
-        {
-            if (!_resetCalled) { Runner.Reset(); _resetCalled = true; }
-            Runner.Update(); // 非战斗也跑 Check（blockBuild 阻止执行）
-            return;
-        }
+        runner.Refresh(state);
 
-        _resetCalled = false;
-        Runner.Update();
+        PipelineDecision decisions;
+        if (state == CombatContext.State.InCombat)
+            decisions = runner.Decide();
+        else
+            decisions = runner.PreCombatDecide(state);
+
+        runner.Execute(in decisions, state);
     }
 
     /// <summary>每帧同步 QT/Hotkey/运行状态到 ImGuiOverlayState（ImGui 模式下）</summary>
