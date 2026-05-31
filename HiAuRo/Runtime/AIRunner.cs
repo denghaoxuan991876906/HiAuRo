@@ -153,12 +153,12 @@ public sealed partial class AIRunner
             Hi.Debug($"[AIRunner] UpdateCountDown 异常: {ex.Message}");
         }
 
-        // 倒计时结束 → 自动启动起手序列
-        if (CountDownHandler.CountdownFinished
+        // 倒计时结束前 50ms → 提前启动起手序列（弥补进战斗前的网络/动画空窗）
+        if (remaining > 0 && remaining * 1000 <= 50
             && CurrentRotation?.Opener != null
             && OpenerMgr.CurrentState == OpenerMgr.State.NotStarted)
         {
-            Hi.Debug("[AIRunner] 倒计时结束, 自动启动 OpenerMgr");
+            Hi.Debug($"[AIRunner] 倒计时 {remaining*1000:F0}ms 提前启动 OpenerMgr");
             OpenerMgr.Start(CurrentRotation.Opener);
         }
     }
