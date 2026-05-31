@@ -64,8 +64,8 @@ public sealed partial class AIRunner
                     stack.Push(PrioritySlotStack.Priority.SpellQueue, queued);
             }
 
-            // AiLoop 正常循环
-            if (!blockBuild && AiLoop != null)
+            // AiLoop 正常循环 —— 仅战斗中触发
+            if (state == CombatContext.State.InCombat && !blockBuild && AiLoop != null)
             {
                 var aiSlot = AiLoop.Build(blockBuild: false);
                 if (aiSlot != null)
