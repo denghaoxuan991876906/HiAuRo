@@ -154,11 +154,12 @@ public sealed partial class AIRunner
         }
 
         // 倒计时结束前 50ms → 提前启动起手序列（弥补进战斗前的网络/动画空窗）
-        if (remaining > 0 && remaining * 1000 <= 50
+        if ((remaining > 0 && remaining * 1000 <= 50
+             || CountDownHandler.CountdownFinished)
             && CurrentRotation?.Opener != null
             && OpenerMgr.CurrentState == OpenerMgr.State.NotStarted)
         {
-            Hi.Debug($"[AIRunner] 倒计时 {remaining*1000:F0}ms 提前启动 OpenerMgr");
+            Hi.Debug($"[AIRunner] 倒计时 {remaining*1000:F0}ms 启动 OpenerMgr");
             OpenerMgr.Start(CurrentRotation.Opener);
         }
     }
