@@ -9,17 +9,16 @@ public sealed partial class AIRunner
     {
         try
         {
+            var stack = PrioritySlotStack.Instance;
+            stack.Clear(); // 帧初清空，防止跨帧残留
+
             var stopped = !RuntimeCore.IsRunning;
             var paused = ACR.MainControlHelper.IsPaused;
             var blockBuild = stopped || paused;
-            var stack = PrioritySlotStack.Instance;
 
             // ── 预执行（立即生效，不 return）──
             if (decisions.ExecAxis?.ForceTarget != null)
                 OmenTools.OmenService.TargetManager.Target = decisions.ExecAxis.ForceTarget;
-
-            // Opener 启动仅由 PreCombatDecide → UpdateCountDown（倒计时路径）触发，
-            // 不在此处直接 InCombat 触发
 
             // ── Push 所有来源到调度栈（高优先级覆盖低优先级）──
             // FactAxis: 已在 DecisionStage.UpdateFactAxis() 中 Push 到 FactAxis 优先级
@@ -44,14 +43,6 @@ public sealed partial class AIRunner
                 stack.Push(PrioritySlotStack.Priority.AssistAxis, slot);
             }
 
-            // Opener: peek current slot, push if available
-            if (OpenerMgr.CurrentState == OpenerMgr.State.Running)
-            {
-                var openerSlot = OpenerMgr.PeekCurrentSlot();
-                if (openerSlot != null)
-                    stack.Push(PrioritySlotStack.Priority.Opener, openerSlot);
-            }
-
             // SpellQueue
             if (!blockBuild && SpellQueue.HasPending())
             {
@@ -69,6 +60,11 @@ public sealed partial class AIRunner
             }
 
             ExecuteOpenerIfRunning();
+
+            // 非战斗态 Pop（Opener/SpellQueue 等预门控 slot）
+            var preGateSlot = stack.Pop();
+            if (preGateSlot != null)
+                SlotExecutor.StartSlot(preGateSlot);
 
             // ── 门控 ──
             if (state != CombatContext.State.InCombat) return;

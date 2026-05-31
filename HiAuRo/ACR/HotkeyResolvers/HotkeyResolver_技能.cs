@@ -1,4 +1,4 @@
-using FFXIVClientStructs.FFXIV.Client.Game;
+using HiAuRo.Runtime;
 using OmenTools.Interop.Game.Lumina;
 
 namespace HiAuRo.ACR.HotkeyResolvers;
@@ -9,6 +9,7 @@ namespace HiAuRo.ACR.HotkeyResolvers;
 public sealed class HotkeyResolver_技能 : IHotkeyResolver
 {
     private readonly uint _spellId;
+    private readonly SpellTargetType _targetType;
 
     public string Id { get; }
     public string Label { get; }
@@ -18,21 +19,29 @@ public sealed class HotkeyResolver_技能 : IHotkeyResolver
     /// <summary>当前实际释放的技能 ID，支持占星出卡等动态变化技能。</summary>
     private uint CurrentSpellId => _spellId.GetActionChange();
 
-    /// <param name="id">热键 ID（如 "Pot_爆发药"）</param>
     /// <param name="label">显示名称</param>
     /// <param name="spellId">技能 ID</param>
+    /// <param name="targetType">目标类型</param>
     /// <param name="defaultKey">默认绑定键</param>
-    public HotkeyResolver_技能(string label, uint spellId, string defaultKey = "")
+    public HotkeyResolver_技能(string label, uint spellId, SpellTargetType targetType = SpellTargetType.Target, string defaultKey = "")
     {
-        Id = label + Guid.NewGuid().ToString("N")[0..8];
+        Id = $"spell_{spellId}";
         Label = label;
         _spellId = spellId;
+        _targetType = targetType;
         DefaultKey = defaultKey;
     }
 
     public void Execute()
     {
-        OmenTools.OmenService.UseActionManager.Instance().UseAction(
-            ActionType.Action, CurrentSpellId, 0, 0, 0, 0);
+        var slot = new Slot();
+        slot.Add(new Spell
+        {
+            Id = _spellId,
+            Name = Label,
+            TargetType = _targetType,
+            Type = SpellType.Ability
+        });
+        ACRLifecycle.Runner.SpellQueue.Enqueue(slot);
     }
 }

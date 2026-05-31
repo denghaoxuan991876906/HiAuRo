@@ -24,7 +24,7 @@ public sealed class HotkeyResolver_NormalSpell : IHotkeyResolver
         _name = name;
         _targetType = targetType;
         _iconId = LuminaWrapper.GetActionIconID(spellId);
-        Id = $"spell_{spellId}"+ Guid.NewGuid().ToString("N")[0..8];
+        Id = $"spell_{spellId}";
         Label = name;
     }
 
