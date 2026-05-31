@@ -29,10 +29,8 @@ public sealed class AILoop_Normal : IAILoop
             });
     }
 
-    /// <summary>获取下一个待执行的 Slot</summary>
-    public Slot? GetNextSlot(bool blockBuild = false)
+    public void CheckAll()
     {
-        // 每帧重置 debug 数据
         foreach (var info in _debugInfos)
         {
             info.CheckResult = -99;
@@ -46,30 +44,12 @@ public sealed class AILoop_Normal : IAILoop
         if (_resolvers.Count == 0)
         {
             DService.Instance().Log.Error("[AILoop] 没有已注册的 SlotResolver");
-            return null;
+            return;
         }
 
-        // 无目标时不调 Check，ACR 作者在 OnNoTarget 中自行处理
         if (Data.Target.Current == null)
-        {
-            foreach (var info in _debugInfos)
-            {
-                info.CheckResult = -99;
-                info.CheckThrew = false;
-                info.CheckError = "";
-                info.PassedWindow = false;
-                info.BuiltSlot = false;
-                info.BuiltSkills = "";
-            }
-            return null;
-        }
+            return;
 
-        bool isGcdReady = GCDHelper.CanUseGCD();
-        bool isOffGcdWindow = GCDHelper.CanUseOffGcd();
-        bool is2ndAbWindow = GCDHelper.Is2ndAbilityTime();
-        float gcdRemain = GCDHelper.GetGCDCooldown();
-
-        // ── 第一遍：遍历所有 Resolver，执行 Check()，记录结果 ──
         if (_checkResults.Length != _resolvers.Count)
             _checkResults = new int[_resolvers.Count];
         for (int i = 0; i < _resolvers.Count; i++)
@@ -93,11 +73,20 @@ public sealed class AILoop_Normal : IAILoop
             }
             _checkResults[i] = checkResult;
         }
+    }
 
-        // 暂停/停止时只阻断 Build，Check 已全部执行完毕
+    public Slot? Build(bool blockBuild)
+    {
         if (blockBuild) return null;
 
-        // ── 第二遍：按顺序找到第一个 Check >= 0 且窗口匹配的 Resolver，调 Build ──
+        if (_resolvers.Count == 0 || _checkResults.Length != _resolvers.Count)
+            return null;
+
+        bool isGcdReady = GCDHelper.CanUseGCD();
+        bool isOffGcdWindow = GCDHelper.CanUseOffGcd();
+        bool is2ndAbWindow = GCDHelper.Is2ndAbilityTime();
+        float gcdRemain = GCDHelper.GetGCDCooldown();
+
         for (int i = 0; i < _resolvers.Count; i++)
         {
             if (_checkResults[i] < 0) continue;
@@ -105,7 +94,6 @@ public sealed class AILoop_Normal : IAILoop
             var data = _resolvers[i];
             var info = _debugInfos[i];
 
-            // 窗口判定：Mode 控制 Build/执行时机
             bool canExecute = data.Mode switch
             {
                 SlotMode.Gcd    => isGcdReady,
@@ -124,7 +112,6 @@ public sealed class AILoop_Normal : IAILoop
 
             info.PassedWindow = true;
 
-            // Build + 执行
             try
             {
                 var slot = new Slot();
@@ -147,10 +134,15 @@ public sealed class AILoop_Normal : IAILoop
             {
                 DService.Instance().Log.Error($"[AILoop] Build error: {ex.Message}\n{ex.StackTrace}");
             }
-
-            // Build 成功会 return，到这里的只有 Build 抛异常，继续找下一个
         }
 
         return null;
+    }
+
+    [Obsolete("Use CheckAll() + Build() instead")]
+    public Slot? GetNextSlot(bool blockBuild = false)
+    {
+        CheckAll();
+        return Build(blockBuild);
     }
 }
