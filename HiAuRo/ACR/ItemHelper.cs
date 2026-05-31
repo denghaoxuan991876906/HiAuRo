@@ -24,31 +24,23 @@ public static class ItemHelper
     }
 
     /// <summary>使用物品并等待冷却好后再重试一次</summary>
-    public static async void ForceUsePotion(uint itemId, bool isHq = false)
+    public static async Task ForceUsePotion(uint itemId, bool isHq = false)
     {
-        if (!await TryUseItem(itemId, isHq))
+        if (!TryUseItemSync(itemId, isHq))
             return;
 
         // 等待冷却后重试（爆发药通常有 CD）
-        await CoroutineHelper.Wait(500);
-        _ = TryUseItem(itemId, isHq);
+        await Task.Delay(500).ConfigureAwait(false);
+        TryUseItemSync(itemId, isHq);
     }
 
     /// <summary>尝试使用物品，返回是否成功</summary>
-    private static Task<bool> TryUseItem(uint itemId, bool isHq)
+    private static unsafe bool TryUseItemSync(uint itemId, bool isHq)
     {
-        var tcs = new TaskCompletionSource<bool>();
         var realId = isHq ? itemId + 1000000U : itemId;
         var selfId = Data.Me.Object?.EntityID ?? 0;
-
-        unsafe
-        {
-            // 直接使用 ActionType.Item
-            var result = ActionManager.Instance()->UseAction(
-                ActionType.Item, realId, selfId, ushort.MaxValue, 0, 0, null);
-            tcs.SetResult(result);
-        }
-        return tcs.Task;
+        return ActionManager.Instance()->UseAction(
+            ActionType.Item, realId, selfId, ushort.MaxValue, 0, 0, null);
     }
 
     /// <summary>检查当前职业爆发药是否可用</summary>
@@ -80,16 +72,5 @@ public static class ItemHelper
                 count++;
         }
         return count;
-    }
-}
-
-/// <summary>
-/// 简单的协程延迟辅助（供 ItemHelper 使用）
-/// </summary>
-internal static class CoroutineHelper
-{
-    public static async Task Wait(int ms)
-    {
-        await Task.Delay(ms);
     }
 }

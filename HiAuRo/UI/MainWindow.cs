@@ -66,6 +66,8 @@ public sealed class MainWindow : Window
     private readonly ConstellationEffect _constellation;
     private readonly LeyLinesEffect _leyLines;
 
+    private VfxDebugUI? _vfxDebugUI;
+
     // ── 新布局状态字段 ──
 
     /// <summary>当前选中的主模块卡片索引 (0=主控, 1=调试, 2=时间轴, 3+=Plugin)</summary>
@@ -109,7 +111,7 @@ public sealed class MainWindow : Window
     {
         ("主控", IconHelper.Icons.Settings, new[] { "状态", "设置", "窗口设置" }),
         ("ACR",  IconHelper.Icons.Settings, new[] { "ACR列表", "ACR Debug" }),
-        ("调试", IconHelper.Icons.Bug, new[] { "Debug", "日志" }),
+        ("调试", IconHelper.Icons.Bug, new[] { "Debug", "日志", "VFX测试" }),
         ("时间轴", IconHelper.Icons.Clock, new[] { "录制", "事实轴", "执行轴", "辅助轴" }),
     };
 
@@ -573,6 +575,7 @@ public sealed class MainWindow : Window
             case "事实轴":     DrawFactAxisTab(); break;
             case "执行轴":     DrawExecutionAxisTab(); break;
             case "辅助轴":     DrawAssistAxisTab(); break;
+            case "VFX测试":   DrawVfxDebug(); break;
         }
     }
 
@@ -778,6 +781,33 @@ public sealed class MainWindow : Window
 
         ImGui.Separator();
         changed |= ImGui.Checkbox("Debug 日志", ref debug);
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Text("身位指示器 (VFX)");
+        ImGui.Separator();
+
+        var showPos = _config.ShowPositional;
+        var showHitbox = _config.ShowTargetHitbox;
+        var showAA = _config.ShowAutoAttackRange;
+
+        changed |= ImGui.Checkbox("启用身位指示器", ref showPos);
+        if (showPos)
+        {
+            ImGui.Indent(16f);
+            changed |= ImGui.Checkbox("显示目标攻击范围圈", ref showHitbox);
+            changed |= ImGui.Checkbox("显示自动攻击范围圈", ref showAA);
+            ImGui.Unindent(16f);
+        }
+
+        if (changed)
+        {
+            _config.ShowPositional = showPos;
+            _config.ShowTargetHitbox = showHitbox;
+            _config.ShowAutoAttackRange = showAA;
+            if (!showPos)
+                Rendering.PositionalVfx.Clear();
+        }
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -1965,6 +1995,12 @@ public sealed class MainWindow : Window
 
             ImGui.EndTable();
         }
+    }
+
+    private void DrawVfxDebug()
+    {
+        _vfxDebugUI ??= new VfxDebugUI();
+        _vfxDebugUI.Draw();
     }
 
     private static void OpenEditor(string fileName, string? query = null)

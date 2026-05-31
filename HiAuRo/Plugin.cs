@@ -11,6 +11,8 @@ using HiAuRo.Setting;
 using HiAuRo.UI;
 using HiAuRo.Decision;
 using HiAuRo.Recording;
+using HiAuRo.Rendering;
+using HiAuRo.Vfx;
 using OmenTools;
 using HiAuRo.ImGuiLib;
 using HiAuRo.Runtime.Intelligence;
@@ -27,9 +29,11 @@ public partial class Plugin : IDalamudPlugin
     internal UIManager? _uiManager;
 
     /// <summary>当前是否处于 WebUI 模式（用于 ACRLifecycle 等判断状态推送通道）</summary>
-    public static bool IsWebUI => Instance._uiManager?.IsWebUI ?? false;
+    public static bool IsWebUI => Instance?._uiManager?.IsWebUI ?? false;
     private readonly MainWindow _mainWindow;
     private readonly WindowSystem _windowSystem;
+    private readonly VfxRenderer? _vfxRenderer;
+    private readonly Action _windowDrawAction;
 
     /// <summary>插件实例单例</summary>
     public static Plugin Instance { get; private set; } = null!;
@@ -51,8 +55,11 @@ public partial class Plugin : IDalamudPlugin
             LogManager.Instance.Init(_pluginInterface.ConfigDirectory.FullName);
             Theme.Mode = _config.ImGuiThemeMode == ImGuiThemeMode.Dark ? Theme.ThemeMode.Dark : Theme.ThemeMode.Light;
             IconHelper.Init();
-            HelperUpdater.CheckAndUpdateAsync().GetAwaiter().GetResult();
-            DService.Instance().Log.Information($"[Lifecycle] HelperUpdater 完成, Loaded={HelperUpdater.Loaded}");
+            SafeFire(HelperUpdater.CheckAndUpdateAsync().ContinueWith(t =>
+            {
+                DService.Instance()?.Log.Information($"[Lifecycle] HelperUpdater 完成, Loaded={HelperUpdater.Loaded}");
+            }), "HelperUpdater");
+            DService.Instance().Log.Information("[Lifecycle] HelperUpdater 异步更新已启动");
 
             var webRoot = Path.Combine(_pluginInterface.ConfigDirectory.FullName, "web");
             var sourceWebRoot = Path.Combine(_pluginInterface.AssemblyLocation.Directory?.FullName ?? ".", "UI", "web");
@@ -100,6 +107,8 @@ public partial class Plugin : IDalamudPlugin
             ACR.QTHelper.OnChanged += OnQtChanged;
 
             _windowSystem = new WindowSystem("HiAuRo");
+            _vfxRenderer = new VfxRenderer();
+            DService.Instance().Log.Information($"[VFX] VfxRenderer 初始化完成, IsAvailable={VfxNative.IsAvailable}");
             _uiManager = new UIManager(_config, _pluginInterface, _windowSystem,
                 () => _config.Save(), webRoot);
             _uiManager.Init();
@@ -113,15 +122,25 @@ public partial class Plugin : IDalamudPlugin
             _mainWindow = new MainWindow(_config, () => _config.Save());
             _windowSystem.AddWindow(_mainWindow);
 #if DEBUG
-            _pluginInterface.UiBuilder.Draw += () =>
+            _windowDrawAction = () =>
             {
                 var _uiTotal = System.Diagnostics.Stopwatch.GetTimestamp();
+                var dt = ImGui.GetIO().DeltaTime;
+                _vfxRenderer?.Update(dt);
+                PositionalVfx.Update(dt);
                 _windowSystem.Draw();
                 Infrastructure.PerfMonitor.Record("UI.Total", _uiTotal);
             };
 #else
-            _pluginInterface.UiBuilder.Draw += _windowSystem.Draw;
+            _windowDrawAction = () =>
+            {
+                var dt = ImGui.GetIO().DeltaTime;
+                _vfxRenderer?.Update(dt);
+                PositionalVfx.Update(dt);
+                _windowSystem.Draw();
+            };
 #endif
+            _pluginInterface.UiBuilder.Draw += _windowDrawAction;
             _pluginInterface.UiBuilder.OpenMainUi += () => _mainWindow.IsOpen = !_mainWindow.IsOpen;
             _pluginInterface.UiBuilder.OpenConfigUi += () => _mainWindow.IsOpen = !_mainWindow.IsOpen;
 
@@ -233,12 +252,16 @@ public partial class Plugin : IDalamudPlugin
         // 先关 ACR（UnloadRotation 依赖 Plugin.Instance）
         ACRLifecycle.Shutdown();
 
+        // 注销 IPC
+        try { DService.Instance().PI.GetIpcProvider<string, object>("HiAuRo.AddMovementDemand").UnregisterAction(); } catch { }
+
         if (_windowSystem != null)
         {
-            _pluginInterface.UiBuilder.Draw -= _windowSystem.Draw;
+            _pluginInterface.UiBuilder.Draw -= _windowDrawAction;
             _uiManager?.Dispose();
             _windowSystem.RemoveAllWindows();
         }
+        _vfxRenderer?.Dispose();
         Instance = null!;
         PluginConfig.Instance = null!;
 
@@ -254,19 +277,29 @@ public partial class Plugin : IDalamudPlugin
         DService.Uninit();
     }
 
+    /// <summary>安全地 fire-and-forget 一个异步操作，异常时记录日志</summary>
+    private static void SafeFire( Task task, string label = "")
+    {
+        _ = task.ContinueWith(t =>
+        {
+            if (t.IsFaulted)
+                DService.Instance()?.Log.Warning($"[FireAndForget] {label} 异常: {t.Exception?.InnerException?.Message}");
+        }, TaskContinuationOptions.OnlyOnFaulted);
+    }
+
     private static void RegisterUiHandlers(WebUiBridge bridge)
     {
         bridge.On("toggleACR", _d =>
         {
             if (RuntimeCore.IsRunning) RuntimeCore.Stop();
             else RuntimeCore.Start();
-            _ = SendStatusState();
+            SafeFire(SendStatusState(), "SendStatusState");
         });
 
         bridge.On("pause", _d =>
         {
             HiAuRo.ACR.MainControlHelper.TogglePause();
-            _ = SendPauseState();
+            SafeFire(SendPauseState(), "SendPauseState");
         });
 
         bridge.On("saveACR", data =>
@@ -443,11 +476,11 @@ public partial class Plugin : IDalamudPlugin
     private static void OnHotkeyExecuted(string id, string label)
     {
         if (!IsWebUI) return;
-        _ = Instance._uiBridge!.SendAsync(new
+        SafeFire(Instance._uiBridge!.SendAsync(new
         {
             type = "hotkeyExecuted",
             data = new { id, label }
-        });
+        }), "OnHotkeyExecuted");
     }
 
     private static void OnQtChanged(string id, bool value)

@@ -153,6 +153,15 @@ public sealed class PluginConfig : SettingsBase
 
     /// <summary>启用副本录制</summary>
     public bool RecordingEnabled { get; set; } = true;
+
+    // ── 身位指示器 ──
+
+    /// <summary>启用身位指示器 VFX</summary>
+    public bool ShowPositional { get; set; } = true;
+    /// <summary>显示目标可攻击范围圈</summary>
+    public bool ShowTargetHitbox { get; set; } = true;
+    /// <summary>显示最大自动攻击范围圈</summary>
+    public bool ShowAutoAttackRange { get; set; }
 }
 
 /// <summary>CEF 悬浮窗设置</summary>

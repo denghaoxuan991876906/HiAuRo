@@ -172,26 +172,19 @@ public sealed partial class AIRunner
             CountDownHandler.Reset();
     }
 
-    /// <summary>如果 opener 已启动，推进执行（不依赖战斗状态）。仅在没有 Slot 正在执行时启动下一个 Slot。</summary>
+    /// <summary>如果 opener 已启动，推进执行（不依赖战斗状态）。</summary>
     private void ExecuteOpenerIfRunning()
     {
         if (CurrentRotation?.Opener == null) return;
         if (OpenerMgr.CurrentState != OpenerMgr.State.Running) return;
 
-        // 已有 Slot 在执行（由顶层 IsExecuting 块推进），不重复干预
+        // 有 Slot 正在执行（由顶层推进），不重复干预
         if (SlotExecutor.IsExecuting) return;
 
         var slot = OpenerMgr.PeekCurrentSlot();
         if (slot != null)
         {
-            SlotExecutor.StartSlot(slot);
-            // 立即推进刚启动的 Slot
-            if (SlotExecutor.IsExecuting)
-            {
-                var completed = SlotExecutor.ExecuteStep();
-                if (completed)
-                    AdvanceOpener();
-            }
+            PrioritySlotStack.Instance.Push(PrioritySlotStack.Priority.Opener, slot);
         }
         else
         {
@@ -313,7 +306,7 @@ public sealed partial class AIRunner
             if (spell == null) continue;
             var slot = new Slot();
             slot.Add(spell);
-            SlotExecutor.StartSlot(slot);
+            PrioritySlotStack.Instance.Push(PrioritySlotStack.Priority.FactAxis, slot);
         }
     }
 

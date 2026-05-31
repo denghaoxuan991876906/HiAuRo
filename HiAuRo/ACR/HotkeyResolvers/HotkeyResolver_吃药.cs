@@ -1,4 +1,4 @@
-using FFXIVClientStructs.FFXIV.Client.Game;
+using HiAuRo.Runtime;
 using OmenTools.Interop.Game.Lumina;
 
 namespace HiAuRo.ACR.HotkeyResolvers;
@@ -9,29 +9,30 @@ namespace HiAuRo.ACR.HotkeyResolvers;
 public sealed class HotkeyResolver_吃药 : IHotkeyResolver
 {
     private readonly uint _itemId;
+    public bool Ishq { get; }
 
     public string Id { get; }
     public string Label { get; }
     public string DefaultKey { get; }
     public uint IconId => LuminaWrapper.GetItemIconID(_itemId);
-    public bool Ishq { get;}
 
-    /// <param name="id">热键 ID</param>
     /// <param name="label">显示名称</param>
     /// <param name="itemId">物品 ID（如刚力爆发药 39727）</param>
+    /// <param name="ishq">是否 HQ</param>
     /// <param name="defaultKey">默认绑定键</param>
     public HotkeyResolver_吃药(string label, uint itemId, bool ishq = true, string defaultKey = "")
     {
-        Id = label + Guid.NewGuid().ToString("N")[0..8];
+        Id = $"potion_{itemId}";
         Label = label;
         _itemId = itemId;
-        DefaultKey = defaultKey;
         Ishq = ishq;
+        DefaultKey = defaultKey;
     }
 
     public void Execute()
     {
-        OmenTools.OmenService.UseActionManager.Instance().UseAction(
-            ActionType.Item, Ishq ? _itemId + 1000000 : _itemId, 0, 0, 0, 0);
+        var slot = new Slot();
+        slot.Add(Spell.CreatePotion());
+        ACRLifecycle.Runner.SpellQueue.Enqueue(slot);
     }
 }

@@ -25,6 +25,7 @@ internal class UIManager : IDisposable
     private OverlayStatusBar? _overlayStatusBar;
     private OverlayQtPanel? _overlayQtPanel;
     private OverlayHotkeyPanel? _overlayHotkeyPanel;
+    private Rendering.PositionalOverlay? _positionalOverlay;
     private DemoWindow? _demoWindow;
     private readonly List<Window> _customWindows = [];
 
@@ -114,11 +115,13 @@ internal class UIManager : IDisposable
         _overlayStatusBar = new OverlayStatusBar(_config, _saveConfig);
         _overlayQtPanel = new OverlayQtPanel(_config, _saveConfig);
         _overlayHotkeyPanel = new OverlayHotkeyPanel(_config, _saveConfig);
+        _positionalOverlay = new Rendering.PositionalOverlay();
 
         _windowSystem.AddWindow(_demoWindow);
         _windowSystem.AddWindow(_overlayStatusBar);
         _windowSystem.AddWindow(_overlayQtPanel);
         _windowSystem.AddWindow(_overlayHotkeyPanel);
+        _windowSystem.AddWindow(_positionalOverlay);
 #if DEBUG
         _windowSystem.AddWindow(new DebugPerfWindow());
 #endif
@@ -130,6 +133,7 @@ internal class UIManager : IDisposable
         try { if (_overlayStatusBar != null) { _windowSystem.RemoveWindow(_overlayStatusBar); _overlayStatusBar = null; } } catch { }
         try { if (_overlayQtPanel != null) { _windowSystem.RemoveWindow(_overlayQtPanel); _overlayQtPanel = null; } } catch { }
         try { if (_overlayHotkeyPanel != null) { _windowSystem.RemoveWindow(_overlayHotkeyPanel); _overlayHotkeyPanel = null; } } catch { }
+        try { if (_positionalOverlay != null) { _windowSystem.RemoveWindow(_positionalOverlay); _positionalOverlay = null; } } catch { }
     }
 
     public void ShowDemoWindow()

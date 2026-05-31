@@ -30,4 +30,14 @@ public static class Hi
     /// <summary>输出错误日志</summary>
     public static void Error(string msg) =>
         DService.Instance().Log.Error($"[HiAuRo] {msg}");
+
+    /// <summary>发送原始聊天消息或执行指令。以 '/' 开头视为宏指令，否则输出聊天消息（不加前缀）。</summary>
+    public static void SendMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return;
+        if (message.StartsWith('/'))
+            DService.Instance().Command.ProcessCommand(message);
+        else
+            DService.Instance().Chat.Print(message);
+    }
 }

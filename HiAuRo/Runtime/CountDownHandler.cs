@@ -133,7 +133,7 @@ public sealed class CountDownHandler
             return;
         }
 
-        _executor.StartSlot(slot);
+        PrioritySlotStack.Instance.Push(PrioritySlotStack.Priority.Opener, slot);
     }
 
     private void TryStartPending()
@@ -141,7 +141,7 @@ public sealed class CountDownHandler
         if (_executor == null || _executor.IsExecuting || _pendingSlots.Count == 0)
             return;
 
-        _executor.StartSlot(_pendingSlots.Dequeue());
+        PrioritySlotStack.Instance.Push(PrioritySlotStack.Priority.Opener, _pendingSlots.Dequeue());
     }
 
     private static void Debug(string message)
