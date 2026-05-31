@@ -81,7 +81,6 @@ public sealed partial class AIRunner
 
         if (Data.Target.Current == null)
         {
-            DService.Instance().Log.Debug("[AIRunner] 无目标, 调用 OnNoTarget");
             EventHandler?.OnNoTarget();
         }
 

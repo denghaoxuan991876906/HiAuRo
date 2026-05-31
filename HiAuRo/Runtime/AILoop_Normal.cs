@@ -126,8 +126,6 @@ public sealed class AILoop_Normal : IAILoop
                 info.BuiltSlot = true;
                 info.BuiltSkills = string.Join(",", slot.Actions.Select(a => a.Spell.Name));
 
-                DService.Instance().Log.Debug($"[AILoop] Build: {resolverName} → {slot.Actions.Count}个技能 = [{string.Join(", ", slot.Actions.Select(a => $"{a.Spell.Name}({a.Spell.Id})"))}] (GCD={isGcdReady} oGCD={isOffGcdWindow} GCDr={gcdRemain:F0}ms 2ndAb={is2ndAbWindow} ab={Data.Combat.AbilityCountInGcd}/{Data.Combat.MaxAbilityTimesInGcd})");
-
                 if (data.Mode == SlotMode.Gcd)
                     Data.Combat.AbilityCountInGcd = 0;
                 else if (slot.Actions.Any(a => a.Spell.IsAbility()))
