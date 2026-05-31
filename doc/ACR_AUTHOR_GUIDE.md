@@ -144,7 +144,7 @@ RuntimeCore.OnTick()
                          ├─ Opener 起手序列
                          ├─ SpellQueue 待处理槽位
                          │
-                         └─ AILoop_Normal.GetNextSlot() ◀── 核心循环
+                         └─ AILoop_Normal.CheckAll() / Build() ◀── 核心循环
                               │
                               └─ 遍历 SlotResolvers 列表
                                    │

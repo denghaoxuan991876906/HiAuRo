@@ -44,6 +44,8 @@ WSL 下直接执行 `./build.sh`（自动通过 cmd.exe 转发到 Windows）。
 3. Use Chinese comments for maintenance and collaboration.
 4. New capabilities are **additive** — never rewrite familiar workflows.
 5. ACR interfaces stay close to AEAssist conventions for ACR author familiarity.
+6. **三阶段管道不可退化** — `DataStage.Refresh()` / `DecisionStage.Decide()` / `ExecutionStage.Execute()` 的分离不可合并回单方法。新增逻辑必须归入对应阶段。DataStage 和 DecisionStage 禁止提前 return；禁止在 DecisionStage 中调用 `SlotExecutor.StartSlot()` 或 `UseActionManager.UseAction()`。
+7. **Push 不入池，统一从栈取** — 所有技能来源（执行轴/辅助轴/事实轴/起手/SpellQueue/AiLoop）必须通过 `PrioritySlotStack.Instance.Push()` 提交 Slot。禁止任何位置直接调用 `SlotExecutor.StartSlot()`。调度栈确保每帧仅执行一个 Slot（最高优先级），其余留下帧继续。
 
 ## Common Pitfalls
 
