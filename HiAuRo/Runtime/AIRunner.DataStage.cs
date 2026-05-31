@@ -87,7 +87,7 @@ public sealed partial class AIRunner
         EventHandler?.OnBattleUpdate(_battleTimeMs);
     }
 
-    private void ResetState()
+    internal void ResetState()
     {
         SpellQueue.Clear();
         OpenerMgr.Reset();

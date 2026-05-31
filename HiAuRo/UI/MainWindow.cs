@@ -818,7 +818,7 @@ public sealed class MainWindow : Window
         ImGui.Text("运行时信息");
 
         if (ImGui.Button("重载 ACR"))
-            ACRLifecycle.Runner.Reset();
+            ACRLifecycle.Runner.ResetState();
 
         ImGui.SameLine();
         if (ImGui.Button("清空协程"))
