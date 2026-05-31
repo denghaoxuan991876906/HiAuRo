@@ -18,12 +18,8 @@ public sealed partial class AIRunner
             if (decisions.ExecAxis?.ForceTarget != null)
                 OmenTools.OmenService.TargetManager.Target = decisions.ExecAxis.ForceTarget;
 
-            if (state == CombatContext.State.InCombat && !blockBuild
-                && CurrentRotation?.Opener != null
-                && OpenerMgr.CurrentState == OpenerMgr.State.NotStarted)
-            {
-                OpenerMgr.Start(CurrentRotation.Opener);
-            }
+            // Opener 启动仅由 PreCombatDecide → UpdateCountDown（倒计时路径）触发，
+            // 不在此处直接 InCombat 触发
 
             // ── Push 所有来源到调度栈（高优先级覆盖低优先级）──
             // FactAxis: 已在 DecisionStage.UpdateFactAxis() 中 Push 到 FactAxis 优先级
