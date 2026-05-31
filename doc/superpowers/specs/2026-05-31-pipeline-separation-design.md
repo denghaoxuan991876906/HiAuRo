@@ -41,10 +41,9 @@ ACRLifecycle.Update():
 
   if (!_loaded || AiLoop == null) return          ← 前置守卫
 
-  var state = CombatContext.CurrentState
-  if (state == OutOfCombat && !_resetCalled): Runner.Reset()
+    var state = CombatContext.CurrentState
 
-  Runner.DataStage.Refresh(state)                 ← 纯读取，所有状态都跑
+    Runner.DataStage.Refresh(state)                 ← 纯读取，所有状态都跑（含 Reset、轴 Start/Stop）
 
   if (state == InCombat):
       decisions = Runner.DecisionStage.Decide()
@@ -99,7 +98,7 @@ void Refresh(CombatContext.State state)
 
 | 操作 | 说明 | 条件 |
 |---|---|---|
-| 战斗状态切换检测 | `state != _prevState`，触发轴 Start/Stop | 总是 |
+| 战斗状态切换检测 | `state != _prevState`，触发轴 Start/Stop。`ExecutionAxis` 的 Start/Stop 仅在 `ModeSwitch.CurrentMode == ExecutionAxis` 时调用；`AssistAxis`/`FactTimeline` 无条件 | 总是 |
 | 切图检测 | `territoryId != _lastTerritoryId`，触发 `OnTerritoryChanged` | 总是 |
 | `Data.Objects.Refresh()` | O(N) 对象表扫描 → `Enemies/Allies/Party/...` | 总是 |
 | `Data.Party.Refresh()` | 队伍扫描 → `All/Alive/Tanks/Healers/...` | InCombat 时 |
@@ -129,7 +128,7 @@ PipelineDecision Decide()
 | 操作 | 说明 |
 |---|---|
 | `CanPauseACRCheck()` | ACR 暂停请求（>0 → CanPauseAck=true） |
-| `ExecutionAxis.Instance.Update(battleTimeMs)` | 执行轴 WaitCond 轮询 → `ExecutionOutput?` |
+| `ExecutionAxis.Instance.Update(battleTimeMs)` | 执行轴 WaitCond 轮询（仅 `ModeSwitch == ExecutionAxis` 时调用） → `ExecutionOutput?` |
 | `AssistAxis.Instance.Update(battleTimeMs)` | 辅助轴轮询 → `ExecutionOutput?` |
 | `FactTimeline.Instance.Update(battleTimeMs)` | 事实轴事件推进（仅内部状态，不触发技能） |
 | `DecisionEngine + IntelligenceEngine + MovementExecutor` | 智能判断 → 产出待执行技能列表（不调用 StartSlot） |
@@ -204,6 +203,7 @@ void Execute(in PipelineDecision decisions, CombatContext.State state)
 |---|---|
 | `ForceTarget → TargetManager.Target =` | 切换目标，当帧推进就能用新目标（**行为变更说明**：提前到门控前，即使 Slot 在执行也会切目标） |
 | `OpenerMgr.Start()` 检查 | 仅一次：NotStarted → Running + 构建第一个 Slot |
+| `ProcessSpellQueue(blockBuild)` | 处理热键排队的技能（非战斗态也需要，倒计时阶段通过热键排队的技能在此执行） |
 | `SlotExecutor.ExecuteStep()` | 推进当前执行中 Slot（所有状态下都运行，包括非战斗） |
 | `ExecuteOpenerIfRunning()` | 推进起手（同上） |
 
@@ -242,7 +242,6 @@ if (state != CombatContext.State.InCombat) return;
 
 | 操作 | 说明 |
 |---|---|
-| `ProcessSpellQueue(blockBuild) → StartSlot, return` | 处理 SpellQueue |
 | `AiLoop.Build(blockBuild) → StartSlot` | 基于 CheckAll 结果构建并启动 Slot |
 
 ---
@@ -254,7 +253,7 @@ if (state != CombatContext.State.InCombat) return;
 | DataStage 无 leave-early return | partial class 内部约定 + Code Review。可用 if-guard 跳过无效操作，但不允许跳到本阶段末尾之前 |
 | DecisionStage 无 return | 同上。且不调用 StartSlot / UseAction 等副作用 API |
 | 门控只影响 ExecutionStage | 架构强制 — 推进/门控/构建全部在 ExecutionStage 中 |
-| 零额外分配 | `Data.*` 复用静态列表，`PipelineDecision` 为 stack-allocated struct。`FactSlots` 列表在事实轴决策阶段经由 `UpdateDecisions` 已分配，不新增 |
+| 零额外分配 | `Data.*` 复用静态列表。`PipelineDecision` 为栈分配 struct，`FactSlots` 复用已有 `List<Slot>` 实例 |
 
 ---
 
@@ -294,7 +293,9 @@ if (state != CombatContext.State.InCombat) return;
 
 ### 迁移步骤
 
-1. 单独 PR，先实现 Stage 拆分 + AiLoop 分离（事实轴 `StartSlot()` 调用暂时保留在 DecisionStage 中，步骤 2 再移除）
+注：迁移分两步是有意为之。步骤 1 的 DecisionStage 中允许暂时保留 `StartSlot()` 调用（仅事实轴路径，作为过渡期的已知例外），步骤 2 正式消除所有 Skill Initiation 依赖。实施者应在步骤 2 完成后对照设计第 255 行做合约验证。
+
+1. 单独 PR，先实现 Stage 拆分 + AiLoop 分离（事实轴 `StartSlot()` 调用暂时保留在 DecisionStage 中，作为 Transitional Allowance）
 2. 事实轴副作用分离（StartSlot → FactSlots 列表），`_resetCalled` 逻辑移入 DataStage
 
 ---
@@ -304,7 +305,7 @@ if (state != CombatContext.State.InCombat) return;
 | 维度 | 说明 |
 |---|---|
 | 调用深度 | 增加一次间接调用（Update → 3×partial 方法），CPU 分支预测下可忽略 |
-| 内存分配 | `PipelineDecision` 是 struct（≤5 字段），栈分配零 GC。`FactSlots` 列表在 `UpdateDecisions` 中已有分配，不新增 |
+| 内存分配 | `PipelineDecision` 是 struct（≤5 字段），栈分配。`FactSlots` 复用已有 `List<Slot>` 实例（`UpdateDecisions`/`CheckPendingMitigations` 中已分配），不引入新堆分配 |
 | 对象扫描 | `Objects.Refresh()` 所有状态均执行（无变化）；`Party.Refresh()` 仅 InCombat 执行（无变化） |
 | AiLoop.CheckAll | Check 结果复用 `_debugInfos` 数组，零分配 |
 | 非战斗帧增量 | `Party.Refresh()` 不额外执行（InCombat 条件不变）。`TryResolveTarget()` 已有 doAutoTarget 短路，无实际增量 |
