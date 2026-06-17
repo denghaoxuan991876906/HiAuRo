@@ -8,7 +8,7 @@ FFXIV Dalamud 战斗辅助框架（.NET 10，Dalamud.CN.NET.Sdk 15.0.0）。
 
 ## ACR 开发者 — 一键开始
 
-详见 **[ACR 作者上手指南](doc/ACR_AUTHOR_GUIDE.md)** — 从零写出职业循环的完整教程。
+详见 **[ACR 作者上手指南](public-docs/ACR_AUTHOR_GUIDE.md)** — 从零写出职业循环的完整教程。
 
 ```bash
 dotnet add package HiAuRo.Sdk
@@ -37,7 +37,7 @@ dotnet build HiAuRo.slnx -c Release
 
 内部开发者可将 `HiAuRo.Sdk` 自动输出到本地 NuGet 源，ACR 秒级恢复，无需等待 nuget.org 更新。
 
-详见 **[本地 NuGet 源开发指南](doc/LOCAL_NUGET_DEV.md)** — 一键设置，零等待。
+详见 **[本地 NuGet 源开发指南](public-docs/LOCAL_NUGET_DEV.md)** — 一键设置，零等待。
 
 > HiAuRo.Helper 是独立仓库，编译时不依赖。运行时通过 HelperUpdater 自动拉取最新 DLL。
 
