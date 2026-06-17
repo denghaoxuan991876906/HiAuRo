@@ -10,7 +10,7 @@ using HiAuRo.Runtime.Intelligence;
 
 namespace HiAuRo.Runtime;
 
-public sealed partial class AIRunner : IDisposable
+public sealed partial class AIRunner
 {
     public static BattleData BattleData { get; } = new();
     public IRotationEntry? CurrentEntry { get; private set; }
@@ -24,7 +24,6 @@ public sealed partial class AIRunner : IDisposable
     internal SlotExecutor SlotExecutor => _slotExecutor;
 
     private readonly SlotExecutor _slotExecutor;
-    private readonly SpellEventHook _spellEventHook;
     private bool _loaded;
 
     /// <summary>当前战斗已持续的毫秒数（进战清零、脱战清零）</summary>
@@ -49,7 +48,6 @@ public sealed partial class AIRunner : IDisposable
     public AIRunner()
     {
         _slotExecutor = new SlotExecutor(this);
-        _spellEventHook = new SpellEventHook();
     }
 
     public void Load(IRotationEntry entry, string settingFolder)
@@ -72,8 +70,6 @@ public sealed partial class AIRunner : IDisposable
 
         CurrentEntry.OnEnterRotation();
 
-        _spellEventHook.OnSpellResult += OnSpellEvent;
-
         GameEventHook.Instance.OnEventFired += OnGameEvent;
         FactTimeline.Instance.PhaseChanged += OnPhaseChanged;
 
@@ -86,8 +82,6 @@ public sealed partial class AIRunner : IDisposable
 
         GameEventHook.Instance.OnEventFired -= OnGameEvent;
         FactTimeline.Instance.PhaseChanged -= OnPhaseChanged;
-
-        _spellEventHook.OnSpellResult -= OnSpellEvent;
 
         CurrentEntry?.OnExitRotation();
 
@@ -110,12 +104,6 @@ public sealed partial class AIRunner : IDisposable
         BattleTimeMs = 0;
     }
 
-    public void Dispose()
-    {
-        Unload();
-        _spellEventHook.Dispose();
-    }
-
     private float _lastCountRemaining;
 
     internal void UpdateCountDown()
@@ -135,10 +123,6 @@ public sealed partial class AIRunner : IDisposable
         if (!CountDownHandler.Instance.Start) return;
 
         _ = CountDownHandler.Instance.Update(BattleData);
-    }
-
-    private void OnSpellEvent(uint actionId, bool isCancelled)
-    {
     }
 
     internal static unsafe float ReadCountdown()

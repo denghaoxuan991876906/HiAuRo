@@ -408,6 +408,14 @@ public sealed class GameEventHook
                     Id = p2
                 });
                 break;
+            case 15: // CancelCast — p3=actionId（仅自身）
+                if (entityId == (Data.Me.Object?.EntityID ?? 0))
+                    Runtime.SpellActionTracker.Instance.Notify(Runtime.SpellActionType.CancelCast, p3);
+                break;
+            case 700: // ActionRejected — p3=actionId（仅自身）
+                if (entityId == (Data.Me.Object?.EntityID ?? 0))
+                    Runtime.SpellActionTracker.Instance.Notify(Runtime.SpellActionType.ActionRejected, p3);
+                break;
             default:
                 if (DService.Instance().ObjectTable.SearchByID(entityId) is not IPlayerCharacter)
                 {
