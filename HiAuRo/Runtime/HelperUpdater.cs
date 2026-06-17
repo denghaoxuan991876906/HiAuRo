@@ -27,13 +27,12 @@ public static class HelperUpdater
 
     private static AssemblyLoadContext? _alc;
     private static Assembly? _helperAsm;
-    private static HiAuRoContextImpl? _contextImpl;
     private static byte[]? _cachedDllBytes;
 
     /// <summary>Helper DLL 是否已加载</summary>
     public static bool Loaded { get; private set; }
 
-    /// <summary>HelperUpdater 已加载并注入 _ctx 的 HiAuRo.Helper 程序集（供 ACRLoader 共享，避免 ALC 隔离）</summary>
+    /// <summary>HelperUpdater 已加载的 HiAuRo.Helper 程序集（供 ACRLoader 共享，避免 ALC 隔离）</summary>
     public static Assembly? HelperAssembly => _helperAsm;
 
     /// <summary>尝试从本地缓存同步加载 Helper DLL（供 ACRLoader 时序竞争回退）</summary>
@@ -180,33 +179,5 @@ public static class HelperUpdater
         using var ms = new MemoryStream(_cachedDllBytes, writable: false);
         _helperAsm = _alc.LoadFromStream(ms);
         Loaded = true;
-
-        InitializeHelperRuntime();
-    }
-
-    /// <summary>通过 Reflection.Emit 生成 IHelperContext 实现 + 反射调用 HelperRuntime.Initialize</summary>
-    private static void InitializeHelperRuntime()
-    {
-        if (_helperAsm == null || _alc == null) return;
-
-        try
-        {
-            _contextImpl = new HiAuRoContextImpl();
-            var proxy = EmitProxy.Create(_contextImpl, _helperAsm, _alc);
-
-            var runtimeType = _helperAsm.GetType("HiAuRo.Helper.HelperRuntime")!;
-            var initMethod = runtimeType.GetMethod("Initialize",
-                BindingFlags.NonPublic | BindingFlags.Static)!;
-            initMethod.Invoke(null, [proxy]);
-
-            DService.Instance().Log.Information("[HelperUpdater] HelperRuntime 上下文已注入");
-        }
-        catch (Exception ex)
-        {
-            var msg = ex is System.Reflection.TargetInvocationException tie && tie.InnerException != null
-                ? tie.InnerException.ToString()
-                : ex.ToString();
-            DService.Instance().Log.Warning($"[HelperUpdater] InitializeHelperRuntime 失败: {msg}");
-        }
     }
 }
