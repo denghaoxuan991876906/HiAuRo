@@ -225,7 +225,7 @@ public interface IRotationEntry
 ```
 
 **使用技巧**：
-- `UseCustomUi = false` 是推荐方式，用 `IUiBuilder` 声明式注册控件
+- `UseCustomUi = false` 是推荐方式，用 `IAcrUiBuilder` 声明式注册控件
 - `TargetJobs` 返回支持的职业列表，框架会按当前职业自动匹配
 - `Build()` 在每次切换职业时调用，所以不要把状态存在 `IRotationEntry` 上
 
@@ -238,7 +238,7 @@ public sealed class Rotation
     List<SlotResolverData> SlotResolvers;    // 技能槽位列表（决定优先级顺序！）
     List<ISlotSequence> SlotSequences;       // 技能序列（连招、循环段）
     IOpener? Opener;                         // 起手爆发序列
-    IRotationEventHandler? EventHandler;      // 12 个事件回调
+    IRotationEventHandler? EventHandler;      // 11 个事件回调
     List<ITriggerAction> TriggerActions;     // 全局触发器
     List<ITriggerCond> TriggerConditions;    // 全局触发条件
 
@@ -546,7 +546,7 @@ public void OnBattleUpdate(int battleTimeMs)
 
 ## 5. 事件回调
 
-实现 `IRotationEventHandler`，所有方法都有默认空实现，你只覆写需要的。
+实现 `IRotationEventHandler`。除 `OnBeforeSpellCast` 有默认空实现外，其余方法必须显式实现（不需要的写空方法体）。
 
 ### 回调总览
 
@@ -559,7 +559,8 @@ public void OnBattleUpdate(int battleTimeMs)
 | `OnResetBattle()` | 脱战时 | 重置战斗计数器、清缓存 |
 | `OnNoTarget()` | 战斗中无目标且自动选目标失败 | 舞者转阶段提前跳舞等 |
 | `OnBattleUpdate(int ms)` | 战斗中每帧（**最常用**） | 更新 Dot 计时、Buff 追踪等 |
-| `BeforeSpell(Slot, Spell)` | 技能释放前 | 最后的资源检查 |
+| `BeforeSpell(Slot)` | Slot 开始执行前 | 返回非 null Slot 可插入到当前 Slot 前先执行 |
+| `OnBeforeSpellCast(Slot, Spell)` | 每个 Spell UseAction 前（有默认实现） | BeforeSpell 通知 |
 | `AfterSpell(Slot, Spell)` | 技能释放后 | 记录状态变更 |
 | `OnSpellCastSuccess(Slot, Spell)` | 读条技能成功判定时 | 滑步时间记录 |
 | `OnGameEvent(ITriggerCondParams)` | 底层游戏事件发生时 | Boss 读条检测、Buff 变化追踪、连线检测等 |
@@ -951,79 +952,140 @@ HiAuRo.Helper 是社区开源项目，欢迎所有人贡献：
 
 HiAuRo 的 UI 是 Web 前端渲染的（CEF 内嵌浏览器），但 ACR 作者不需要懂 HTML/CSS/JS。你只需要在 `IRotationUI` 中**声明式地**描述要哪些控件。
 
+`IRotationUI.RegisterControls` 接收 `IAcrUiBuilder`，值控件使用 `ref` 参数直接绑定 settings 字段，无需手写 id 映射。
+
 ### 7.1 实现 IRotationUI
 
 ```csharp
+using HiAuRo.ACR;
+using HiAuRo.ACR.HotkeyResolvers;
+
+// ① 定义 Settings（继承 AcrSettings，字段需为 public 字段，Web UI 回写靠字段名匹配）
+public class BRDSettings : AcrSettings
+{
+    public bool AutoSing = true;
+    public float RefreshSecs = 3f;
+    public string OpenerType = "标准起手";
+    public int AoeCount = 3;
+    public bool UsePitchPerfect = true;
+}
+
+// ② 入口实现 ISettingsProvider<T>，宿主自动托管 Settings 的加载与保存
+public class BRDEntry : IRotationEntry, ISettingsProvider<BRDSettings>
+{
+    public BRDSettings Settings { get; set; } = new();
+    public bool UseCustomUi => false;
+    public IRotationUI? GetRotationUI() => new BRDRotationUI(Settings);
+    // ... 其他成员省略
+}
+
+// ③ UI 类：通过构造函数接收 settings，用 ref 绑定
 public class BRDRotationUI : IRotationUI
 {
-    public void RegisterControls(IUiBuilder builder)
+    private readonly BRDSettings _s;
+    public BRDRotationUI(BRDSettings settings) => _s = settings;
+
+    public void RegisterControls(IAcrUiBuilder builder)
     {
         // 分 Tab
-        builder.AddTab("general", "基础设置");
-        builder.AddTab("aoe", "AOE 设置");
-        builder.AddTab("hotkeys", "热键");
+        builder.AddTab("基础设置");
+        builder.AddTab("AOE 设置");
 
-        // Tab 1: 基础设置
-        builder.AddGroup("buffs", "Buff 相关");
-        builder.AddCheckbox("自动唱歌", true);
-        builder.AddCheckbox("脱战自动速行", false);
+        // ── Tab 1: 基础设置 ──
+        builder.AddGroup("Buff 相关");
+        builder.AddCheckbox("自动唱歌", ref _s.AutoSing);
 
-        builder.AddGroup("dots", "DoT 续费");
-        builder.AddSlider("提前续费秒数", 1, 5, 3);
+        builder.AddGroup("DoT 续费");
+        builder.AddSlider("提前续费秒数", 1, 5, ref _s.RefreshSecs);
 
-        builder.AddGroup("opener", "起手爆发");
+        builder.AddGroup("起手爆发");
         builder.AddDropdown("起手类型",
-            ["标准起手", "双爆发起手", "2.47 特化"], "标准起手");
+            ["标准起手", "双爆发起手", "2.47 特化"], ref _s.OpenerType);
 
-        // Tab 2: AOE 设置
-        builder.AddGroup("aoeSettings", "AOE");
-        builder.AddIntInput("AOE 触发敌人数量", 3, 1, 1);
-        builder.AddCheckbox("使用影噬箭", true);
+        // ── Tab 2: AOE 设置 ──
+        builder.AddGroup("AOE");
+        builder.AddIntInput("AOE 触发敌人数量", ref _s.AoeCount, 1, 1);
+        builder.AddCheckbox("使用影噬箭", ref _s.UsePitchPerfect);
 
-        // Tab 3: 热键
-        builder.AddGroup("hotkeys", "快捷操作");
-        builder.AddHotkey("手动爆发", "Ctrl+Shift+F");
-        builder.AddHotkeyRow("burst", "pause");
+        // ── QT 开关（独立于 Tab/Group，显示在悬浮窗 QT 面板） ──
+        builder.AddBuiltinQt(BuiltinQt.Burst);
+        builder.AddBuiltinQt(BuiltinQt.Mitigation, true);
+        builder.AddQtToggle("自动唱歌", false, "战斗中自动释放歌曲");
+
+        // ── 热键（IHotkeyResolver 实现，显示在悬浮窗热键面板） ──
+        builder.AddQtHotkey("手动爆发",
+            new HotkeyResolver_技能("爆发", 7405, SpellTargetType.Target, "Ctrl+Shift+F"));
+        builder.AddQtHotkey("疾跑", new HotkeyResolver_疾跑());
+
+        // 多热键同行排列
+        builder.AddHotkeyRow([
+            new HotkeyResolver_技能("Ex弓", 117, SpellTargetType.Target),
+            new HotkeyResolver_吃药("爆发药", 39727, true, "Ctrl+F"),
+        ]);
 
         // 主控面板（暂停/保存）
         builder.AddMainControl(showPause: true, showSave: true);
-
-        // 内置 QT（第二个参数可选，覆盖默认值）
-        builder.AddBuiltinQt(BuiltinQt.Burst);
-        builder.AddBuiltinQt(BuiltinQt.Mitigation, true); // 强制默认开启
     }
 }
 ```
-### 7.2 在 IRotationEntry 中使用
+
+### 7.2 ref 绑定原理
+
+`IAcrUiBuilder` 的值控件（`AddCheckbox` / `AddSlider` / `AddDropdown` / `AddIntInput` / `AddFloatInput` / `AddTextInput`）使用 `[CallerArgumentExpression]` 自动捕获字段名：
 
 ```csharp
-public bool UseCustomUi => false;
-
-public IRotationUI? GetRotationUI() => new BRDRotationUI();
+builder.AddCheckbox("自动唱歌", ref _s.AutoSing);
+// → CallerArgumentExpression 捕获 "_s.AutoSing" → 提取字段名 "AutoSing"
+// → Web UI 回写时通过 GetCurrentSettings().GetField("AutoSing") 定位字段
 ```
 
-### 7.3 IUiBuilder 控件一览
+> Settings 字段必须是 **public 字段**（不是属性），否则 Web UI 回写无法定位。ImGui 悬浮窗模式通过 `ref` 直接读写，不受此限制。
+
+### 7.3 IAcrUiBuilder 控件一览
+
+**结构控件**（`IUiBuilder` 基础接口）：
 
 | 方法 | 用途 |
 |------|------|
-| `AddTab(id, title)` | 创建标签页 |
-| `AddGroup(id, title)` | 创建分组（折叠面板） |
+| `AddTab(title)` | 开始一个标签页 |
+| `EndTab()` | 结束当前标签页 |
+| `AddGroup(title)` | 创建分组（折叠面板） |
 | `AddSeparator()` | 分隔线 |
 | `AddSameLine()` | 下一个控件同行 |
-| `AddCheckbox(label, default)` | 勾选框（id=label 自动生成） |
-| `AddSlider(label, min, max, default)` | 滑块 |
-| `AddDropdown(label, options[], default)` | 下拉菜单 |
-| `AddHotkey(label, defaultKey, visible?)` | 热键按钮 |
-| `AddIntInput(label, default, step?, stepFast?)` | 整数输入框 |
-| `AddLabel(id, text)` | 文本标签 |
-| `AddQtHotkey(label, resolver, visible?)` | QT 热键 |
-| `AddQtToggle(label, default, tooltip?, color?, visible?)` | QT 开关 |
-| `AddMainControl(showPause?, showSave?)` | 主控面板 |
+| `AddLabel(text)` | 文本标签 |
+| `AddMainControl(showPause?, showSave?)` | 主控面板（暂停/保存） |
 | `AddTooltip(targetId, tooltip)` | 给控件加提示 |
-| `AddHotkeyRow(params ids[])` | 多个热键同行排列 |
-| `AddBuiltinQt(type, default?)` | 注册内置 QT |
 
-> 所有控件方法保留旧版 `(id, label, ...)` 签名，向后兼容。
+**值控件**（`IAcrUiBuilder` ref 重载，直接绑定 settings 字段）：
+
+| 方法 | 签名 |
+|------|------|
+| `AddCheckbox` | `(label, ref bool value)` |
+| `AddSlider` | `(label, float min, float max, ref float value)` |
+| `AddDropdown` | `(label, string[] options, ref string value)` |
+| `AddIntInput` | `(label, ref int value, int step=1, int stepFast=10)` |
+| `AddFloatInput` | `(label, ref float value)` |
+| `AddTextInput` | `(label, ref string value)` |
+| `AddButton` | `(label)` → `bool`（返回是否点击） |
+
+**QT / 热键**：
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `AddBuiltinQt` | `(BuiltinQt type, bool? value=null)` | 注册内置 QT（Burst/Potion/Hold/Mitigation/Dump/AoE/TTK） |
+| `AddQtToggle` | `(label, bool value, tooltip?, color?, defaultVisible?)` | 自定义 QT 开关 |
+| `AddQtHotkey` | `(label, IHotkeyResolver resolver, defaultVisible=true)` | 注册热键（点击释放技能） |
+| `AddHotkeyRow` | `(IHotkeyResolver[] hotkeyIds)` | 多个热键同行排列 |
+
+**内置 HotkeyResolver**（命名空间 `HiAuRo.ACR.HotkeyResolvers`）：
+
+| 类 | 用途 |
+|------|------|
+| `HotkeyResolver_技能(label, spellId, targetType, defaultKey)` | 释放指定技能 |
+| `HotkeyResolver_NormalSpell(spellId, name, targetType)` | 释放技能（带 CD 检查） |
+| `HotkeyResolver_吃药(label, itemId, ishq, defaultKey)` | 使用爆发药 |
+| `HotkeyResolver_疾跑()` | 疾跑（无参数） |
+| `HotkeyResolver_极限技` / `HotkeyResolver_LB` | 极限技 |
 
 > **自定义 UI**：如果 `UseCustomUi = true`，`GetRotationUI()` 返回 `null`，你需要自己提供 HTML 文件（放在 ACR DLL 同目录下）。
 
@@ -1391,7 +1453,7 @@ HiAuRo 内置调试面板（Web UI），会显示每个 Resolver：
 | `IRotationEntry` | `GetRotationUI() → IRotationUI?` | 返回 UI 注册 |
 | `ISlotResolver` | `int Check()` | 判断技能是否可用 |
 | `ISlotResolver` | `void Build(Slot slot)` | 构建技能槽位 |
-| `IRotationEventHandler` | 12 个回调（全有默认空实现） | 事件响应 |
+| `IRotationEventHandler` | 11 个回调（`OnBeforeSpellCast` 有默认实现） | 事件响应 |
 
 ### 10.2 你可能用到的
 

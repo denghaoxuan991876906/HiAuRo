@@ -240,7 +240,7 @@ HiAuRo.Runtime/
 public interface IRotationEntry
 {
     string AuthorName { get; }
-    bool UseCustomUi { get; }   // false=IUiBuilder / true=ACR 自带 HTML
+    bool UseCustomUi { get; }   // false=IAcrUiBuilder / true=ACR 自带 HTML
     Rotation? Build(string settingFolder);
     IRotationUI? GetRotationUI();
     void OnDrawSetting();  // 可选
@@ -249,7 +249,7 @@ public interface IRotationEntry
 
 public interface IRotationUI
 {
-    void RegisterControls(IUiBuilder builder);  // 注册 UI 控件，HiAuRo 转为 Web 前端渲染
+    void RegisterControls(IAcrUiBuilder builder);  // 注册 UI 控件，HiAuRo 转为 Web 前端渲染
 }
 
 public class Rotation
@@ -289,16 +289,17 @@ public class Rotation
 
 public interface IRotationEventHandler
 {
-    void OnPreCombat();                       // 非战斗每帧
-    void OnResetBattle();                     // 战斗重置
-    void OnNoTarget();                        // 无目标时
+    void OnPreCombat();                        // 非战斗每帧
+    void OnResetBattle();                      // 战斗重置
+    void OnNoTarget();                         // 无目标时
     void OnSpellCastSuccess(Slot s, Spell sp); // 读条完成（可滑步）
-    void BeforeSpell(Slot s, Spell sp);        // 技能使用前
+    Slot? BeforeSpell(Slot slot);              // Slot 执行前，返回非 null 插入前序 Slot
+    void OnBeforeSpellCast(Slot s, Spell sp) { } // 每个 Spell UseAction 前（默认实现）
     void AfterSpell(Slot s, Spell sp);         // 技能使用后
     void OnBattleUpdate(int timeMs);           // 战斗中每帧
-    void OnEnterRotation();                   // 切入当前 ACR
-    void OnExitRotation();                    // 切出当前 ACR
-    void OnTerritoryChanged();                // 切图
+    void OnTerritoryChanged();                 // 切图
+    void OnGameEvent(ITriggerCondParams p);    // 底层游戏事件分发
+    void OnPhaseChanged(string id, string name); // 事实轴阶段切换
 }
 
 public class SlotResolverData
