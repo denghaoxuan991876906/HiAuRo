@@ -108,6 +108,7 @@ public static class ACRLifecycle
     {
         DynModuleWatcher.Stop();
         UnloadRotation();
+        Runner.Dispose();
         _acrRegistry.Clear();
         _activeAcrIndices.Clear();
         foreach (var alc in _externalAlcs)

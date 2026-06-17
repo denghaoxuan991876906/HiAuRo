@@ -10,7 +10,7 @@ using HiAuRo.Runtime.Intelligence;
 
 namespace HiAuRo.Runtime;
 
-public sealed partial class AIRunner
+public sealed partial class AIRunner : IDisposable
 {
     public static BattleData BattleData { get; } = new();
     public IRotationEntry? CurrentEntry { get; private set; }
@@ -108,6 +108,12 @@ public sealed partial class AIRunner
         CurrentEntry = null;
         _loaded = false;
         BattleTimeMs = 0;
+    }
+
+    public void Dispose()
+    {
+        Unload();
+        _spellEventHook.Dispose();
     }
 
     private float _lastCountRemaining;
