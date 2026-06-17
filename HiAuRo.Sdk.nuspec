@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>HiAuRo.Sdk</id>
-    <version>0.2.9</version>
+    <version>0.2.10</version>
     <authors>嗨呀</authors>
     <description>HiAuRo ACR 开发 SDK</description>
     <dependencies><group targetFramework="net10.0" /></dependencies>
