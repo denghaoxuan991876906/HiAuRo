@@ -14,6 +14,8 @@ FFXIV Dalamud 战斗辅助框架（.NET 10，Dalamud.CN.NET.Sdk 15.0.0）。
 dotnet add package HiAuRo.Sdk
 ```
 
+如果需要职业数据辅助库，在 ACR 仓库中以 submodule 方式引用 `HiAuRo.Helper`，并保持 `HiAuRo.Sdk` 版本与宿主一致。
+
 ```csharp
 using HiAuRo.ACR;
 using HiAuRo.Helper;
@@ -39,7 +41,33 @@ dotnet build HiAuRo.slnx -c Release
 
 详见 **[本地 NuGet 源开发指南](public-docs/LOCAL_NUGET_DEV.md)** — 一键设置，零等待。
 
-> HiAuRo.Helper 是独立仓库，编译时不依赖。运行时通过 HelperUpdater 自动拉取最新 DLL。
+> HiAuRo.Helper 是独立仓库，宿主编译时不依赖。运行时通过 `HelperUpdater` 自动拉取最新 DLL，`ACRLoader` 会把 ACR 对 `HiAuRo.Helper` 的引用解析到同一份已加载程序集。
+
+## HiAuRo.Helper 共存模式
+
+ACR 可以同时引用 `HiAuRo.Sdk` 和 `HiAuRo.Helper`：
+
+```xml
+<ItemGroup>
+    <PackageReference Include="HiAuRo.Sdk" Version="0.2.11">
+        <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+</ItemGroup>
+
+<ItemGroup>
+    <Compile Remove="Helper\**" />
+    <None Remove="Helper\**" />
+    <Content Remove="Helper\**" />
+</ItemGroup>
+
+<ItemGroup>
+    <ProjectReference Include="Helper\HiAuRo.Helper\HiAuRo.Helper.csproj">
+        <Private>False</Private>
+    </ProjectReference>
+</ItemGroup>
+```
+
+`ExcludeAssets=runtime` 避免 ACR 输出第二份 `HiAuRo.dll`，`Private=False` 避免 ACR 输出第二份 `HiAuRo.Helper.dll`。游戏内由宿主加载并共享 Helper。
 
 ## 项目结构
 
@@ -78,4 +106,4 @@ Browsingway/         ← CEF 渲染参考（submodule）
 |------|------|
 | [HiAuRo-SampleACR](https://github.com/denghaoxuan991876906/HiAuRo-SampleACR) | 示例 ACR 实现 |
 | [HiAuRo.Helper](https://github.com/denghaoxuan991876906/HiAuRo.Helper) | 全职业数据辅助库 |
-| [HiAuRo.Sdk](https://www.nuget.org/packages/HiAuRo.Sdk) | ACR 开发 NuGet 包 || 仓库 | 说明 |
+| [HiAuRo.Sdk](https://www.nuget.org/packages/HiAuRo.Sdk) | ACR 开发 NuGet 包 |

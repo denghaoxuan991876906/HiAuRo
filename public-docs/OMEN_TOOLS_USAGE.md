@@ -249,7 +249,7 @@ OmenTools 不提供 ACR 框架。HiAuRo 自建：
 
 #### HiAuRo.Helper 辅助库
 
-HiAuRo.Helper 是独立仓库（21职业 Helper），同样遵循 OmenTools 直取模式，不做额外包装。HelperUpdater 从 GitHub Release 自动更新加载，编译时不依赖运行时。
+HiAuRo.Helper 是独立仓库（21职业 Helper），基于 `HiAuRo.Sdk` 访问宿主暴露的 ACR/Data API，不直接包装 OmenTools。`HelperUpdater` 从 GitHub Release 或本地缓存加载 Helper，`ACRLoader` 将 ACR 对 `HiAuRo.Helper` 的引用解析到同一份程序集。
 
 #### 执行轴 / 事实轴 / 智能层
 

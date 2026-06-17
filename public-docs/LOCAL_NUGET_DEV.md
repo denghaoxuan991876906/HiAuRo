@@ -36,10 +36,12 @@ E:\DalamudPlugins\
 ACR 的 `.csproj` 中 SDK 引用改为浮动版本：
 
 ```xml
-<PackageReference Include="HiAuRo.Sdk" Version="0.1.*">
+<PackageReference Include="HiAuRo.Sdk" Version="0.2.*">
     <ExcludeAssets>runtime</ExcludeAssets>
 </PackageReference>
 ```
+
+如果 ACR 同时引用 `HiAuRo.Helper`，Helper 项目也应引用同一条 `HiAuRo.Sdk` 版本线。ACR 侧通过 `ProjectReference` 引入 Helper 时保持 `<Private>False</Private>`，避免输出第二份 `HiAuRo.Helper.dll`。
 
 ## 开关
 
@@ -64,4 +66,4 @@ cmd.exe /c "E:\DalamudPlugins\HiAuRo\build.cmd"
 
 ## 版本升级
 
-同时更新 `HiAuRo.csproj` 的 `<Version>` 和 `HiAuRo.Sdk.nuspec` 的 `<version>`。ACR 用浮动版本 `0.1.*`，自动拉最新，无需手动同步。
+同时更新 `HiAuRo.csproj` 的 `<Version>` 和 `HiAuRo.Sdk.nuspec` 的 `<version>`。ACR 用浮动版本 `0.2.*`，自动拉最新，无需手动同步。

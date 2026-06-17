@@ -851,9 +851,9 @@ MathHelper.CountInSector(center, dir, radius, halfAngleDeg)  // 扇形内敌人�
 
 `HiAuRo.Helper` 是社区维护的全职业数据辅助库，覆盖 FFXIV 全部 **21 个战斗职业**（4T + 4H + 6 近战 + 3 远敏 + 4 法系）。特点：
 
-- **零外部依赖**——只依赖 .NET 10 + Dalamud SDK，不引入 OmenTools 或 HiAuRo
+- **SDK 原生**——Helper 编译期引用 `HiAuRo.Sdk`，复用宿主暴露的 ACR/Data API
 - **静态 API 开箱即用**——所有 Helper 都是 `static` 属性/方法，无需 `new`、无需实现接口、无需初始化
-- **由 HiAuRo 宿主自动注入**——ACR 作者完全不用操心初始化
+- **宿主共享加载**——运行时由 `HelperUpdater` 加载，`ACRLoader` 解析到同一份 Helper 程序集
 
 #### 覆盖职业
 
@@ -893,7 +893,17 @@ if (BLMHelper.HasEnochian && BLMHelper.IsAstralFireMax)
 
 #### 如何引入
 
-**推荐以 git submodule 方式引入你的 ACR 项目**，这样本地改完就能验证，同时也方便向主库提 PR：
+ACR 项目需要同时引用 `HiAuRo.Sdk` 和 `HiAuRo.Helper`。`HiAuRo.Sdk` 版本必须与宿主匹配，`ExcludeAssets="runtime"` 避免 ACR 输出第二份 `HiAuRo.dll`。
+
+```xml
+<ItemGroup>
+    <PackageReference Include="HiAuRo.Sdk" Version="0.2.11">
+        <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+</ItemGroup>
+```
+
+**推荐以 git submodule 方式引入 `HiAuRo.Helper`**，这样本地改完就能验证，同时也方便向主库提 PR：
 
 ```bash
 # 1. 在你的 ACR 仓库根目录添加 submodule
@@ -904,9 +914,15 @@ git submodule add https://github.com/denghaoxuan991876906/HiAuRo.Helper.git Help
 dotnet sln YourACR.slnx add Helper/HiAuRo.Helper/HiAuRo.Helper.csproj
 ```
 
-然后在你的 `.csproj` 中添加项目引用：
+然后在你的 `.csproj` 中添加项目引用，并排除 submodule 源码被 ACR 项目隐式编译：
 
 ```xml
+<ItemGroup>
+    <Compile Remove="Helper\**" />
+    <None Remove="Helper\**" />
+    <Content Remove="Helper\**" />
+</ItemGroup>
+
 <ItemGroup>
     <ProjectReference Include="Helper\HiAuRo.Helper\HiAuRo.Helper.csproj">
         <Private>False</Private>
@@ -914,7 +930,7 @@ dotnet sln YourACR.slnx add Helper/HiAuRo.Helper/HiAuRo.Helper.csproj
 </ItemGroup>
 ```
 
-之后直接在代码中 `using HiAuRo.Helper;` 即可。
+`Private=False` 避免 ACR 输出第二份 `HiAuRo.Helper.dll`。游戏内由 HiAuRo 宿主加载并共享 Helper；之后直接在代码中 `using HiAuRo.Helper;` 即可。
 
 #### 社区贡献
 
