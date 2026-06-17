@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiAuRo</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ====== MainWindow (bar+panel 合一) ====== -->
+    <div id="main-win">
+        <div class="bar-header">
+            <div class="status-dot" id="status-dot"></div>
+            <span class="status-label" id="status-label">就绪</span>
+            <div class="bar-divider hide-on-expand"></div>
+            <div class="ctrl-btns">
+                <button class="bar-btn" id="btn-pause" title="暂停" onclick="send('pause')">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                </button>
+                <button class="bar-btn" id="btn-acr" title="开关" onclick="send('toggleACR')">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+                </button>
+                <button class="bar-btn" id="btn-save" title="保存" onclick="send('saveACR')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                </button>
+            </div>
+            <div class="bar-divider"></div>
+            <button class="bar-btn expand" id="btn-expand" title="展开" onclick="toggleExpand()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg>
+            </button>
+        </div>
+        <div class="panel-body" id="panel-body">
+            <div class="panel-actions">
+                <span class="title">HiAuRo</span>
+                <div class="row-btns">
+                    <button class="btn-sm" id="btn-acr-ex" onclick="send('toggleACR')">停止</button>
+                    <button class="btn-sm" id="btn-pause-ex" onclick="send('pause')">暂停</button>
+                    <button class="btn-sm" id="btn-save-ex" onclick="send('saveACR')">保存</button>
+                </div>
+            </div>
+            <div class="tab-bar" id="tab-bar"></div>
+            <div class="tab-body" id="tab-body"></div>
+        </div>
+    </div>
+
+    <!-- ====== Qt toggle chips ====== -->
+    <div id="qt-panel"><div class="drag-dot"></div><div class="drag-inner" id="qt-grid"></div></div>
+
+    <!-- ====== Hotkey buttons ====== -->
+    <div id="hk-panel"><div class="drag-dot"></div><div class="drag-inner" id="hk-grid"></div></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

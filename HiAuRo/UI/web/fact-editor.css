@@ -1,0 +1,954 @@
+/* === UX 尺寸优化 === */
+button, .p-btn, .btn {
+    min-height: 30px !important;
+    padding: 4px 12px !important;
+    font-size: 13px !important;
+}
+.btn-sm { min-height: 24px; padding: 2px 8px; font-size: 12px; }
+.prop-input, input[type="text"], input[type="number"], select, textarea.prop-input {
+    height: 28px;
+    font-size: 13px;
+    padding: 2px 6px;
+}
+textarea.prop-input { height: auto; }
+.prop-row { margin: 4px 0; display: flex; align-items: center; gap: 6px; }
+.prop-label { font-size: 12px; font-weight: 600; }
+.ed-add-btn, .ed-del-btn { min-width: 22px; min-height: 22px; font-size: 12px; }
+.sidebar-label {
+    font-size: 13px;
+    padding: 6px 0;
+    cursor: pointer;
+    user-select: none;
+}
+.sidebar-label:hover { color: var(--blue, #4dabf7); }
+.sidebar-section { margin: 6px 0; border-bottom: 1px solid var(--bd, #444); padding-bottom: 6px; }
+.toolbar .actions { gap: 6px; }
+
+/* ============================================================
+   HiAuRo 事实轴编辑器 — 深色主题基础样式
+   ============================================================ */
+
+:root {
+    /* 背景层级 */
+    --bg0: #f0f2f5;
+    --bg1: #ffffff;
+    --bg2: #f5f6f8;
+
+    /* 文字层级 */
+    --tx0: #1a1a2e;
+    --tx1: #555;
+    --tx2: #999;
+
+    /* 强调色 */
+    --accent: #0077cc;
+    --accent-dim: #005599;
+    --accent-bg: rgba(0, 119, 204, 0.06);
+
+    /* 语义色 */
+    --red: #d63031;
+    --green: #00b894;
+    --purple: #6c5ce7;
+    --orange: #e17055;
+    --yellow: #fdcb6e;
+
+    /* 边框 */
+    --border: #ddd;
+    --border-light: rgba(0, 0, 0, 0.04);
+
+    /* 字体 */
+    --font: 'Segoe UI', -apple-system, sans-serif;
+}
+
+/* ---- 全局重置 ---- */
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* ---- 页面基础 ---- */
+body {
+    background: var(--bg0);
+    color: var(--tx0);
+    font-family: var(--font);
+    font-size: 13px;
+    line-height: 1.4;
+    overflow: hidden;
+    height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+        radial-gradient(circle at 10% 20%, rgba(26, 35, 126, 0.05) 0%, transparent 20%),
+        radial-gradient(circle at 90% 80%, rgba(106, 27, 154, 0.05) 0%, transparent 20%);
+}
+
+/* ---- 编辑器布局 ---- */
+.editor-layout {
+    display: flex;
+    height: 100vh;
+}
+
+/* ---- 工具栏 ---- */
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--bg1);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+/* ---- 侧边面板（左） ---- */
+.side-panel {
+    width: 280px;
+    background: var(--bg1);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---- 属性面板（右） ---- */
+.properties-panel {
+    width: 320px;
+    background: var(--bg1);
+    border-left: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---- 时间轴画布 ---- */
+.timeline-canvas {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg0);
+}
+
+.timeline-scroll {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+}
+
+.timeline-body {
+    display: flex;
+    align-items: stretch;
+    min-height: 3600px;
+}
+
+/* 相位区域包裹器 - 居中显示阶段轨道，但不裁切事件标签 */
+.phase-wrapper {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    overflow: visible;
+    min-width: 0;
+}
+
+/* 相位轨道容器 - 不裁切子元素的事件标签 */
+#phaseTracks {
+    display: flex;
+    overflow: visible;
+    align-items: flex-start;
+}
+
+/* ---- 表单元素 ---- */
+input[type="text"],
+input[type="number"],
+input[type="password"],
+select,
+textarea {
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 8px 10px;
+    background: var(--bg2);
+    color: var(--tx0);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.15);
+}
+
+input[type="text"]::placeholder,
+input[type="number"]::placeholder,
+textarea::placeholder {
+    color: var(--tx2);
+}
+
+input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* ---- 按钮 ---- */
+button,
+.btn {
+    font-family: var(--font);
+    font-size: 13px;
+    padding: 8px 14px;
+    background: var(--bg2);
+    color: var(--tx0);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+button:hover,
+.btn:hover {
+    background: var(--accent-bg);
+    border-color: var(--accent-dim);
+}
+
+button:active,
+.btn:active {
+    transform: scale(0.96);
+}
+
+button.primary,
+.btn.primary {
+    background: var(--accent-bg);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+button.primary:hover,
+.btn.primary:hover {
+    background: rgba(0, 212, 255, 0.15);
+}
+
+button.danger,
+.btn.danger {
+    background: rgba(255, 68, 119, 0.08);
+    color: var(--red);
+    border-color: var(--red);
+}
+
+button.danger:hover,
+.btn.danger:hover {
+    background: rgba(255, 68, 119, 0.15);
+}
+
+/* ---- 滚动条 ---- */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--tx2);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--tx1);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* ---- 底部状态栏 ---- */
+.footer {
+    height: 24px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--border);
+    background: var(--bg1);
+    font-size: 11px;
+    color: var(--tx2);
+    flex-shrink: 0;
+}
+
+/* ---- 分区标签 ---- */
+.section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--tx2);
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+/* ---- 卡片 ---- */
+.card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+/* ---- 提示文字 ---- */
+.hint {
+    color: var(--tx2);
+    font-size: 12px;
+    text-align: center;
+    padding: 20px 0;
+}
+
+/* ---- 时间轴渲染样式 ---- */
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.editor-layout {
+    flex: 1;
+    overflow: hidden;
+}
+
+/* 时间刻度 */
+.time-scale {
+    position: relative;
+    flex-shrink: 0;
+    width: 55px;
+    min-height: 3600px;
+    pointer-events: none;
+    user-select: none;
+}
+
+.time-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 60px;
+    display: flex;
+    align-items: flex-start;
+    padding-left: 6px;
+    font-size: 11px;
+    color: var(--tx2);
+    font-variant-numeric: tabular-nums;
+    overflow: visible;
+    border-top: 1px dashed rgba(0, 0, 0, 0.08);
+}
+
+/* 文字背景遮住虚线 */
+.time-line span {
+    background: var(--bg0);
+    padding: 1px 3px 0 3px;
+    margin-top: -1px;
+    border-radius: 0 0 2px 2px;
+    line-height: 1.2;
+}
+
+/* 0s 刻度线特殊标记 */
+.time-line-zero { border-color: var(--accent) !important; }
+.time-line-zero span { color: var(--accent); font-weight: 600; }
+.time-line-zero::after { border-color: var(--accent) !important; }
+
+/* 虚线延伸到画布宽度 */
+.time-line::after {
+    content: '';
+    position: absolute;
+    left: 55px;
+    top: -1px;
+    width: 5000px;
+    height: 0;
+    border-top: 1px dashed rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+}
+
+/* 虚线穿过文字中央 */
+.time-line::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    border-top: 1px dashed rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+}
+
+/* 文字背景遮住虚线（刻线穿过效果） */
+.time-line span {
+    position: relative;
+    z-index: 1;
+    background: var(--bg0);
+    padding: 0 2px;
+}
+
+/* 虚线延伸到画布宽度 */
+.time-line::after {
+    content: '';
+    position: absolute;
+    left: 55px;
+    top: -1px;
+    width: 5000px;
+    height: 0;
+    border-top: 1px dashed rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+}
+
+/* 阶段轨道 */
+.phase-track {
+    width: 100px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    overflow: visible;
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+
+.phase-track.sel-phase {
+    background: var(--accent-bg);
+}
+
+.sub-branch.sel-phase {
+    background: var(--accent-bg);
+    border-radius: 4px;
+}
+
+.track-main-line {
+    width: 3px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent), 0 0 16px rgba(0, 212, 255, 0.3);
+    flex: 1;
+    min-height: 3600px;
+}
+
+.track-glare {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 212, 255, 0.03);
+    pointer-events: none;
+}
+
+.track-label {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    background: var(--bg1);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* 事件节点 */
+.event-node {
+    position: absolute;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    cursor: grab;
+    z-index: 5;
+    transition: box-shadow 0.15s;
+}
+
+.event-node::after {
+    content: '';
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.event-node.sel {
+    box-shadow: 0 0 14px currentColor;
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
+
+.event-node.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+/* 事件标签 */
+.event-label {
+    position: absolute;
+    left: 50%;
+    margin-left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: #fff;
+    background: rgba(13, 17, 23, 0.85);
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+.event-label-alt {
+    position: absolute;
+    left: 50%;
+    margin-left: -136px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: #fff;
+    background: rgba(13, 17, 23, 0.85);
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+/* 子分支 */
+.sub-branch {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* 横向折线: 从主轴线连接到分支轨道 */
+.sub-branch-hook {
+    height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 4px var(--accent);
+    opacity: 0.6;
+    margin-bottom: 2px;
+}
+
+.sub-branch-track {
+    width: 2px;
+    flex: 1;
+    min-height: 120px;
+}
+
+.sub-branch-event {
+    position: absolute;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    cursor: grab;
+    z-index: 5;
+    transition: box-shadow 0.15s;
+}
+
+.sub-branch-event::after {
+    content: '';
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: #fff;
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.sub-branch-label {
+    font-size: 10px;
+    color: var(--tx1);
+    text-align: center;
+    margin-bottom: 2px;
+}
+
+.sub-branch-ruler {
+    font-size: 9px;
+    color: var(--tx2);
+    min-width: 40px;
+}
+
+.sub-branch-ruler .tick {
+    height: 30px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+    padding-left: 2px;
+}
+
+/* 拖放指示器 */
+.drop-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    z-index: 20;
+    pointer-events: none;
+}
+
+/* 右键菜单 */
+.context-menu {
+    position: fixed;
+    z-index: 10000;
+    min-width: 140px;
+    background: var(--bg2);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+}
+
+.context-menu .ctx-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.1s;
+}
+
+.context-menu .ctx-item:hover {
+    background: var(--accent-bg);
+}
+
+.context-menu .ctx-sep {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+}
+
+.context-menu .ctx-danger {
+    color: var(--red);
+}
+
+/* 工具类 */
+.hide {
+    display: none !important;
+}
+
+/* 属性面板 */
+.prop-section {
+    margin-bottom: 16px;
+}
+
+.prop-section-header {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--tx2);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+
+.prop-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.prop-label {
+    width: 60px;
+    font-size: 11px;
+    color: var(--tx1);
+    flex-shrink: 0;
+}
+
+.prop-input {
+    flex: 1;
+}
+
+/* 动作列表 */
+.action-item {
+    background: var(--bg0);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px;
+    margin-bottom: 6px;
+}
+
+.action-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+/* ---- 侧边栏布局（左/右） ---- */
+.sidebar-left {
+    width: 280px;
+    background: var(--bg1);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sidebar-right {
+    width: 320px;
+    background: var(--bg1);
+    border-left: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+/* ---- 阶段列表 ---- */
+.phase-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+}
+
+.phase-item:hover {
+    border-color: var(--accent-dim);
+    background: var(--accent-bg);
+}
+
+.phase-item.active {
+    border-color: var(--accent);
+    background: rgba(0, 212, 255, 0.1);
+}
+
+.phase-name {
+    flex: 1;
+    font-size: 13px;
+    color: var(--tx0);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.phase-del {
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: var(--tx2);
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    transition: color 0.15s, background 0.15s;
+    margin-left: 4px;
+}
+
+.phase-del:hover {
+    color: var(--red);
+    background: rgba(255, 68, 119, 0.15);
+}
+
+.phase-add {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--tx1);
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 12px;
+    transition: all 0.15s;
+}
+
+.phase-add:hover:not(:disabled) {
+    border-color: var(--accent-dim);
+    color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.phase-add:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ---- 阶段树形视图 ---- */
+.phase-toggle {
+    width: 16px; height: 16px;
+    font-size: 10px; line-height: 16px;
+    text-align: center; flex-shrink: 0;
+    color: var(--tx2); cursor: pointer; margin-right: 4px;
+    transition: transform 0.15s;
+}
+.phase-toggle.expanded { transform: rotate(90deg); }
+
+.phase-children { overflow: hidden; transition: max-height 0.2s ease; }
+.phase-children.collapsed { max-height: 0 !important; }
+
+.tree-event {
+    display: flex; align-items: center;
+    padding: 3px 8px; margin: 1px 0; border-radius: 4px;
+    cursor: pointer; font-size: 11px; color: var(--tx1);
+    transition: background 0.1s;
+}
+.tree-event:hover { background: var(--accent-bg); color: var(--tx0); }
+.tree-event.active { background: rgba(0,212,255,0.12); color: var(--accent); }
+
+.tree-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0; margin-right: 6px;
+}
+
+.tree-branch-header {
+    display: flex; align-items: center;
+    padding: 3px 8px; margin: 2px 0; border-radius: 4px;
+    cursor: pointer; font-size: 11px; color: var(--tx1);
+    font-weight: 600;
+}
+.tree-branch-header:hover { background: var(--accent-bg); }
+
+.tree-branch-toggle { margin-right: 4px; font-size: 10px; color: var(--tx2); }
+
+.phase-rename-input {
+    flex: 1;
+    font-size: 13px;
+    padding: 2px 6px;
+    background: var(--bg0);
+    color: var(--tx0);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    outline: none;
+    min-width: 0;
+}
+
+/* ---- 鼠标时间标线 ---- */
+.mouse-marker {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent), 0 0 12px rgba(0, 212, 255, 0.4);
+    z-index: 999;
+    pointer-events: none;
+    transform: translateY(-50%);
+}
+
+.mouse-marker-label {
+    position: absolute;
+    left: 4px;
+    top: -8px;
+    font-size: 10px;
+    font-family: 'SF Mono', monospace;
+    color: #fff;
+    background: rgba(0, 212, 255, 0.25);
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* ---- 录制面板 ---- */
+
+#recordingPanel {
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+}
+
+.recording-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.recording-toolbar h3 {
+    font-size: 13px;
+    margin: 0;
+}
+
+.recording-info {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.recording-filters {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.recording-events {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.rec-event-row {
+    display: flex;
+    align-items: flex-start;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 10px;
+    border-bottom: 1px solid var(--border-light);
+    gap: 4px;
+}
+
+.rec-event-row:hover {
+    background: var(--accent-bg);
+}
+
+.rec-event-label {
+    word-break: break-all;
+    line-height: 1.4;
+}
+
+.recording-actions {
+    padding: 6px 8px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.recording-actions .p-btn {
+    width: 100%;
+}

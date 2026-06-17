@@ -1,0 +1,73 @@
+/* Puppertino Bridge Layer - Compact Sizing for HiAuRo Editor */
+/* Only overrides sizes (font-size, padding, margin, border-radius), not colors */
+
+/* ===== Button Overrides ===== */
+.p-btn {
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+  margin: 0 !important;
+  border-radius: 7px !important;
+}
+
+.p-btn.p-btn-sm {
+  font-size: 10px !important;
+  padding: 3px 8px !important;
+}
+
+.p-btn.p-prim-col {
+  /* Keep Puppertino primary button styling, just size adjusted via .p-btn above */
+}
+
+/* ===== Form Input Overrides ===== */
+.p-form-text {
+  font-size: 11px !important;
+  padding: 4px 6px !important;
+  margin: 0 !important;
+  border-radius: 5px !important;
+}
+
+.p-form-text-alt {
+  font-size: 11px !important;
+  padding: 4px 6px !important;
+  margin: 0 !important;
+}
+
+.p-form-select {
+  font-size: 11px !important;
+  margin: 0 !important;
+}
+
+.p-form-select > select {
+  font-size: 11px !important;
+  padding: 4px 20px 4px 6px !important;
+}
+
+/* ===== Segmented Control Overrides ===== */
+.p-segmented-controls {
+  margin-top: 0 !important;
+  border-radius: 7px !important;
+}
+
+.p-segmented-controls a,
+.p-segmented-controls button {
+  font-size: 12px !important;
+  padding: 4px 12px !important;
+}
+
+/* ===== Radio/Checkbox Label Overrides ===== */
+.p-form-radio-cont,
+.p-form-checkbox-cont {
+  font-size: 11px !important;
+  margin: 0 5px !important;
+}
+
+.p-form-radio-cont > input + span,
+.p-form-checkbox-cont > input + span {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* ===== Label Overrides ===== */
+.p-form-label {
+  font-size: 10px !important;
+}

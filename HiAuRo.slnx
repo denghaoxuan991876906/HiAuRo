@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="HiAuRo/HiAuRo.csproj">
+    <Platform Solution="Debug|*" Project="x64" />
+  </Project>
+  <Project Path="OmenTools/OmenTools.csproj">
+    <Platform Solution="Debug|*" Project="x64" />
+  </Project>
+</Solution>

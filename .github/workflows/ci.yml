@@ -1,0 +1,184 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      HAS_PAT: ${{ secrets.DALAMUDPLUGINS_PAT != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
+          Expand-Archive dalamud.zip -DestinationPath dalamud
+
+      - name: Bump version
+        if: github.ref == 'refs/heads/master'
+        shell: pwsh
+        run: |
+          $csproj = "HiAuRo/HiAuRo.csproj"
+          $nuspec = "HiAuRo.Sdk.nuspec"
+          $m = Select-String -Path $csproj -Pattern '<Version>(.*?)</Version>'
+          $cur = $m.Matches[0].Groups[1].Value
+          $p = $cur.Split('.')
+          $new = "$([int]$p[0]).$([int]$p[1]).$([int]$p[2] + 1)"
+          $mn = Select-String -Path $nuspec -Pattern '<version>(.*?)</version>'
+          $curNuspec = $mn.Matches[0].Groups[1].Value
+          Write-Host "Bump csproj: $cur → $new, nuspec: $curNuspec → $new"
+          (Get-Content $csproj) -replace "<Version>$cur</Version>", "<Version>$new</Version>" | Set-Content $csproj
+          (Get-Content $nuspec) -replace "<version>$curNuspec</version>", "<version>$new</version>" | Set-Content $nuspec
+          # keep HiAuRo.json AssemblyVersion in sync with csproj (4-part: <new>.0)
+          $json = "HiAuRo/HiAuRo.json"
+          $av = '"AssemblyVersion": "' + $new + '.0"'
+          (Get-Content $json) -replace '"AssemblyVersion"\s*:\s*"[^"]*"', $av | Set-Content $json
+          "NEW_VERSION=$new" >> $env:GITHUB_ENV
+
+      - name: Build
+        run: dotnet build HiAuRo.slnx -c Release
+        env:
+          DALAMUD_HOME: ${{ github.workspace }}\dalamud
+
+      - name: Pack NuGet
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force sdk\lib\net10.0 | Out-Null
+          Copy-Item HiAuRo\bin\Release\HiAuRo.dll sdk\lib\net10.0\
+          Copy-Item HiAuRo\bin\Release\HiAuRo.deps.json sdk\lib\net10.0\ -ErrorAction SilentlyContinue
+
+          Copy-Item HiAuRo\bin\Release\OmenTools.dll sdk\lib\net10.0\
+          foreach ($dll in @("Dalamud.dll","Dalamud.Common.dll","Dalamud.Bindings.ImGui.dll","FFXIVClientStructs.dll","Lumina.dll","Lumina.Excel.dll","ImGuiScene.dll","TerraFX.Interop.Windows.dll","Newtonsoft.Json.dll","Serilog.dll","CheapLoc.dll")) {
+            Copy-Item "dalamud\$dll" "sdk\lib\net10.0\" -ErrorAction SilentlyContinue
+          }
+          Copy-Item HiAuRo.Sdk.nuspec sdk\
+          Invoke-WebRequest https://dist.nuget.org/win-x86-commandline/latest/nuget.exe -OutFile nuget.exe
+          .\nuget.exe pack sdk\HiAuRo.Sdk.nuspec -OutputDirectory nupkg -BasePath sdk
+
+      - name: Archive full build output
+        shell: pwsh
+        run: |
+          Get-ChildItem "HiAuRo/bin/Release/*" -Exclude "*.zip" | Compress-Archive -DestinationPath "HiAuRo/bin/Release/HiAuRo-full-build.zip"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: HiAuRo-release
+          path: |
+            HiAuRo/bin/Release/HiAuRo-*.zip
+            HiAuRo/bin/Release/HiAuRo-full-build.zip
+            nupkg/*.nupkg
+
+      - name: Commit & Tag
+        if: github.ref == 'refs/heads/master'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add HiAuRo/HiAuRo.csproj HiAuRo/HiAuRo.json HiAuRo.Sdk.nuspec
+          git commit -m "chore: bump version to v${{ env.NEW_VERSION }} [skip ci]"
+          git tag "v${{ env.NEW_VERSION }}"
+          git push origin master
+          git push origin "v${{ env.NEW_VERSION }}"
+
+      - name: Create Release
+        if: github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ env.NEW_VERSION }}
+          files: |
+            HiAuRo/bin/Release/HiAuRo-*.zip
+            HiAuRo/bin/Release/HiAuRo-full-build.zip
+            nupkg/*.nupkg
+          generate_release_notes: true
+
+      - name: Publish to DalamudPlugins meta repo
+        if: github.ref == 'refs/heads/master' && env.HAS_PAT == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DALAMUDPLUGINS_PAT }}
+          VERSION: ${{ env.NEW_VERSION }}
+        shell: bash
+        run: |
+          META=denghaoxuan991876906/DalamudPlugins
+          TAG="HiAuRo-v${VERSION}.0"
+          cp "HiAuRo/bin/Release/HiAuRo-full-build.zip" latest.zip
+          if gh release view "$TAG" --repo "$META" >/dev/null 2>&1; then
+            gh release upload "$TAG" latest.zip --repo "$META" --clobber
+          else
+            gh release create "$TAG" latest.zip --repo "$META" --title "$TAG" --target main --generate-notes
+          fi
+          python - <<'PY'
+          import json, base64, subprocess, os
+          meta = "denghaoxuan991876906/DalamudPlugins"
+          ver = os.environ["VERSION"] + ".0"
+          path = "plugins/HiAuRo/HiAuRo.json"
+          obj = json.loads(subprocess.check_output(["gh", "api", f"/repos/{meta}/contents/{path}"]))
+          data = json.loads(base64.b64decode(obj["content"]))
+          if data.get("AssemblyVersion") == ver:
+              raise SystemExit("manifest already at " + ver)
+          data["AssemblyVersion"] = ver
+          b64 = base64.b64encode(json.dumps(data, ensure_ascii=False, indent=2).encode()).decode()
+          subprocess.run(["gh", "api", "-X", "PUT", f"/repos/{meta}/contents/{path}",
+            "-f", f"message=chore(publish): HiAuRo v{ver}",
+            "-f", f"content={b64}",
+            "-f", f"sha={obj['sha']}",
+            "-f", "branch=main"], check=True)
+          print("manifest bumped to", ver)
+          PY
+
+  publish-nuget:
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: HiAuRo-release
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish to nuget.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: dotnet nuget push nupkg\*.nupkg --source "https://api.nuget.org/v3/index.json" --api-key $env:NUGET_API_KEY --skip-duplicate
+
+      - name: Publish to GitHub Packages
+        run: dotnet nuget push nupkg\*.nupkg --source "https://nuget.pkg.github.com/denghaoxuan991876906/index.json" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: HiAuRo-release
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            HiAuRo/bin/Release/HiAuRo-*.zip
+            HiAuRo/bin/Release/HiAuRo-full-build.zip
+            nupkg/*.nupkg
+          generate_release_notes: true

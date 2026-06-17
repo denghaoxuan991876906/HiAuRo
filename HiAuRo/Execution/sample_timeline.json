@@ -1,0 +1,53 @@
+{
+  "name": "极朱雀执行轴",
+  "territoryId": 297,
+  "description": "极朱雀征魂战执行轴示例 - 开场爆发控制",
+  "lines": [
+    {
+      "id": "pull",
+      "name": "开场倒计时爆发",
+      "loop": false,
+      "enabled": true,
+      "entries": [
+        {
+          "id": "countdown_5",
+          "condition": { "type": "countdown", "secondsRemaining": 5 },
+          "action": { "type": "usePotion", "itemId": 39727 },
+          "delayMs": 500
+        },
+        {
+          "id": "burst_opener",
+          "condition": { "type": "spellCooldown", "spellId": 3559, "remainingMs": 0 },
+          "action": { "type": "castSpell", "spellId": 3559, "targetType": "Target" }
+        }
+      ]
+    },
+    {
+      "id": "raidwide_reaction",
+      "name": "AOE 减伤应对",
+      "loop": false,
+      "enabled": true,
+      "entries": [
+        {
+          "id": "detect_raidwide",
+          "condition": { "type": "enemyCasting", "spellId": 10589 },
+          "action": { "type": "castSpell", "spellId": 7561 },
+          "delayMs": 0
+        }
+      ]
+    },
+    {
+      "id": "p1_end_pause",
+      "name": "P1 结束暂停 ACR",
+      "loop": false,
+      "enabled": false,
+      "entries": [
+        {
+          "id": "actor_death",
+          "condition": { "type": "actorDeath", "dataId": 5411 },
+          "action": { "type": "togglePause", "stop": true }
+        }
+      ]
+    }
+  ]
+}

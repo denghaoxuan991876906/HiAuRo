@@ -1,0 +1,67 @@
+<Project Sdk="Dalamud.CN.NET.Sdk/15.0.0">
+
+  <PropertyGroup>
+    <AssemblyName>HiAuRo</AssemblyName>
+    <RootNamespace>HiAuRo</RootNamespace>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Version>0.2.9</Version>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>CS1591</NoWarn>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <UseLocalNuGetFeed Condition="'$(UseLocalNuGetFeed)' == ''">true</UseLocalNuGetFeed>
+    <LocalNuGetFeed Condition="'$(LocalNuGetFeed)' == ''">E:\DalamudPlugins\local-nuget-feed\</LocalNuGetFeed>
+  </PropertyGroup>
+
+  <!-- DALAMUD_HOME 自动检测（Windows 环境已预设，WSL 手动指定） -->
+  <PropertyGroup>
+    <DALAMUD_HOME Condition="'$(DALAMUD_HOME)' == '' And '$(APPDATA)' != ''">$(APPDATA)\XIVLauncherCN\addon\Hooks\dev\</DALAMUD_HOME>
+  </PropertyGroup>
+
+  <!-- 编译时注入 Dev-时间戳 到 AssemblyInformationalVersion -->
+  <Target Name="SetDevVersion" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <InformationalVersion>Dev-$([System.DateTime]::UtcNow.AddHours(8).ToString(yyyyMMdd-HHmm))</InformationalVersion>
+    </PropertyGroup>
+  </Target>
+
+  <!-- 构建后自动打包 HiAuRo.Sdk.nupkg 到本地 NuGet 源（加速本地 ACR 测试） -->
+  <!-- 关闭：dotnet build -p:UseLocalNuGetFeed=false -->
+  <Target Name="PackSdkToLocalFeed" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true' And '$(UseLocalNuGetFeed)' == 'true'">
+    <PropertyGroup>
+      <PackArgs>$(ProjectDir)../HiAuRo.Sdk.nuspec $(OutputPath) $(LocalNuGetFeed) --version $(Version)</PackArgs>
+      <PackArgs Condition="'$(DALAMUD_HOME)' != ''">$(ProjectDir)../HiAuRo.Sdk.nuspec $(OutputPath) $(DALAMUD_HOME) $(LocalNuGetFeed) --version $(Version)</PackArgs>
+    </PropertyGroup>
+    <Exec Command="python $(ProjectDir)../tools/nuspec_pack.py $(PackArgs)"
+          IgnoreExitCode="true"
+          IgnoreStandardErrorWarningFormat="true">
+      <Output TaskParameter="ExitCode" PropertyName="PackExitCode" />
+    </Exec>
+    <Message Text="[HiAuRo] SDK 包已输出到本地 NuGet 源" Importance="high" Condition="'$(PackExitCode)' == '0'" />
+  </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="../OmenTools/OmenTools.csproj" />
+  </ItemGroup>
+
+  <!-- Roslyn for TreeScriptNode dynamic compilation -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.13.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="HiAuRo.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="UI/web/**\*.*" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
+    <EmbeddedResource Include="Resources\Fonts\*.ttf" />
+    <EmbeddedResource Include="Resources\blm_alpha.png" />
+    <Compile Remove="Jobs\**" />
+    <Compile Remove="Sdk\**" />
+    <None Remove="Jobs\**" />
+    <None Remove="Sdk\**" />
+  </ItemGroup>
+
+  
+</Project>
