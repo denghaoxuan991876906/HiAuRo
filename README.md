@@ -35,11 +35,21 @@ cd HiAuRo
 dotnet build HiAuRo.slnx -c Release
 ```
 
-### 本地开发加速
+### 同时开发 HiAuRo 和 ACR
 
-内部开发者可将 `HiAuRo.Sdk` 自动输出到本地 NuGet 源，ACR 秒级恢复，无需等待 nuget.org 更新。
+如果同时修改 HiAuRo 本体和 ACR，等 NuGet 更新太慢。可以直接引用本地编译的 `HiAuRo.dll`，跳过 SDK 包：
 
-详见 **[本地 NuGet 源开发指南](public-docs/LOCAL_NUGET_DEV.md)** — 一键设置，零等待。
+```xml
+<!-- 用直接引用替换 PackageReference HiAuRo.Sdk -->
+<Reference Include="HiAuRo">
+    <HintPath>..\HiAuRo\HiAuRo\bin\x64\Debug\HiAuRo.dll</HintPath>
+    <Private>false</Private>
+</Reference>
+```
+
+`Private=False` 确保 ACR 输出目录不复制 `HiAuRo.dll`，运行时用宿主已加载的那份。
+
+> 同理，Helper 项目也可以临时换成直接引用 `HiAuRo.dll`，但注意编译器会沿 public API 拉入 OmenTools / Dalamud 等传递依赖，需要确保这些 DLL 在编译路径中可达。
 
 > HiAuRo.Helper 是独立仓库，宿主编译时不依赖。运行时通过 `HelperUpdater` 自动拉取最新 DLL，`ACRLoader` 会把 ACR 对 `HiAuRo.Helper` 的引用解析到同一份已加载程序集。
 
