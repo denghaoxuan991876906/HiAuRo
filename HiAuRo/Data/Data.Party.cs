@@ -139,7 +139,9 @@ public static partial class Data
             var list = bc.StatusList;
             for (int i = 0; i < list.Length; i++)
             {
-                var sid = list[i].StatusID;
+                var status = list[i];
+                if (status == null) continue;
+                var sid = status.StatusID;
                 for (int j = 0; j < TankStances.Length; j++)
                 {
                     if (sid == TankStances[j]) return true;

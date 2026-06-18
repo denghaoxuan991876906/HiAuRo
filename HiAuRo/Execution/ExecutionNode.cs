@@ -87,19 +87,29 @@ public sealed class TreeParallel : TriggerCompositeNode
     /// <summary>并行执行所有子节点</summary>
     protected override async Task<bool> OnExecute(EvalContext ctx)
     {
-        var tasks = Childs.Where(c => c.Enable).Select(c => c.Execute(ctx)).ToList();
-        Hi.Verbose($"[ExecNode] Parallel({Tag}) 启动 {tasks.Count} 子节点 [AnyReturn={AnyReturn}]");
-        if (tasks.Count == 0) return true;
         if (AnyReturn)
         {
+            var branches = Childs.Where(c => c.Enable)
+                .Select(c => (Node: c, Context: ctx.CreateChild()))
+                .ToList();
+            var tasks = branches.Select(b => b.Node.Execute(b.Context)).ToList();
+
+            Hi.Verbose($"[ExecNode] Parallel({Tag}) 启动 {tasks.Count} 子节点 [AnyReturn={AnyReturn}]");
+            if (tasks.Count == 0) return true;
+
             var winner = await Task.WhenAny(tasks);
+            foreach (var branch in branches)
+                branch.Context.IsDisposed = true;
             Hi.Verbose($"[ExecNode] Parallel({Tag}) 竞赛胜出");
+            return await winner;
         }
-        else
-        {
-            await Task.WhenAll(tasks);
-            Hi.Verbose($"[ExecNode] Parallel({Tag}) 全部完成");
-        }
+
+        var allTasks = Childs.Where(c => c.Enable).Select(c => c.Execute(ctx)).ToList();
+        Hi.Verbose($"[ExecNode] Parallel({Tag}) 启动 {allTasks.Count} 子节点 [AnyReturn={AnyReturn}]");
+        if (allTasks.Count == 0) return true;
+
+        await Task.WhenAll(allTasks);
+        Hi.Verbose($"[ExecNode] Parallel({Tag}) 全部完成");
         return true;
     }
 }
@@ -378,6 +388,20 @@ public sealed class EvalContext
 
     /// <summary>所属轴的 WaitCond 委托（由轴 Start 时注入；节点据此路由到正确的轴，避免跨轴串扰）</summary>
     public Func<TriggerLeafNode, Task<bool>>? WaitCondFn { get; set; }
+
+    public EvalContext CreateChild()
+    {
+        var child = new EvalContext
+        {
+            BattleTimeMs = BattleTimeMs,
+            WaitCondFn = WaitCondFn
+        };
+
+        foreach (var kv in Variables)
+            child.Variables[kv.Key] = kv.Value;
+
+        return child;
+    }
 
     /// <summary>获取变量值</summary>
     public int GetVariable(string name) =>

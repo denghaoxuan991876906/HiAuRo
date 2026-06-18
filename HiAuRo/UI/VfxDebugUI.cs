@@ -190,9 +190,9 @@ public sealed class VfxDebugUI
 
         var hasTarget = target != null;
         var drawPos = hasTarget
-            ? new Vector3(target.Position.X, _shapePos.Y, target.Position.Z)
+            ? new Vector3(target!.Position.X, _shapePos.Y, target.Position.Z)
             : _shapePos;
-        var baseRot = (_ftUseTargetRot && hasTarget) ? target.Rotation : 0f;
+        var baseRot = (_ftUseTargetRot && hasTarget) ? target!.Rotation : 0f;
         var baseRotDeg = baseRot * 180f / MathF.PI;
 
         ImGui.Separator();
@@ -356,7 +356,7 @@ public sealed class VfxDebugUI
     {
         var target = TargetManager.Target;
         var hasTarget = target != null;
-        var drawPos = hasTarget ? target.Position : _shapePos;
+        var drawPos = hasTarget ? target!.Position : _shapePos;
 
         ImGui.Text("圈环测试 (Scale X/Y/Z 精确控制)");
         ImGui.Separator();

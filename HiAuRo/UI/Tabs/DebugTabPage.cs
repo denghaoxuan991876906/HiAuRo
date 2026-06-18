@@ -302,7 +302,6 @@ public sealed class DebugTabPage : TabPageBase
     private string _dbgSpellCanUseSpell_Result = "";
 
     private int _dbgSpellIsActionReady_Id;
-    private string _dbgSpellIsActionReady_TargetId = "E0000000";
     private string _dbgSpellIsActionReady_Result = "";
 
     private int _dbgSpellGetCd_Id;

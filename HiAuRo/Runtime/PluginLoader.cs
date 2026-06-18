@@ -60,7 +60,8 @@ public static class PluginLoader
                                 Plugin = plugin,
                                 Assembly = asm,
                                 Context = alc,
-                                DllBytes = dllBytes
+                                DllBytes = dllBytes,
+                                DllPath = dllPath
                             };
                             found = true;
                             DService.Instance().Log.Information(

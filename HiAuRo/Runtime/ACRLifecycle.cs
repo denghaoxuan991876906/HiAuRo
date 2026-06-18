@@ -271,7 +271,9 @@ public static class ACRLifecycle
     private static void LoadRotation(IRotationEntry entry, string settingFolder)
     {
         IsLoadingRotation = true;
-        UnloadRotation();
+        try
+        {
+            UnloadRotation();
 
         // 切换 ACR 时重置 GCD 能力技计数和上限
         Data.Combat.AbilityCountInGcd = 0;
@@ -335,9 +337,10 @@ public static class ACRLifecycle
             loadedSettings = HiAuRo.Setting.SettingMgr.GetAcrJobSetting<DefaultAcrSettings>(entry.AuthorName, CurrentJobId);
             _defaultSettings = loadedSettings;
         }
+        var currentSettings = loadedSettings ?? throw new InvalidOperationException("ACR settings should be available after load.");
 
         // 恢复热键绑定（从 AcrSettings.HkBindings）
-        foreach (var (id, key) in loadedSettings.HkBindings)
+        foreach (var (id, key) in currentSettings.HkBindings)
             ACR.HotkeyHelper.SetBinding(id, key);
 
         // QT 值变更自动保存（先注册回调，值恢复在 RegisterControls 之后）
@@ -383,7 +386,7 @@ public static class ACRLifecycle
         }
 
         // 恢复 QT 值（必须在 RegisterControls 之后，否则 key 尚未注册）
-        foreach (var (id, value) in loadedSettings.QtValues)
+        foreach (var (id, value) in currentSettings.QtValues)
             ACR.QTHelper.SetValue(id, value);
 
         // 推送 UI 设置（从 AcrSettings 读取）
@@ -394,27 +397,27 @@ public static class ACRLifecycle
                 type = "uiSettings",
                 data = new
                 {
-                    qtCols = loadedSettings.QtCols,
-                    qtBtnW = loadedSettings.QtBtnW,
-                    qtVisible = loadedSettings.QtVisible,
-                    hkCols = loadedSettings.HkCols,
-                    hkBtnSize = loadedSettings.HkBtnSize,
-                    hkVisible = loadedSettings.HkVisible,
-                    hkBindings = loadedSettings.HkBindings
+                    qtCols = currentSettings.QtCols,
+                    qtBtnW = currentSettings.QtBtnW,
+                    qtVisible = currentSettings.QtVisible,
+                    hkCols = currentSettings.HkCols,
+                    hkBtnSize = currentSettings.HkBtnSize,
+                    hkVisible = currentSettings.HkVisible,
+                    hkBindings = currentSettings.HkBindings
                 }
             });
             Plugin.Instance._uiBridge.CacheUiSettings(new
             {
-                qtCols = loadedSettings.QtCols,
-                qtBtnW = loadedSettings.QtBtnW,
-                qtVisible = loadedSettings.QtVisible,
-                hkCols = loadedSettings.HkCols,
-                hkBtnSize = loadedSettings.HkBtnSize,
-                hkVisible = loadedSettings.HkVisible,
-                hkBindings = loadedSettings.HkBindings
+                qtCols = currentSettings.QtCols,
+                qtBtnW = currentSettings.QtBtnW,
+                qtVisible = currentSettings.QtVisible,
+                hkCols = currentSettings.HkCols,
+                hkBtnSize = currentSettings.HkBtnSize,
+                hkVisible = currentSettings.HkVisible,
+                hkBindings = currentSettings.HkBindings
             });
         }
-        DService.Instance().Log.Information($"[ACR] uiSettings 消息已发送 + 已缓存 (qtVisible={loadedSettings.QtVisible?.Count ?? 0} hkVisible={loadedSettings.HkVisible?.Count ?? 0})");
+        DService.Instance().Log.Information($"[ACR] uiSettings 消息已发送 + 已缓存 (qtVisible={currentSettings.QtVisible.Count} hkVisible={currentSettings.HkVisible.Count})");
 
         // 推送完整状态（qt + hotkey 数据）
         var hotkeyList = ACR.HotkeyHelper.GetAll();
@@ -472,22 +475,21 @@ public static class ACRLifecycle
         }
         // 增量合并：QT / HK — 只补新增，不覆盖用户已保存的值
         var needSave = false;
-
         // 从 UI 控件定义中提取 QT/HK 的 defaultVisible 和 defaultValue
         // 合并 QT 值和可见性（用注册时的 DefaultValue 和 defaultVisible）
         var qtAll = ACR.QTHelper.GetAll();
         foreach (var qt in qtAll)
         {
-            if (!loadedSettings.QtValues.ContainsKey(qt.Id))
+            if (!currentSettings.QtValues.ContainsKey(qt.Id))
             {
-                loadedSettings.QtValues[qt.Id] = qt.DefaultValue;
+                currentSettings.QtValues[qt.Id] = qt.DefaultValue;
                 needSave = true;
             }
-            if (!loadedSettings.QtVisible.ContainsKey(qt.Id))
+            if (!currentSettings.QtVisible.ContainsKey(qt.Id))
             {
                 // 从控件定义的 Meta 中读取 defaultVisible
                 var vis = GetControlDefaultVisible(qt.Id, controls);
-                loadedSettings.QtVisible[qt.Id] = vis;
+                currentSettings.QtVisible[qt.Id] = vis;
                 needSave = true;
             }
         }
@@ -497,34 +499,36 @@ public static class ACRLifecycle
         foreach (var hk in hkAll)
         {
             var hkId = "hk_" + hk.Label;
-            if (!loadedSettings.HkVisible.ContainsKey(hkId))
+            if (!currentSettings.HkVisible.ContainsKey(hkId))
             {
                 var vis = GetControlDefaultVisible(hkId, controls);
-                loadedSettings.HkVisible[hkId] = vis;
+                currentSettings.HkVisible[hkId] = vis;
                 needSave = true;
             }
-            if (!loadedSettings.HkBindings.ContainsKey(hkId))
+            if (!currentSettings.HkBindings.ContainsKey(hkId))
             {
-                loadedSettings.HkBindings[hkId] = hk.DefaultKey;
+                currentSettings.HkBindings[hkId] = hk.DefaultKey;
                 needSave = true;
             }
         }
 
         if (needSave)
         {
-            loadedSettings.Save();
-            DService.Instance().Log.Information($"[ACR] 新增项已合并保存 (qtValues={loadedSettings.QtValues.Count} hkVisible={loadedSettings.HkVisible.Count})");
+            currentSettings.Save();
+            DService.Instance().Log.Information($"[ACR] 新增项已合并保存 (qtValues={currentSettings.QtValues.Count} hkVisible={currentSettings.HkVisible.Count})");
         }
 
-        // 宿主订阅保存事件 —— 用户点击保存按钮时自动写回所有 settings
-        ACR.MainControlHelper.OnSave += HostSaveAllSettings;
-
-        IsLoadingRotation = false;
+            // 宿主订阅保存事件 —— 用户点击保存按钮时自动写回所有 settings
+            ACR.MainControlHelper.OnSave += HostSaveAllSettings;
+        }
+        finally
+        {
+            IsLoadingRotation = false;
+        }
     }
 
     private static void UnloadRotation()
     {
-        CurrentEntry?.OnExitRotation();
         if (Plugin.Instance != null)
             Plugin.Instance._uiManager?.RemoveCustomWindows();
         DService.Instance().Log.Information($"[ACR] UnloadRotation: {CurrentAcrName}");

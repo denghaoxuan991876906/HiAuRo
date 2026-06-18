@@ -14,7 +14,8 @@ public static class AuraHelper
         var list = bc.StatusList;
         for (int i = 0; i < list.Length; i++)
         {
-            if (list[i].StatusID == buffId) return true;
+            var status = list[i];
+            if (status != null && status.StatusID == buffId) return true;
         }
         return false;
     }
@@ -26,7 +27,9 @@ public static class AuraHelper
         var list = bc.StatusList;
         for (int i = 0; i < list.Length; i++)
         {
-            var sid = list[i].StatusID;
+            var status = list[i];
+            if (status == null) continue;
+            var sid = status.StatusID;
             for (int j = 0; j < buffIds.Length; j++)
             {
                 if (sid == buffIds[j]) return true;
@@ -43,6 +46,7 @@ public static class AuraHelper
         for (int i = 0; i < list.Length; i++)
         {
             var s = list[i];
+            if (s == null) continue;
             if (s.StatusID == buffId && (sourceId == 0xE0000000 || s.SourceID == sourceId))
                 return s.RemainingTime;
         }

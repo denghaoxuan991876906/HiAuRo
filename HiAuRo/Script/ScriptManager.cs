@@ -340,7 +340,7 @@ public static class ScriptManager
                 foreach (var type in record.Assembly.GetExportedTypes())
                 {
                     if (type.IsAbstract || type.IsInterface) continue;
-                    if (loaded.Contains(type.FullName)) continue;
+                    if (type.FullName is string fullName && loaded.Contains(fullName)) continue;
                     var attr = type.GetCustomAttribute<ScriptTypeAttribute>();
                     if (attr == null) continue;
                     if (attr.TerritoryIds?.Contains(territoryId) != true) continue;
@@ -884,16 +884,6 @@ using HiAuRo.FA.Shapes;
                 try { refs.Add(MetadataReference.CreateFromFile(path)); return; }
                 catch { }
             }
-        }
-
-        // Try CodeBase (for shadow-copied assemblies)
-        var codeBase = asm.GetName().CodeBase;
-        if (!string.IsNullOrEmpty(codeBase) && codeBase.StartsWith("file:///"))
-        {
-            var path = codeBase["file:///".Length..];
-            path = Uri.UnescapeDataString(path);
-            try { refs.Add(MetadataReference.CreateFromFile(path)); return; }
-            catch { }
         }
 
         // Fallback: scan modules
