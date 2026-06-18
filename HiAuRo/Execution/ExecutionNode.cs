@@ -84,22 +84,46 @@ public sealed class TreeParallel : TriggerCompositeNode
     /// <summary>竞赛模式：最先完成的胜出</summary>
     public bool AnyReturn { get; set; }
 
+    private static EvalContext CreateChildContext(EvalContext parent)
+    {
+        var child = new EvalContext
+        {
+            BattleTimeMs = parent.BattleTimeMs,
+            WaitCondFn = parent.WaitCondFn
+        };
+
+        foreach (var kv in parent.Variables)
+            child.Variables[kv.Key] = kv.Value;
+
+        return child;
+    }
+
     /// <summary>并行执行所有子节点</summary>
     protected override async Task<bool> OnExecute(EvalContext ctx)
     {
-        var tasks = Childs.Where(c => c.Enable).Select(c => c.Execute(ctx)).ToList();
-        Hi.Verbose($"[ExecNode] Parallel({Tag}) 启动 {tasks.Count} 子节点 [AnyReturn={AnyReturn}]");
-        if (tasks.Count == 0) return true;
         if (AnyReturn)
         {
+            var branches = Childs.Where(c => c.Enable)
+                .Select(c => (Node: c, Context: CreateChildContext(ctx)))
+                .ToList();
+            var tasks = branches.Select(b => b.Node.Execute(b.Context)).ToList();
+
+            Hi.Verbose($"[ExecNode] Parallel({Tag}) 启动 {tasks.Count} 子节点 [AnyReturn={AnyReturn}]");
+            if (tasks.Count == 0) return true;
+
             var winner = await Task.WhenAny(tasks);
+            foreach (var branch in branches)
+                branch.Context.IsDisposed = true;
             Hi.Verbose($"[ExecNode] Parallel({Tag}) 竞赛胜出");
+            return await winner;
         }
-        else
-        {
-            await Task.WhenAll(tasks);
-            Hi.Verbose($"[ExecNode] Parallel({Tag}) 全部完成");
-        }
+
+        var allTasks = Childs.Where(c => c.Enable).Select(c => c.Execute(ctx)).ToList();
+        Hi.Verbose($"[ExecNode] Parallel({Tag}) 启动 {allTasks.Count} 子节点 [AnyReturn={AnyReturn}]");
+        if (allTasks.Count == 0) return true;
+
+        await Task.WhenAll(allTasks);
+        Hi.Verbose($"[ExecNode] Parallel({Tag}) 全部完成");
         return true;
     }
 }
