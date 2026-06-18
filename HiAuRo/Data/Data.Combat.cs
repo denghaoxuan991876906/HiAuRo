@@ -24,9 +24,7 @@ public static partial class Data
         public static long LastAbilityUseTime { get; internal set; }
 
         /// <summary>能力技间隔是否已过 (用于 oGCD slot 构建判定)</summary>
-        public static bool AbilityIntervalElapsed =>
-            LastAbilityUseTime == 0
-            || Environment.TickCount64 - LastAbilityUseTime >= PluginConfig.Instance.AbilityIntervalMs;
+        public static bool AbilityIntervalElapsed => Runtime.AbilityThrottle.CanStartNow(Environment.TickCount64);
 
         public static bool IsLoggedIn => GameState.IsLoggedIn;
 

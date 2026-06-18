@@ -48,6 +48,7 @@ public sealed partial class AIRunner
                 Data.Combat.LastAbilityUseTime = 0;
                 Data.Combat.LastGCDCompleted = 0;
                 Data.Combat.MaxAbilityTimesInGcd = PluginConfig.Instance.MaxAbilityTimesInGcd;
+                AbilityThrottle.Reset();
                 EventHandler?.OnTerritoryChanged();
             }
             _lastTerritoryId = territoryId;
@@ -114,6 +115,7 @@ public sealed partial class AIRunner
         Data.Combat.LastAbilityUseTime = 0;
         Data.Combat.LastGCDCompleted = 0;
         Data.Combat.MaxAbilityTimesInGcd = PluginConfig.Instance.MaxAbilityTimesInGcd;
+        AbilityThrottle.Reset();
         EventHandler?.OnResetBattle();
         IntelligenceEngine.Instance.Reset();
         MovementExecutor.Instance.Reset();

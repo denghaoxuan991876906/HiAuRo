@@ -24,7 +24,14 @@ public sealed class SpellQueue
     public int QueueSize => _queue.Count;
 
     /// <summary>获取下一个待执行 Slot</summary>
-    public Slot? GetNext()
+    public Slot? PeekNext()
+    {
+        ExpireOld();
+        return _queue.Count > 0 ? _queue.Peek().Slot : null;
+    }
+
+    /// <summary>出队下一个待执行 Slot</summary>
+    public Slot? DequeueNext()
     {
         ExpireOld();
         return _queue.Count > 0 ? _queue.Dequeue().Slot : null;

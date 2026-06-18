@@ -129,6 +129,9 @@ public sealed class SlotExecutor
         }
         else
         {
+            if (!AbilityThrottle.CanStartNow(Environment.TickCount64))
+                return;
+
             if (bd.HighPrioritySlots_OffGCD.Count > 0)
             {
                 var slot = bd.HighPrioritySlots_OffGCD.Peek();
@@ -171,6 +174,15 @@ public sealed class SlotExecutor
         var slot = new Slot();
         resolver.Build(slot);
 
+        if (slot.Actions.Count > 0
+            && slot.Actions[0].Spell.IsAbility()
+            && !slot.AbilityThrottleReserved)
+        {
+            if (!AbilityThrottle.TryReserveNow(Environment.TickCount64))
+                return false;
+            slot.AbilityThrottleReserved = true;
+        }
+
         if (slot.Actions.Count > 0) return await RunSlot(bd, slot, false);
 
         if (slot.AppendedSequence != null)
@@ -190,6 +202,9 @@ public sealed class SlotExecutor
     {
         if (slot.breakTime == 0L)
             slot.breakTime = Environment.TickCount64 + slot.MaxDuration;
+
+        if (!TryReserveAbilityWindow(slot))
+            return false;
 
         _runner.Debug.SlotSource = slot.Source;
         _runner.Debug.InSeq = slot.InSequence;
@@ -292,6 +307,7 @@ public sealed class SlotExecutor
             {
                 bd.AbilityCount++;
                 Data.Combat.AbilityCountInGcd++;
+                AbilityThrottle.MarkSuccess(Environment.TickCount64);
             }
             else
             {
@@ -312,6 +328,20 @@ public sealed class SlotExecutor
     private static bool CanUseAction()
     {
         if (Data.Me.Object is { IsDead: true }) return false;
+        return true;
+    }
+
+    private static bool TryReserveAbilityWindow(Slot slot)
+    {
+        if (slot.Actions.Count == 0 || !slot.Actions[0].Spell.IsAbility())
+            return true;
+        if (slot.AbilityThrottleReserved)
+            return true;
+
+        if (!AbilityThrottle.TryReserveNow(Environment.TickCount64))
+            return false;
+
+        slot.AbilityThrottleReserved = true;
         return true;
     }
 }

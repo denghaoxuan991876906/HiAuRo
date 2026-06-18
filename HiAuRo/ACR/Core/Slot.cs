@@ -28,6 +28,9 @@ public sealed class Slot
     /// <summary>Slot 执行过程中的超时时间戳（由 executor 设置）</summary>
     internal long breakTime;
 
+    /// <summary>是否已占用本次能力技节流窗口</summary>
+    internal bool AbilityThrottleReserved { get; set; }
+
     /// <summary>Slot 快结束时追加的序列</summary>
     public ISlotSequence? AppendedSequence { get; private set; }
 

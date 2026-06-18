@@ -49,6 +49,13 @@ public sealed class PluginConfig : SettingsBase
     /// <summary>全局配置实例</summary>
     public static PluginConfig Instance { get; internal set; } = null!;
 
+    /// <summary>测试/非插件初始化场景下确保存在默认实例</summary>
+    internal static PluginConfig EnsureInstance()
+    {
+        Instance ??= new PluginConfig();
+        return Instance;
+    }
+
     /// <summary>配置版本</summary>
     public int Version { get; set; } = 1;
     /// <summary>是否启用 Debug 日志</summary>

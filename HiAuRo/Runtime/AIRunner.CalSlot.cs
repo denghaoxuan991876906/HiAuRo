@@ -68,15 +68,23 @@ public sealed partial class AIRunner
     {
         if (SpellQueue.HasPending())
         {
-            var sqSlot = SpellQueue.GetNext();
-            if (sqSlot != null)
+            var peekSlot = SpellQueue.PeekNext();
+            if (peekSlot != null)
             {
+                if (peekSlot.Actions.Count > 0
+                    && peekSlot.Actions[0].Spell.IsAbility()
+                    && !AbilityThrottle.CanStartNow(Environment.TickCount64))
+                    goto AfterSpellQueue;
+
+                var sqSlot = SpellQueue.DequeueNext();
+                if (sqSlot == null) goto AfterSpellQueue;
                 sqSlot.Source = "SpellQueue";
                 bd.SetCurrSlot(sqSlot);
                 if (await _slotExecutor.HandleSlot(bd)) { Debug.Phase = "SpellQueue"; return; }
             }
         }
 
+    AfterSpellQueue:
         if (_slotExecutor.CheckNextSlot(bd)) { Debug.Phase = "NextSlot"; return; }
 
         if (await _slotExecutor.HandleSlot(bd)) { Debug.Phase = "HandleSlot"; return; }

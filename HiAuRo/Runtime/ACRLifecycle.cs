@@ -280,6 +280,7 @@ public static class ACRLifecycle
         Data.Combat.LastAbilityUseTime = 0;
         Data.Combat.LastGCDCompleted = 0;
         Data.Combat.MaxAbilityTimesInGcd = PluginConfig.Instance.MaxAbilityTimesInGcd;
+        AbilityThrottle.Reset();
 
         CurrentJobId = _lastJob;
 
@@ -548,6 +549,7 @@ public static class ACRLifecycle
             _settingsProviders.Clear();
         }
         ACR.MainControlHelper.Reset();
+        AbilityThrottle.Reset();
     }
 
     private static DateTime _lastAutoSave = DateTime.MinValue;
