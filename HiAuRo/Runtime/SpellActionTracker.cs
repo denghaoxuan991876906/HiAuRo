@@ -1,4 +1,5 @@
 using HiAuRo.ACR;
+using System.Threading;
 
 namespace HiAuRo.Runtime;
 
@@ -14,7 +15,8 @@ public sealed class SpellActionTracker
 {
     public static SpellActionTracker Instance { get; } = new();
 
-    public uint PendingSpellId { get; private set; }
+    private uint _pendingSpellId;
+    public uint PendingSpellId => Volatile.Read(ref _pendingSpellId);
     private volatile bool _request;
     private volatile bool _effect;
     private volatile bool _cancelCast;
@@ -39,7 +41,8 @@ public sealed class SpellActionTracker
     public bool BeginTrack(Slot slot, Spell spell)
     {
         if (slot == _lastSlot) return false;
-        PendingSpellId = spell.Id;
+        _lastSlot = slot;
+        Volatile.Write(ref _pendingSpellId, spell.Id);
         _request = false;
         _effect = false;
         _cancelCast = false;
@@ -61,7 +64,8 @@ public sealed class SpellActionTracker
 
     public void Clear()
     {
-        PendingSpellId = 0;
+        Volatile.Write(ref _pendingSpellId, 0);
+        _lastSlot = null;
         _request = false;
         _effect = false;
         _cancelCast = false;
