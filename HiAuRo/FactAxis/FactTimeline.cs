@@ -386,15 +386,15 @@ public sealed class FactTimeline
         State.PhaseTime = phaseTime;
         State.TotalTime = fightNow;
 
-        // 就地更新 Variables（复用已有 Dictionary 容量）
-        State.Variables.Clear();
-        foreach (var kv in _variables)
-            State.Variables[kv.Key] = kv.Value;
-
         if (_waitingStartSync == null && _waitingEndSync == null && !_waitingSwitch)
         {
             AdvanceTimedEvents(fightNow);
         }
+
+        // 事件推进和动作执行后再刷新变量快照，避免变量状态滞后一帧
+        State.Variables.Clear();
+        foreach (var kv in _variables)
+            State.Variables[kv.Key] = kv.Value;
 
         // 就地更新 PendingEvents（复用已有 List 容量）
         State.PendingEvents.Clear();
@@ -435,6 +435,7 @@ public sealed class FactTimeline
         while (_eventIndex < _currentEvents.Count)
         {
             var ev = _currentEvents[_eventIndex];
+            if (ev.Time > fightNow) break;
 
             if (!ev.Reached && fightNow >= ev.Time)
             {
@@ -458,7 +459,6 @@ public sealed class FactTimeline
                         ev.ActualEnd = ev.ActualStart;
                 }
             }
-
             _eventIndex++;
         }
 
@@ -621,7 +621,7 @@ public sealed class FactTimeline
         while (_eventIndex < _currentEvents.Count)
         {
             var ev = _currentEvents[_eventIndex];
-            if (ev.Time > fightNow) break;
+            if (ev.Time >= fightNow) break;
             _eventIndex++;
         }
 
