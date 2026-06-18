@@ -20,7 +20,7 @@ public sealed class TriggerCond_连线 : ITriggerCond
         if (condParams is TetherRemoveParams)
             return false;
 
-        return BattleData.GetRecentTethers().Any(e => e.TetherId == TetherId);
+        return BattleEvents.GetRecentTethers().Any(e => e.TetherId == TetherId);
     }
 
     public void Draw(ACR.IUiBuilder builder)

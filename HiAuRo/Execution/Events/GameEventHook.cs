@@ -371,7 +371,7 @@ public sealed class GameEventHook
             case 35:
                 {
                     var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                    BattleData.OnTetherAdded(p2, entityId, p3, now);
+                    BattleEvents.OnTetherAdded(p2, entityId, p3, now);
                     Fire(new TetherCreateParams
                     {
                         TetherID = p2,
@@ -381,7 +381,7 @@ public sealed class GameEventHook
                     break;
                 }
             case 47:
-                BattleData.RemoveTethers(e => e.TetherId == p2 && e.SourceId == entityId);
+                BattleEvents.RemoveTethers(e => e.TetherId == p2 && e.SourceId == entityId);
                 Fire(new TetherRemoveParams
                 {
                     SourceID = entityId
@@ -442,7 +442,7 @@ public sealed class GameEventHook
         {
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var state = s1 | ((uint)s2 << 16);
-            BattleData.OnMapEffect((byte)index, new System.Numerics.Vector3(), now);
+            BattleEvents.OnMapEffect((byte)index, new System.Numerics.Vector3(), now);
             Fire(new OnMapEffectCreateEvent
             {
                 Pos = index,
@@ -772,7 +772,7 @@ public sealed class GameEventHook
                     var targetOid32 = (uint)(targetOid & 0xFFFFFFFF);
 
                     if (isSelf)
-                        BattleData.OnActionEffect(actionId, sourceId, targetOid32, nowMs);
+                        BattleEvents.OnActionEffect(actionId, sourceId, targetOid32, nowMs);
 
 
                     Fire(new ReceviceAbilityEffectCondParams
@@ -790,7 +790,7 @@ public sealed class GameEventHook
                     var animTargetId32 = (uint)(animTargetId & 0xFFFFFFFF);
 
                     if (isSelf)
-                        BattleData.OnActionEffect(actionId, sourceId, animTargetId32, nowMs);
+                        BattleEvents.OnActionEffect(actionId, sourceId, animTargetId32, nowMs);
 
 
                     {

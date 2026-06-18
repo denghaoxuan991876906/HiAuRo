@@ -7,8 +7,9 @@ public static partial class Data
     /// <summary>
     /// 战斗事件历史缓冲区 —— 为 TriggerCond 提供近期事件查询
     /// 通过 OmenTools GamePacketManager 订阅游戏事件包填充数据
+    /// 注意：此类名原为 BattleData，与 Runtime.BattleData（slot 中心状态）重名易混淆，故改名 BattleEvents
     /// </summary>
-    public static class BattleData
+    public static class BattleEvents
     {
         public record TetherEvent(uint TetherId, uint SourceId, uint TargetId, long TimestampMs);
         public record ActionEffectEvent(uint ActionId, uint CasterId, ulong TargetId, long TimestampMs);

@@ -18,7 +18,7 @@ public sealed class TriggerCond_地图特效 : ITriggerCond
 
         var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var cutoffMs = nowMs - 3000;
-        return BattleData.GetRecentMapEffects().Any(e =>
+        return BattleEvents.GetRecentMapEffects().Any(e =>
             e.TimestampMs >= cutoffMs && e.EffectId == EffectId);
     }
 

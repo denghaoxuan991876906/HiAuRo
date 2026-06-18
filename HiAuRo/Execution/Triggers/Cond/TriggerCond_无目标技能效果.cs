@@ -24,7 +24,7 @@ public sealed class TriggerCond_无目标技能效果 : ITriggerCond
         var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var cutoffMs = nowMs - (long)(CheckTimeSec * 1000);
 
-        return BattleData.GetRecentActionEffects().Any(e =>
+        return BattleEvents.GetRecentActionEffects().Any(e =>
             e.TimestampMs >= cutoffMs &&
             e.ActionId == ActionId);
     }

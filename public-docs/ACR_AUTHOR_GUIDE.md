@@ -484,13 +484,15 @@ Data.Combat.AbilityCountInGcd // 本 GCD 已用能力技数（只读）
 Data.Combat.MaxAbilityTimesInGcd // 本 GCD 允许的能力技上限（默认 2，可改）
 ```
 
-### 4.6 Data.BattleData — 战斗事件
+### 4.6 Data.BattleEvents — 战斗事件
 
 ```csharp
-Data.BattleData.RecentTethers          // 最近 30s 的连线事件
-Data.BattleData.RecentActionEffects    // 最近 30s 的技能效果事件
-Data.BattleData.RecentMapEffects       // 最近 30s 的地图效果事件
+Data.BattleEvents.GetRecentTethers()        // 最近 30s 的连线事件（List<TetherEvent>）
+Data.BattleEvents.GetRecentActionEffects()  // 最近 30s 的技能效果事件（List<ActionEffectEvent>）
+Data.BattleEvents.GetRecentMapEffects()     // 最近 30s 的地图效果事件（List<MapEffectEvent>）
 ```
+
+> 类名原为 `Data.BattleData`，因与 `Runtime.BattleData`（slot 中心状态）重名易混淆，故改名 `BattleEvents`。
 
 ### 4.7 Data.FactState — 事实轴状态
 
