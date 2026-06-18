@@ -474,22 +474,23 @@ public static class ACRLifecycle
         }
         // 增量合并：QT / HK — 只补新增，不覆盖用户已保存的值
         var needSave = false;
+        var currentSettings = loadedSettings;
 
         // 从 UI 控件定义中提取 QT/HK 的 defaultVisible 和 defaultValue
         // 合并 QT 值和可见性（用注册时的 DefaultValue 和 defaultVisible）
         var qtAll = ACR.QTHelper.GetAll();
         foreach (var qt in qtAll)
         {
-            if (!loadedSettings.QtValues.ContainsKey(qt.Id))
+            if (!currentSettings.QtValues.ContainsKey(qt.Id))
             {
-                loadedSettings.QtValues[qt.Id] = qt.DefaultValue;
+                currentSettings.QtValues[qt.Id] = qt.DefaultValue;
                 needSave = true;
             }
-            if (!loadedSettings.QtVisible.ContainsKey(qt.Id))
+            if (!currentSettings.QtVisible.ContainsKey(qt.Id))
             {
                 // 从控件定义的 Meta 中读取 defaultVisible
                 var vis = GetControlDefaultVisible(qt.Id, controls);
-                loadedSettings.QtVisible[qt.Id] = vis;
+                currentSettings.QtVisible[qt.Id] = vis;
                 needSave = true;
             }
         }
@@ -499,23 +500,23 @@ public static class ACRLifecycle
         foreach (var hk in hkAll)
         {
             var hkId = "hk_" + hk.Label;
-            if (!loadedSettings.HkVisible.ContainsKey(hkId))
+            if (!currentSettings.HkVisible.ContainsKey(hkId))
             {
                 var vis = GetControlDefaultVisible(hkId, controls);
-                loadedSettings.HkVisible[hkId] = vis;
+                currentSettings.HkVisible[hkId] = vis;
                 needSave = true;
             }
-            if (!loadedSettings.HkBindings.ContainsKey(hkId))
+            if (!currentSettings.HkBindings.ContainsKey(hkId))
             {
-                loadedSettings.HkBindings[hkId] = hk.DefaultKey;
+                currentSettings.HkBindings[hkId] = hk.DefaultKey;
                 needSave = true;
             }
         }
 
         if (needSave)
         {
-            loadedSettings.Save();
-            DService.Instance().Log.Information($"[ACR] 新增项已合并保存 (qtValues={loadedSettings.QtValues.Count} hkVisible={loadedSettings.HkVisible.Count})");
+            currentSettings.Save();
+            DService.Instance().Log.Information($"[ACR] 新增项已合并保存 (qtValues={currentSettings.QtValues.Count} hkVisible={currentSettings.HkVisible.Count})");
         }
 
             // 宿主订阅保存事件 —— 用户点击保存按钮时自动写回所有 settings

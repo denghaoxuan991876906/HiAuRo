@@ -510,8 +510,6 @@ public static class ComponentLibrary
     // 卡片 — 自适应高度，标题与卡片体一体化
     // ═══════════════════════════════════════════════════
 
-    private static int _cardCounter;
-
     /// <summary>
     /// 自适应高度卡片 — 标题栏与卡片体共享同一圆角矩形容器，高度跟随内容。<br/>
     /// 用 BeginGroup/EndGroup 测量内容实际尺寸，draw channel 分层让 header 背景在文字下层渲染，

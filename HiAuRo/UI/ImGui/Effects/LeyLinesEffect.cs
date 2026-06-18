@@ -160,10 +160,16 @@ public sealed class LeyLinesEffect
 
         foreach (var (a, b, col, thickness) in data.Lines)
             dl.AddLine(a, b, col, thickness);
-        foreach (var (center, radius, col) in data.Dots)
-            dl.AddCircleFilled(center, radius, col);
-        foreach (var (a, b, col, thickness) in data.ScanLines)
-            dl.AddLine(a, b, col, thickness);
+        if (data.Dots != null)
+        {
+            foreach (var (center, radius, col) in data.Dots)
+                dl.AddCircleFilled(center, radius, col);
+        }
+        if (data.ScanLines != null)
+        {
+            foreach (var (a, b, col, thickness) in data.ScanLines)
+                dl.AddLine(a, b, col, thickness);
+        }
 
         dl.PopClipRect();
     }
