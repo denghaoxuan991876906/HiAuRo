@@ -271,7 +271,9 @@ public static class ACRLifecycle
     private static void LoadRotation(IRotationEntry entry, string settingFolder)
     {
         IsLoadingRotation = true;
-        UnloadRotation();
+        try
+        {
+            UnloadRotation();
 
         // 切换 ACR 时重置 GCD 能力技计数和上限
         Data.Combat.AbilityCountInGcd = 0;
@@ -516,15 +518,17 @@ public static class ACRLifecycle
             DService.Instance().Log.Information($"[ACR] 新增项已合并保存 (qtValues={loadedSettings.QtValues.Count} hkVisible={loadedSettings.HkVisible.Count})");
         }
 
-        // 宿主订阅保存事件 —— 用户点击保存按钮时自动写回所有 settings
-        ACR.MainControlHelper.OnSave += HostSaveAllSettings;
-
-        IsLoadingRotation = false;
+            // 宿主订阅保存事件 —— 用户点击保存按钮时自动写回所有 settings
+            ACR.MainControlHelper.OnSave += HostSaveAllSettings;
+        }
+        finally
+        {
+            IsLoadingRotation = false;
+        }
     }
 
     private static void UnloadRotation()
     {
-        CurrentEntry?.OnExitRotation();
         if (Plugin.Instance != null)
             Plugin.Instance._uiManager?.RemoveCustomWindows();
         DService.Instance().Log.Information($"[ACR] UnloadRotation: {CurrentAcrName}");
