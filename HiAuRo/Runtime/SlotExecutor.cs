@@ -328,6 +328,7 @@ public sealed class SlotExecutor
     private static bool CanUseAction()
     {
         if (Data.Me.Object is { IsDead: true }) return false;
+        if (MainControlHelper.IsPaused) return false;
         return true;
     }
 

@@ -24,6 +24,12 @@ public static class MainControlHelper
         IsPaused = !IsPaused;
     }
 
+    /// <summary>暂停 ACR 动作输出。</summary>
+    public static void Pause()
+    {
+        IsPaused = true;
+    }
+
     /// <summary>取消暂停</summary>
     public static void Unpause()
     {

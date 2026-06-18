@@ -82,6 +82,7 @@ public partial class Plugin : IDalamudPlugin
             ScriptManager.SetHostDllPath(_pluginInterface.AssemblyLocation.Directory?.FullName ?? "");
             ScriptEngine.Instance.Init();
             EncounterRecorder.Instance.Init();
+            CombatRecorder.Instance.Init();
             ExecutionAxis.Instance.Init();
 
             // 注册 MovementDemand IPC（接收外部分发插件的推送）
@@ -249,6 +250,7 @@ public partial class Plugin : IDalamudPlugin
         CombatContext.Reset();
         ExecutionAxis.Instance.Shutdown();
         AssistAxis.Instance.Shutdown();
+        CombatRecorder.Instance.Shutdown();
         EncounterRecorder.Instance.Shutdown();
         ScriptEngine.Instance.Shutdown();
         ScriptManager.Shutdown();

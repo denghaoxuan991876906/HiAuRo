@@ -184,6 +184,33 @@ public sealed class PluginConfig : SettingsBase
     /// <summary>启用副本录制</summary>
     public bool RecordingEnabled { get; set; } = true;
 
+    /// <summary>启用战斗操作录制器（事件采样型）。</summary>
+    public bool CombatRecorderEnabled { get; set; }
+
+    /// <summary>Combat Recorder 仅在战斗中写事件。</summary>
+    public bool CombatRecorderOnlyInCombat { get; set; } = true;
+
+    /// <summary>Combat Recorder 仅记录当前加载 ACR 对应职业。</summary>
+    public bool CombatRecorderOnlyCurrentJob { get; set; } = true;
+
+    /// <summary>Combat Recorder 每次技能事件额外写上一帧快照。</summary>
+    public bool CombatRecorderIncludePreviousFrame { get; set; }
+
+    /// <summary>Combat Recorder 是否记录自身/目标 Buff 明细。</summary>
+    public bool CombatRecorderIncludeBuffDetails { get; set; } = true;
+
+    /// <summary>Combat Recorder 是否记录当前 resolver Check 结果。</summary>
+    public bool CombatRecorderIncludeResolverResults { get; set; }
+
+    /// <summary>Combat Recorder source 字段由用户显式指定。</summary>
+    public Recording.CombatRecorderSourceMode CombatRecorderSourceMode { get; set; } = Recording.CombatRecorderSourceMode.Acr;
+
+    /// <summary>Combat Recorder 最近帧缓存轮询间隔。</summary>
+    public int CombatRecorderSampleIntervalMs { get; set; } = 40;
+
+    /// <summary>清理多少天以前的 Combat Recorder jsonl 日志。</summary>
+    public int CombatRecorderKeepDays { get; set; } = 14;
+
     // ── 身位指示器 ──
 
     /// <summary>启用身位指示器 VFX</summary>

@@ -41,6 +41,7 @@ public sealed class MainWindow : Window
             new AcrListTabPage(_config, _saveConfig),
             new AcrDebugTabPage(),
             new TimelineTabPage(_config, _saveConfig),
+            new CombatRecorderTabPage(_config, _saveConfig),
             new VfxTabPage(),
         ];
     }

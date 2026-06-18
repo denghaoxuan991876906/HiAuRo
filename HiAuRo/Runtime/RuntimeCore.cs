@@ -63,6 +63,7 @@ public static class RuntimeCore
             HiAuRo.Data.Party.Refresh();
             ScriptManager.Update();
             CombatContext.Check();
+            Recording.CombatRecorder.Instance.UpdateFrameCache();
         }
 
         if (!IsRunning) return;

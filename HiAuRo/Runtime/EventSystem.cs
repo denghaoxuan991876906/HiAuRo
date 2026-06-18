@@ -13,6 +13,7 @@ public static class EventSystem
 {
     private static readonly object _lock = new();
     private static readonly List<Action<uint, ulong>> _onActionUsedHandlers = [];
+    private static readonly List<Action<UseActionEvent>> _onUseActionHandlers = [];
     private static readonly List<Action<uint>> _onActionCompletedHandlers = [];
     private static readonly List<Action<IGameObject?>> _onTargetChangedHandlers = [];
 
@@ -24,6 +25,15 @@ public static class EventSystem
 
     /// <summary>上一次成功执行的技能 ID（连击系统用）</summary>
     public static uint LastComboSpellId { get; private set; }
+
+    /// <summary>UseActionManager.PostUseAction 的原始返回信息。</summary>
+    public readonly record struct UseActionEvent(
+        bool Result,
+        ActionType ActionType,
+        uint ActionId,
+        ulong TargetId,
+        ActionManager.UseActionMode QueueState,
+        uint ComboRouteId);
 
     /// <summary>去重：自记录 ID 集合，防止 OnPostUseAction 同 ID 二次覆盖</summary>
     private static readonly HashSet<uint> _selfRecordedIds = [];
@@ -62,6 +72,7 @@ public static class EventSystem
         UseActionManager.Instance().Unreg(OnPostUseAction);
 
         _onActionUsedHandlers.Clear();
+        _onUseActionHandlers.Clear();
         _onActionCompletedHandlers.Clear();
         _onTargetChangedHandlers.Clear();
 
@@ -91,6 +102,14 @@ public static class EventSystem
     /// <summary>注销技能使用回调</summary>
     public static void UnregisterOnActionUsed(Action<uint, ulong> handler)
     { lock (_lock) _onActionUsedHandlers.Remove(handler); }
+
+    /// <summary>注册底层 UseAction 返回回调（包含 result/queueState）。</summary>
+    public static void RegisterOnUseAction(Action<UseActionEvent> handler)
+    { lock (_lock) _onUseActionHandlers.Add(handler); }
+
+    /// <summary>注销底层 UseAction 返回回调。</summary>
+    public static void UnregisterOnUseAction(Action<UseActionEvent> handler)
+    { lock (_lock) _onUseActionHandlers.Remove(handler); }
 
     /// <summary>注册技能完成回调</summary>
     public static void RegisterOnActionCompleted(Action<uint> handler)
@@ -161,11 +180,23 @@ public static class EventSystem
         }
 
         Action<uint, ulong>[] usedSnapshot;
-        lock (_lock) { usedSnapshot = _onActionUsedHandlers.ToArray(); }
+        Action<UseActionEvent>[] useActionSnapshot;
+        lock (_lock)
+        {
+            usedSnapshot = _onActionUsedHandlers.ToArray();
+            useActionSnapshot = _onUseActionHandlers.ToArray();
+        }
         foreach (var handler in usedSnapshot)
         {
             try { handler(actionId, targetId); }
             catch (Exception ex) { DService.Instance().Log.Error($"[EventSystem] OnActionUsed handler 异常: {ex}"); }
+        }
+
+        var ev = new UseActionEvent(result, actionType, actionId, targetId, queueState, comboRouteId);
+        foreach (var handler in useActionSnapshot)
+        {
+            try { handler(ev); }
+            catch (Exception ex) { DService.Instance().Log.Error($"[EventSystem] OnUseAction handler 异常: {ex}"); }
         }
     }
 
