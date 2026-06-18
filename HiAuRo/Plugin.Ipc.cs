@@ -9,7 +9,7 @@ namespace HiAuRo;
 public partial class Plugin
 {
     /// <summary>安全地 fire-and-forget 一个异步操作，异常时记录日志</summary>
-    private static void SafeFire( Task task, string label = "")
+    internal static void SafeFire(Task task, string label = "")
     {
         _ = task.ContinueWith(t =>
         {

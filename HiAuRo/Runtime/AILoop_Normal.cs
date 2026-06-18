@@ -35,19 +35,7 @@ public sealed class AILoop_Normal : IAILoop
             Clear(runner);
         }
 
-        UpdateAsync(runner);
-    }
-
-    private async void UpdateAsync(AIRunner runner)
-    {
-        try
-        {
-            await runner.CalSlotAsync();
-        }
-        catch (Exception ex)
-        {
-            DService.Instance().Log.Error($"[AILoop] {ex}");
-        }
+        Plugin.SafeFire(runner.CalSlotAsync(), "AILoop");
     }
 
     public void Clear(AIRunner runner)

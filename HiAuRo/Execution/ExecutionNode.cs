@@ -84,27 +84,13 @@ public sealed class TreeParallel : TriggerCompositeNode
     /// <summary>竞赛模式：最先完成的胜出</summary>
     public bool AnyReturn { get; set; }
 
-    private static EvalContext CreateChildContext(EvalContext parent)
-    {
-        var child = new EvalContext
-        {
-            BattleTimeMs = parent.BattleTimeMs,
-            WaitCondFn = parent.WaitCondFn
-        };
-
-        foreach (var kv in parent.Variables)
-            child.Variables[kv.Key] = kv.Value;
-
-        return child;
-    }
-
     /// <summary>并行执行所有子节点</summary>
     protected override async Task<bool> OnExecute(EvalContext ctx)
     {
         if (AnyReturn)
         {
             var branches = Childs.Where(c => c.Enable)
-                .Select(c => (Node: c, Context: CreateChildContext(ctx)))
+                .Select(c => (Node: c, Context: ctx.CreateChild()))
                 .ToList();
             var tasks = branches.Select(b => b.Node.Execute(b.Context)).ToList();
 
@@ -402,6 +388,20 @@ public sealed class EvalContext
 
     /// <summary>所属轴的 WaitCond 委托（由轴 Start 时注入；节点据此路由到正确的轴，避免跨轴串扰）</summary>
     public Func<TriggerLeafNode, Task<bool>>? WaitCondFn { get; set; }
+
+    public EvalContext CreateChild()
+    {
+        var child = new EvalContext
+        {
+            BattleTimeMs = BattleTimeMs,
+            WaitCondFn = WaitCondFn
+        };
+
+        foreach (var kv in Variables)
+            child.Variables[kv.Key] = kv.Value;
+
+        return child;
+    }
 
     /// <summary>获取变量值</summary>
     public int GetVariable(string name) =>
