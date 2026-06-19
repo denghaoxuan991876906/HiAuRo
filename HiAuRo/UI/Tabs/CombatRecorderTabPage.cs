@@ -87,6 +87,10 @@ public sealed class CombatRecorderTabPage : TabPageBase
                 rec.OpenLogDirectory();
 
             ImGui.SameLine();
+            if (CL.PrimaryButton("打开日志阅读器", new Vector2(120, 0)))
+                MainWindow.OpenEditor(CombatRecorderViewerPageConfig.FileName);
+
+            ImGui.SameLine();
             if (CL.DangerButton("清理旧日志", new Vector2(120, 0)))
             {
                 var deleted = rec.ClearOldLogs(_config.CombatRecorderKeepDays);

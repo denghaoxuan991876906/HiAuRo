@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Combat Recorder Viewer</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="puppertino/buttons.css">
+<link rel="stylesheet" href="puppertino/forms.css">
+<link rel="stylesheet" href="combat-recorder.css">
+</head>
+<body>
+<div id="app">
+  <header class="toolbar">
+    <div class="toolbar-left">
+      <button class="p-btn p-prim-col" id="btnChoose">选择 jsonl</button>
+      <button class="p-btn" id="btnReload" disabled>重新加载</button>
+      <div class="file-pill" id="fileName">未选择文件</div>
+    </div>
+    <div class="toolbar-right">
+      <select id="filterType" class="filter-select">
+        <option value="all">全部事件</option>
+        <option value="GcdReadyAndAction">GCD</option>
+        <option value="AbilityEffect">能力技</option>
+      </select>
+      <input type="text" id="searchInput" class="filter-input" placeholder="技能名 / ActionId">
+      <label class="toggle">
+        <input type="checkbox" id="changedOnly">
+        <span>只看有变化项</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="showRawJson">
+        <span>显示原始 JSON</span>
+      </label>
+    </div>
+  </header>
+
+  <section class="summary-bar">
+    <div class="summary-item"><span class="summary-label">事件组</span><span id="statGroups">0</span></div>
+    <div class="summary-item"><span class="summary-label">GCD</span><span id="statGcd">0</span></div>
+    <div class="summary-item"><span class="summary-label">能力技</span><span id="statAbility">0</span></div>
+    <div class="summary-item"><span class="summary-label">警告</span><span id="statWarnings">0</span></div>
+  </section>
+
+  <main class="layout">
+    <aside class="timeline-panel">
+      <div class="panel-header">
+        <div class="panel-title">事件时间线</div>
+        <div class="panel-subtitle" id="timelineSubtitle">等待加载文件</div>
+      </div>
+      <div class="timeline-list" id="timelineList">
+        <div class="empty-state">
+          <div class="empty-title">选择一份 Combat Recorder 日志</div>
+          <div class="empty-copy">页面会按 eventGroupId 聚合，并展示每次技能的 prev/current 差异。</div>
+        </div>
+      </div>
+    </aside>
+
+    <section class="details-panel" id="detailsPanel">
+      <div class="panel-header">
+        <div class="panel-title">事件详情</div>
+        <div class="panel-subtitle" id="detailsSubtitle">未选择事件组</div>
+      </div>
+      <div class="details-scroll" id="detailsContent">
+        <div class="empty-state">
+          <div class="empty-title">从左侧选择一个事件组</div>
+          <div class="empty-copy">右侧会优先显示关键差异，再提供原始 JSON 兜底。</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" id="footerText">Combat Recorder Viewer</footer>
+</div>
+
+<input type="file" id="fileInput" accept=".jsonl,.txt" hidden>
+<script src="combat-recorder.js"></script>
+</body>
+</html>

@@ -4,3 +4,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("MainWindowNavigationTests")]
 [assembly: InternalsVisibleTo("CombatRecorderTests")]
 [assembly: InternalsVisibleTo("EventSystemTests")]
+[assembly: InternalsVisibleTo("CombatRecorderViewerTests")]
