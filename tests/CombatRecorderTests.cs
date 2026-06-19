@@ -10,8 +10,8 @@ Test_EventWriter_上一帧模式最多写两条并共享事件组();
 Test_EventWriter_上一帧模式不污染缓存对象();
 Test_EventFilter_GCD只记录刷新GCD时机();
 Test_EventFilter_能力技只记录成功效果时机();
-Test_GcdStartDetection_错过边沿时仍能识别新GCD();
-Test_GcdDedup_手动连点同一gcd只应记录一次();
+Test_CastedGcdStart_新读条应只记录一次();
+Test_GcdEffectDedup_已记录读条起手后应忽略同action效果();
 Console.WriteLine("=== 全部通过 ===");
 
 void Test_RingBuffer_只保留最近帧并能取上一帧()
@@ -89,8 +89,8 @@ void Test_EventWriter_上一帧模式不污染缓存对象()
 
 void Test_EventFilter_GCD只记录刷新GCD时机()
 {
-    if (!CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.UseActionSuccess, isAbilityAction: false, gcdJustActivated: false))
-        throw new Exception("GCD 应允许在底层 UseAction 成功时直接记录");
+    if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.UseActionSuccess, isAbilityAction: false, gcdJustActivated: false))
+        throw new Exception("GCD 不应在 UseActionSuccess 直接记录");
 
     if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.ActionEffect, isAbilityAction: false, gcdJustActivated: false))
         throw new Exception("GCD 不应在 ActionEffect 时重复记录");
@@ -117,62 +117,43 @@ void Test_EventFilter_能力技只记录成功效果时机()
         throw new Exception("ActionRejected 不应进入技能采样日志");
 }
 
-void Test_GcdStartDetection_错过边沿时仍能识别新GCD()
+void Test_CastedGcdStart_新读条应只记录一次()
 {
-    if (!CombatRecorder.ShouldCaptureGcdStartForTests(
-            previousGcdActive: true,
-            currentGcdActive: true,
-            previousGcdCooldownMs: 0,
-            currentGcdCooldownMs: 2457,
-            currentGcdDurationMs: 2457))
+    if (!CombatRecorder.ShouldCaptureCastedGcdStartForTests(
+            previousCastActionId: 0,
+            currentCastActionId: 152,
+            isAbilityAction: false))
     {
-        throw new Exception("即使错过 inactive -> active 边沿，只要 GCD 从 0 跳到完整新周期，也应识别为新 GCD");
+        throw new Exception("新的 GCD 读条开始时应记录");
     }
 
-    if (CombatRecorder.ShouldCaptureGcdStartForTests(
-            previousGcdActive: true,
-            currentGcdActive: true,
-            previousGcdCooldownMs: 1200,
-            currentGcdCooldownMs: 900,
-            currentGcdDurationMs: 2457))
+    if (CombatRecorder.ShouldCaptureCastedGcdStartForTests(
+            previousCastActionId: 152,
+            currentCastActionId: 152,
+            isAbilityAction: false))
     {
-        throw new Exception("普通 GCD 倒计时推进不应被误判为新 GCD");
+        throw new Exception("同一条读条不应重复记录");
     }
 }
 
-void Test_GcdDedup_手动连点同一gcd只应记录一次()
+void Test_GcdEffectDedup_已记录读条起手后应忽略同action效果()
 {
-    if (!CombatRecorder.ShouldCaptureManualGcdUseForTests(
+    if (CombatRecorder.ShouldCaptureGcdEffectForTests(
             actionId: 152,
-            lastRecordedActionId: 0,
-            lastRecordedAtTicks: 0,
-            nowTicks: 1000,
-            gcdCooldownMs: 2457,
-            gcdDurationMs: 2457))
+            pendingCastGcdActionId: 152,
+            pendingCastRecordedAtTicks: 1000,
+            nowTicks: 2000))
     {
-        throw new Exception("首次手动 GCD 成功应记录");
+        throw new Exception("同一发已在读条开始记录过的 GCD，不应在 ActionEffect 再记一次");
     }
 
-    if (CombatRecorder.ShouldCaptureManualGcdUseForTests(
-            actionId: 152,
-            lastRecordedActionId: 152,
-            lastRecordedAtTicks: 1000,
-            nowTicks: 1100,
-            gcdCooldownMs: 2400,
-            gcdDurationMs: 2457))
-    {
-        throw new Exception("同一 GCD 窗口内手动连点不应重复记录");
-    }
-
-    if (!CombatRecorder.ShouldCaptureManualGcdUseForTests(
+    if (!CombatRecorder.ShouldCaptureGcdEffectForTests(
             actionId: 3577,
-            lastRecordedActionId: 152,
-            lastRecordedAtTicks: 1000,
-            nowTicks: 4000,
-            gcdCooldownMs: 2457,
-            gcdDurationMs: 2457))
+            pendingCastGcdActionId: 152,
+            pendingCastRecordedAtTicks: 1000,
+            nowTicks: 2000))
     {
-        throw new Exception("新的 GCD 窗口应允许记录新的技能");
+        throw new Exception("未在读条开始记录过的 instant GCD，应在 ActionEffect 记录");
     }
 }
 
