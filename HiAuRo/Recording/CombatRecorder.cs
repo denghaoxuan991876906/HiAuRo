@@ -474,6 +474,7 @@ public sealed class CombatRecorder
     {
         return eventType switch
         {
+            CombatRecorderEventType.UseActionSuccess => !isAbilityAction,
             CombatRecorderEventType.AbilityEffect => isAbilityAction,
             CombatRecorderEventType.GcdReadyAndAction => !isAbilityAction && gcdJustActivated,
             _ => false

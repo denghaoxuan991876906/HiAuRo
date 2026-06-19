@@ -88,8 +88,8 @@ void Test_EventWriter_上一帧模式不污染缓存对象()
 
 void Test_EventFilter_GCD只记录刷新GCD时机()
 {
-    if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.UseActionSuccess, isAbilityAction: false, gcdJustActivated: false))
-        throw new Exception("GCD 不应在按下技能时的 UseActionSuccess 直接记录");
+    if (!CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.UseActionSuccess, isAbilityAction: false, gcdJustActivated: false))
+        throw new Exception("GCD 应允许在底层 UseAction 成功时直接记录");
 
     if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.ActionEffect, isAbilityAction: false, gcdJustActivated: false))
         throw new Exception("GCD 不应在 ActionEffect 时重复记录");
@@ -138,6 +138,7 @@ void Test_GcdStartDetection_错过边沿时仍能识别新GCD()
         throw new Exception("普通 GCD 倒计时推进不应被误判为新 GCD");
     }
 }
+
 
 static CombatFrameSnapshot MakeSnapshot(long sampleIndex, string role)
 {
