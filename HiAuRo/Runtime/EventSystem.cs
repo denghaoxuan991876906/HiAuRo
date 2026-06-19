@@ -17,7 +17,7 @@ public static class EventSystem
     private static readonly List<Action<uint>> _onActionCompletedHandlers = [];
     private static readonly List<Action<IGameObject?>> _onTargetChangedHandlers = [];
 
-    private static IGameObject? _lastTarget;
+    private static nint _lastTargetAddress;
     private static bool _initialized;
 
     /// <summary>最近一次成功执行的技能 ID（供触发条件使用）</summary>
@@ -75,6 +75,7 @@ public static class EventSystem
         _onUseActionHandlers.Clear();
         _onActionCompletedHandlers.Clear();
         _onTargetChangedHandlers.Clear();
+        _lastTargetAddress = nint.Zero;
 
         _initialized = false;
     }
@@ -82,10 +83,11 @@ public static class EventSystem
     /// <summary>检查目标变更</summary>
     public static void CheckTargetChanged()
     {
-        var currentTarget = TargetManager.Target;
-        if (_lastTarget?.EntityID != currentTarget?.EntityID)
+        var currentTargetAddress = ReadCurrentTargetAddress();
+        if (ShouldPublishTargetChanged(_lastTargetAddress, currentTargetAddress))
         {
-            _lastTarget = currentTarget;
+            _lastTargetAddress = currentTargetAddress;
+            var currentTarget = DService.Instance().ObjectTable.CreateObjectReference(currentTargetAddress);
             Action<IGameObject?>[] snapshot;
             lock (_lock) { snapshot = _onTargetChangedHandlers.ToArray(); }
             foreach (var handler in snapshot)
@@ -201,4 +203,13 @@ public static class EventSystem
     }
 
     #endregion
+
+    internal static bool ShouldPublishTargetChangedForTests(nint previousTargetAddress, nint currentTargetAddress)
+        => ShouldPublishTargetChanged(previousTargetAddress, currentTargetAddress);
+
+    private static bool ShouldPublishTargetChanged(nint previousTargetAddress, nint currentTargetAddress)
+        => previousTargetAddress != currentTargetAddress;
+
+    private static unsafe nint ReadCurrentTargetAddress()
+        => (nint)TargetManager.ToStruct()->GetHardTarget();
 }
