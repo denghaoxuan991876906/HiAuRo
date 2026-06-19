@@ -87,7 +87,7 @@ internal static class CombatRecorderViewerLogic
         if ((prev?.Mp ?? 0) != (current?.Mp ?? 0))
             parts.Add($"MP {FormatNumber(prev?.Mp)} -> {FormatNumber(current?.Mp)}");
 
-        foreach (var key in new[] { "astralFireStacks", "umbralIceStacks", "umbralHearts", "astralSoulStacks", "polyglotStacks", "isParadoxActive" })
+        foreach (var key in UniqueKeys(prev?.JobGauge, current?.JobGauge))
         {
             var before = FormatValue(prev?.JobGauge.GetValueOrDefault(key));
             var after = FormatValue(current?.JobGauge.GetValueOrDefault(key));

@@ -22,6 +22,12 @@ public sealed class CombatRecorderTabPage : TabPageBase
     public override void DrawContent()
     {
         ImGui.Spacing();
+        var currentJob = HiAuRo.Data.Me.ClassJob;
+        if (!_config.CombatRecorderTrackedSkillsByJob.TryGetValue(currentJob, out var trackedSkillsForJob))
+        {
+            trackedSkillsForJob = [];
+            _config.CombatRecorderTrackedSkillsByJob[currentJob] = trackedSkillsForJob;
+        }
 
         CL.Card("Combat Recorder", () =>
         {
@@ -79,17 +85,17 @@ public sealed class CombatRecorderTabPage : TabPageBase
 
             ImGui.Spacing();
             ComponentLibrary.SectionHeader("自定义技能");
-            ImGui.TextColored(Theme.Colors.TextSecondary, "录制时会额外写入这些技能的技能ID、技能名、剩余CD、当前层数与最大层数。");
+            ImGui.TextColored(Theme.Colors.TextSecondary, $"当前职业 {currentJob} 的技能会额外写入技能ID、技能名、剩余CD、当前层数与最大层数。");
 
             CL.InputText("combat_rec_tracked_skill_input", "技能ID", ref _trackedSkillInput, 16, 120f);
             ImGui.SameLine();
-            if (CL.PrimaryButton("添加技能", new Vector2(90, 0)) && TryAddTrackedSkill(_trackedSkillInput))
+            if (CL.PrimaryButton("添加技能", new Vector2(90, 0)) && TryAddTrackedSkill(_trackedSkillInput, currentJob))
             {
                 _trackedSkillInput = "";
                 _saveConfig();
             }
 
-            if (_config.CombatRecorderTrackedSkills.Count == 0)
+            if (trackedSkillsForJob.Count == 0)
             {
                 ImGui.TextDisabled("暂无自定义技能");
             }
@@ -101,22 +107,22 @@ public sealed class CombatRecorderTabPage : TabPageBase
                 ImGui.TableSetupColumn("操作", ImGuiTableColumnFlags.WidthFixed, 70f);
                 ImGui.TableHeadersRow();
 
-                for (var i = 0; i < _config.CombatRecorderTrackedSkills.Count; i++)
+                for (var i = 0; i < trackedSkillsForJob.Count; i++)
                 {
-                    var item = _config.CombatRecorderTrackedSkills[i];
-                    var actionName = item.ActionId == 0 ? "-" : OmenTools.Interop.Game.Lumina.LuminaWrapper.GetActionName(item.ActionId);
-                    var cooldown = HiAuRo.ACR.SpellHelper.GetCooldownRemaining(item.ActionId);
-                    var charges = HiAuRo.ACR.SpellHelper.GetCharges(item.ActionId);
-                    var maxCharges = HiAuRo.ACR.SpellHelper.GetMaxCharges(item.ActionId);
+                    var actionId = trackedSkillsForJob[i];
+                    var actionName = actionId == 0 ? "-" : OmenTools.Interop.Game.Lumina.LuminaWrapper.GetActionName(actionId);
+                    var cooldown = HiAuRo.ACR.SpellHelper.GetCooldownRemaining(actionId);
+                    var charges = HiAuRo.ACR.SpellHelper.GetCharges(actionId);
+                    var maxCharges = HiAuRo.ACR.SpellHelper.GetMaxCharges(actionId);
 
                     ImGui.TableNextRow();
-                    ImGui.TableNextColumn(); ImGui.Text(item.ActionId.ToString());
+                    ImGui.TableNextColumn(); ImGui.Text(actionId.ToString());
                     ImGui.TableNextColumn(); ImGui.Text(string.IsNullOrWhiteSpace(actionName) ? "-" : actionName);
                     ImGui.TableNextColumn(); ImGui.Text($"CD {cooldown:F0}ms | 层数 {charges}/{maxCharges}");
                     ImGui.TableNextColumn();
                     if (CL.DangerButton($"删除##combat_rec_tracked_skill_{i}", new Vector2(56, 0)))
                     {
-                        _config.CombatRecorderTrackedSkills.RemoveAt(i);
+                        trackedSkillsForJob.RemoveAt(i);
                         _saveConfig();
                         break;
                     }
@@ -130,6 +136,7 @@ public sealed class CombatRecorderTabPage : TabPageBase
             ImGui.TextColored(Theme.Colors.TextSecondary, $"状态: {(rec.IsRecording ? "录制中" : "待机")}");
             ImGui.TextColored(Theme.Colors.TextTertiary, $"Session: {(string.IsNullOrEmpty(rec.SessionId) ? "-" : rec.SessionId)}");
             ImGui.TextColored(Theme.Colors.TextTertiary, $"文件: {(string.IsNullOrEmpty(rec.CurrentLogPath) ? "-" : rec.CurrentLogPath)}");
+            ImGui.TextColored(Theme.Colors.TextTertiary, $"目录: {rec.LogRoot}");
 
             ImGui.Spacing();
             if (CL.DefaultButton("打开日志目录", new Vector2(120, 0)))
@@ -155,18 +162,21 @@ public sealed class CombatRecorderTabPage : TabPageBase
         });
     }
 
-    private bool TryAddTrackedSkill(string rawInput)
+    private bool TryAddTrackedSkill(string rawInput, uint currentJob)
     {
         if (!uint.TryParse(rawInput.Trim(), out var actionId) || actionId == 0)
             return false;
 
-        if (_config.CombatRecorderTrackedSkills.Any(x => x.ActionId == actionId))
+        if (!_config.CombatRecorderTrackedSkillsByJob.TryGetValue(currentJob, out var trackedSkills))
+        {
+            trackedSkills = [];
+            _config.CombatRecorderTrackedSkillsByJob[currentJob] = trackedSkills;
+        }
+
+        if (trackedSkills.Any(x => x == actionId))
             return false;
 
-        _config.CombatRecorderTrackedSkills.Add(new CombatRecorderTrackedSkillConfig
-        {
-            ActionId = actionId
-        });
+        trackedSkills.Add(actionId);
         return true;
     }
 }

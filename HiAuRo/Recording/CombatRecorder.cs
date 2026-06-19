@@ -1,6 +1,6 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
-using Dalamud.Game.ClientState.JobGauge.Types;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using HiAuRo.ACR;
 using HiAuRo.Execution.Events;
@@ -44,10 +44,9 @@ public sealed class CombatRecorder
 
     public string CurrentLogPath => _sessionPath;
 
-    public string LogRoot => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "HiAuRo",
-        "RecorderLogs");
+    public string LogRoot => ResolveLogRoot(
+        PluginConfig.Instance.CombatRecorderLogRoot,
+        @"E:\DalamudPlugins\HiAuRo");
 
     public void Init()
     {
@@ -297,20 +296,22 @@ public sealed class CombatRecorder
 
     private static List<CombatTrackedSkillSnapshot> CaptureTrackedSkills()
     {
-        var configs = PluginConfig.Instance.CombatRecorderTrackedSkills;
-        if (configs.Count == 0) return [];
+        var actionIds = ResolveTrackedSkillIds(
+            PluginConfig.Instance.CombatRecorderTrackedSkillsByJob,
+            Data.Me.ClassJob);
+        if (actionIds.Count == 0) return [];
 
-        var result = new List<CombatTrackedSkillSnapshot>(configs.Count);
-        foreach (var item in configs)
+        var result = new List<CombatTrackedSkillSnapshot>(actionIds.Count);
+        foreach (var actionId in actionIds)
         {
-            if (item.ActionId == 0) continue;
+            if (actionId == 0) continue;
             result.Add(new CombatTrackedSkillSnapshot
             {
-                ActionId = item.ActionId,
-                ActionName = GetActionName(item.ActionId),
-                CooldownRemainingMs = SpellHelper.GetCooldownRemaining(item.ActionId),
-                Charges = SpellHelper.GetCharges(item.ActionId),
-                MaxCharges = SpellHelper.GetMaxCharges(item.ActionId)
+                ActionId = actionId,
+                ActionName = GetActionName(actionId),
+                CooldownRemainingMs = SpellHelper.GetCooldownRemaining(actionId),
+                Charges = SpellHelper.GetCharges(actionId),
+                MaxCharges = SpellHelper.GetMaxCharges(actionId)
             });
         }
 
@@ -341,43 +342,7 @@ public sealed class CombatRecorder
 
     private static Dictionary<string, object?> CaptureJobGauge(IBattleChara? self)
     {
-        var gauge = new Dictionary<string, object?>();
-
-        if (Data.Me.ClassJob != (uint)Jobs.BLM || self == null)
-            return gauge;
-
-        try
-        {
-            var blm = DService.Instance().JobGauges.Get<BLMGauge>();
-            gauge["inAstralFire"] = blm.InAstralFire;
-            gauge["astralFireStacks"] = blm.AstralFireStacks;
-            gauge["inUmbralIce"] = blm.InUmbralIce;
-            gauge["umbralIceStacks"] = blm.UmbralIceStacks;
-            gauge["umbralHearts"] = blm.UmbralHearts;
-            gauge["astralSoulStacks"] = blm.AstralSoulStacks;
-            gauge["polyglotStacks"] = blm.PolyglotStacks;
-            gauge["isParadoxActive"] = blm.IsParadoxActive;
-            gauge["enochianTimer"] = TryGetRemainMs(self, 737, out var timerMs) ? timerMs : 0;
-            return gauge;
-        }
-        catch (Exception ex)
-        {
-            DService.Instance().Log.Debug($"[CombatRecorder] BLM Gauge 读取失败，使用 Buff 推导: {ex.Message}");
-        }
-
-        var astralFireStacks = GetStack(self, 173);
-        var umbralIceStacks = GetStack(self, 174);
-        var enochian = TryGetRemainMs(self, 737, out var enochianMs);
-        gauge["inAstralFire"] = astralFireStacks > 0;
-        gauge["astralFireStacks"] = astralFireStacks;
-        gauge["inUmbralIce"] = umbralIceStacks > 0;
-        gauge["umbralIceStacks"] = umbralIceStacks;
-        gauge["umbralHearts"] = GetStack(self, 264);
-        gauge["astralSoulStacks"] = GetStack(self, 3870);
-        gauge["polyglotStacks"] = GetStack(self, 1211);
-        gauge["isParadoxActive"] = self.StatusList.HasStatus(3097);
-        gauge["enochianTimer"] = enochian ? enochianMs : 0;
-        return gauge;
+        return CaptureJobGaugeByJob(Data.Me.ClassJob, self);
     }
 
     private static ushort GetStack(IBattleChara self, uint statusId)
@@ -528,6 +493,17 @@ public sealed class CombatRecorder
         string suffix)
         => RotateSession(existingSessionId, now, suffix);
 
+    public static string ResolveLogRootForTests(string configuredPath, string fallbackRoot)
+        => ResolveLogRoot(configuredPath, fallbackRoot);
+
+    public static IReadOnlyList<uint> ResolveTrackedSkillIdsForTests(
+        Dictionary<uint, List<uint>> byJob,
+        uint currentJob)
+        => ResolveTrackedSkillIds(byJob, currentJob);
+
+    public static Dictionary<string, object?> ExportGaugeObjectForTests(object gauge)
+        => ExportGaugeObject(gauge);
+
     private static bool ShouldCaptureEvent(
         CombatRecorderEventType eventType,
         bool isAbilityAction,
@@ -561,6 +537,139 @@ public sealed class CombatRecorder
             $"{now:yyyyMMdd-HHmmss}-{suffix}",
             FrameIndex: 0,
             SampleIndex: 0);
+    }
+
+    private static string ResolveLogRoot(string configuredPath, string fallbackRoot)
+    {
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+            return configuredPath;
+
+        return Path.Combine(fallbackRoot, "Recordings", "CombatRecorder");
+    }
+
+    private static Dictionary<string, object?> CaptureJobGaugeByJob(uint jobId, IBattleChara? self)
+    {
+        if (self == null) return [];
+        var gauge = TryCaptureGaugeFromHelper(jobId);
+        return gauge ?? [];
+    }
+
+    private static IReadOnlyList<uint> ResolveTrackedSkillIds(Dictionary<uint, List<uint>> byJob, uint currentJob)
+    {
+        if (byJob.TryGetValue(currentJob, out var ids))
+            return ids;
+        return [];
+    }
+
+    private static Dictionary<string, object?>? TryCaptureGaugeFromHelper(uint jobId)
+    {
+        try
+        {
+            var helperType = ResolveHelperType(jobId);
+            if (helperType == null) return null;
+
+            var gaugeProperty = helperType.GetProperty("Gauge", BindingFlags.Public | BindingFlags.Static)
+                ?? helperType.GetProperty("量谱", BindingFlags.Public | BindingFlags.Static)
+                ?? helperType.GetProperties(BindingFlags.Public | BindingFlags.Static)
+                    .FirstOrDefault(p => p.PropertyType.Name.EndsWith("Gauge", StringComparison.Ordinal));
+            if (gaugeProperty == null) return null;
+
+            var gauge = gaugeProperty.GetValue(null);
+            if (gauge == null) return null;
+
+            return ExportGaugeObject(gauge);
+        }
+        catch (Exception ex)
+        {
+            DService.Instance().Log.Debug($"[CombatRecorder] JobGauge 读取失败(job={jobId}): {ex.Message}");
+            return null;
+        }
+    }
+
+    private static Type? ResolveHelperType(uint jobId)
+    {
+        var helperTypeName = jobId switch
+        {
+            (uint)Jobs.AST => "HiAuRo.Helper.ASTHelper",
+            (uint)Jobs.BLM => "HiAuRo.Helper.BLMHelper",
+            (uint)Jobs.BRD => "HiAuRo.Helper.BRDHelper",
+            (uint)Jobs.DNC => "HiAuRo.Helper.DNCHelper",
+            (uint)Jobs.DRG => "HiAuRo.Helper.DRGHelper",
+            (uint)Jobs.DRK => "HiAuRo.Helper.DRKHelper",
+            (uint)Jobs.GNB => "HiAuRo.Helper.GNBHelper",
+            (uint)Jobs.MCH => "HiAuRo.Helper.MCHHelper",
+            (uint)Jobs.MNK => "HiAuRo.Helper.MNKHelper",
+            (uint)Jobs.NIN => "HiAuRo.Helper.NINHelper",
+            (uint)Jobs.PCT => "HiAuRo.Helper.PCTHelper",
+            (uint)Jobs.PLD => "HiAuRo.Helper.PLDHelper",
+            (uint)Jobs.RDM => "HiAuRo.Helper.RDMHelper",
+            (uint)Jobs.RPR => "HiAuRo.Helper.RPRHelper",
+            (uint)Jobs.SAM => "HiAuRo.Helper.SAMHelper",
+            (uint)Jobs.SCH => "HiAuRo.Helper.SCHHelper",
+            (uint)Jobs.SGE => "HiAuRo.Helper.SGEHelper",
+            (uint)Jobs.SMN => "HiAuRo.Helper.SMNHelper",
+            (uint)Jobs.VPR => "HiAuRo.Helper.VPRHelper",
+            (uint)Jobs.WAR => "HiAuRo.Helper.WARHelper",
+            (uint)Jobs.WHM => "HiAuRo.Helper.WHMHelper",
+            _ => null
+        };
+
+        if (helperTypeName == null) return null;
+
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var type = asm.GetType(helperTypeName, throwOnError: false, ignoreCase: false);
+            if (type != null) return type;
+        }
+
+        return null;
+    }
+
+    private static Dictionary<string, object?> ExportGaugeObject(object gauge)
+    {
+        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var prop in gauge.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (!prop.CanRead || prop.GetIndexParameters().Length > 0)
+                continue;
+
+            var value = prop.GetValue(gauge);
+            if (value == null)
+                continue;
+
+            var type = value.GetType();
+            if (!IsGaugeScalar(type))
+                continue;
+
+            result[ToCamelCase(prop.Name)] = value;
+        }
+
+        return result;
+    }
+
+    private static bool IsGaugeScalar(Type type)
+    {
+        var actual = Nullable.GetUnderlyingType(type) ?? type;
+        return actual.IsEnum
+            || actual == typeof(bool)
+            || actual == typeof(byte)
+            || actual == typeof(sbyte)
+            || actual == typeof(short)
+            || actual == typeof(ushort)
+            || actual == typeof(int)
+            || actual == typeof(uint)
+            || actual == typeof(long)
+            || actual == typeof(ulong)
+            || actual == typeof(float)
+            || actual == typeof(double)
+            || actual == typeof(string);
+    }
+
+    private static string ToCamelCase(string name)
+    {
+        if (string.IsNullOrEmpty(name) || !char.IsUpper(name[0]))
+            return name;
+        return char.ToLowerInvariant(name[0]) + name[1..];
     }
 
     private string BuildSessionPath(string sessionId)

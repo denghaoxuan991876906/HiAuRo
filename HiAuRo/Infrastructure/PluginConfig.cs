@@ -211,8 +211,11 @@ public sealed class PluginConfig : SettingsBase
     /// <summary>清理多少天以前的 Combat Recorder jsonl 日志。</summary>
     public int CombatRecorderKeepDays { get; set; } = 14;
 
-    /// <summary>Combat Recorder 额外跟踪的技能列表。</summary>
-    public List<CombatRecorderTrackedSkillConfig> CombatRecorderTrackedSkills { get; set; } = [];
+    /// <summary>Combat Recorder 日志根目录。</summary>
+    public string CombatRecorderLogRoot { get; set; } = @"E:\DalamudPlugins\HiAuRo\Recordings\CombatRecorder";
+
+    /// <summary>Combat Recorder 按职业配置的额外跟踪技能列表。</summary>
+    public Dictionary<uint, List<uint>> CombatRecorderTrackedSkillsByJob { get; set; } = [];
 
     // ── 身位指示器 ──
 
@@ -241,12 +244,6 @@ public sealed class OverlayWindowSetting
     public bool Visible { get; set; } = true;
     /// <summary>是否锁定</summary>
     public bool Locked { get; set; } = true;
-}
-
-public sealed class CombatRecorderTrackedSkillConfig
-{
-    /// <summary>技能 ID。</summary>
-    public uint ActionId { get; set; }
 }
 
 #region FactAxis

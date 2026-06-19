@@ -133,6 +133,29 @@ public sealed class SettingsTabPage : TabPageBase
             }
         });
 
+        CL.Card("战斗录制", () =>
+        {
+            var logRoot = _config.CombatRecorderLogRoot ?? "";
+            CL.FormRow("日志目录", () =>
+            {
+                ImGui.SetNextItemWidth(420);
+                if (ImGui.InputText("##combat_rec_log_root", ref logRoot, 512))
+                {
+                    _config.CombatRecorderLogRoot = logRoot;
+                    _saveConfig();
+                }
+            });
+
+            ImGui.SameLine();
+            if (CL.DefaultButton("恢复默认目录"))
+            {
+                _config.CombatRecorderLogRoot = @"E:\DalamudPlugins\HiAuRo\Recordings\CombatRecorder";
+                _saveConfig();
+            }
+
+            ImGui.TextColored(Theme.Colors.TextTertiary, "Combat Recorder 新日志会保存到这个目录，而不是 C 盘 AppData。");
+        });
+
         // ── 身位指示器 ──
         CL.Card("身位指示器", () =>
         {
