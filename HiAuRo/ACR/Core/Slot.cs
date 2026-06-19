@@ -54,8 +54,15 @@ public sealed class Slot
     // === 添加方法（fluent 链式，返回 Slot） ===
 
     /// <summary>添加一个技能</summary>
-    public Slot Add(Spell spell)
+    public Slot Add(Spell spell, bool waitServerAcq = false, int gcdGuardMs = 0)
     {
+        if (waitServerAcq || gcdGuardMs > 0)
+        {
+            spell = spell.WithExecutionOptions(
+                waitServerAcq: waitServerAcq ? true : null,
+                gcdGuardMs: gcdGuardMs > 0 ? gcdGuardMs : null);
+        }
+
         Actions.Add(new SlotAction { Spell = spell });
         return this;
     }

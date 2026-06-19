@@ -308,6 +308,11 @@ public sealed class SlotExecutor
                 bd.AbilityCount++;
                 Data.Combat.AbilityCountInGcd++;
                 AbilityThrottle.MarkSuccess(Environment.TickCount64);
+                if (spell.GcdGuardMs > 0)
+                {
+                    bd.GcdGuardUntil = Math.Max(bd.GcdGuardUntil, Environment.TickCount64 + spell.GcdGuardMs);
+                    DService.Instance().Log.Debug($"[Action] GCD保护窗: {spell.Name}({spell.Id}) {spell.GcdGuardMs}ms");
+                }
             }
             else
             {
@@ -315,6 +320,7 @@ public sealed class SlotExecutor
                 bd.CurrGcdAbilityCount = PluginConfig.Instance.MaxAbilityTimesInGcd;
                 Data.Combat.AbilityCountInGcd = 0;
                 Data.Combat.LastGCDCompleted = Environment.TickCount64;
+                bd.GcdGuardUntil = 0;
             }
             _runner.EventHandler?.AfterSpell(slot, spell);
         }

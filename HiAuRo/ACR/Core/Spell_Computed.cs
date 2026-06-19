@@ -21,6 +21,27 @@ public sealed partial class Spell
     /// <summary>链式：不使用 GCD 优化偏移</summary>
     public Spell DontUseGcd() { DontUseGcdOpt = true; return this; }
 
+    /// <summary>复制一个 Spell，并覆盖执行期选项</summary>
+    public Spell WithExecutionOptions(bool? waitServerAcq = null, int? gcdGuardMs = null)
+    {
+        return new Spell
+        {
+            Id = Id,
+            Name = _name,
+            TargetType = TargetType,
+            SpellCategory = SpellCategory,
+            Type = Type,
+            SpecifyTarget = SpecifyTarget,
+            GetDynamicTarget = GetDynamicTarget,
+            UsePos = UsePos,
+            DontUseGcdOpt = DontUseGcdOpt,
+            WaitServerAcq = waitServerAcq ?? WaitServerAcq,
+            GcdGuardMs = gcdGuardMs ?? GcdGuardMs,
+            Hq = Hq,
+            TargetLimits = TargetLimits
+        };
+    }
+
     /// <summary>静态工厂：创建药水 Spell</summary>
     public static Spell CreatePotion() => CreatePotion(false);
     public static Spell CreatePotion(bool isHq) => new(ItemHelper.GetCurrJobPotionActionId(isHq), SpellTargetType.Self)

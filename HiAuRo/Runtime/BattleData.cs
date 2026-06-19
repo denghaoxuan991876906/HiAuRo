@@ -20,6 +20,7 @@ public sealed class BattleData
     public bool SlotState { get; set; }
     public bool TargetCleared { get; set; }
     public bool IsDead { get; set; }
+    public long GcdGuardUntil { get; set; }
 
     public void AddSpell2NextSlot(Spell spell)
     {
@@ -89,6 +90,7 @@ public sealed class BattleData
         AbilityCount = 0;
         IsDead = false;
         TargetCleared = false;
+        GcdGuardUntil = 0;
     }
 }
 

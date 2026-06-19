@@ -120,6 +120,12 @@ public sealed partial class AIRunner
 
         if (GCDHelper.CanUseGCD())
         {
+            if (Environment.TickCount64 < bd.GcdGuardUntil)
+            {
+                Debug.Phase = "GcdGuard";
+                return;
+            }
+
             Debug.Phase = "GCD";
             await _slotExecutor.ResolveSlots(bd, 1);
         }

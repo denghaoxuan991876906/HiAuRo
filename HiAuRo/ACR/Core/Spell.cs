@@ -38,6 +38,7 @@ public sealed partial class Spell
     public Vector3? UsePos { get; init; }
     public bool DontUseGcdOpt { get; set; }
     public bool WaitServerAcq { get; init; }
+    public int GcdGuardMs { get; init; }
 
     /// <summary>道具是否 HQ</summary>
     public bool Hq { get; init; }
