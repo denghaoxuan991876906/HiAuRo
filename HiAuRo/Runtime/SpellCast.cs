@@ -6,6 +6,11 @@ namespace HiAuRo.Runtime;
 
 public static class SpellCast
 {
+    internal static bool ShouldRaiseSpellCastSuccessCallback(bool isAbility, long castTimeMs)
+    {
+        return !isAbility && castTimeMs > 0;
+    }
+
     public static async Task<bool> ExecuteAsync(Slot slot, Spell spell, AIRunner runner)
     {
         if (Data.Me.Object is { IsDead: true }) return false;
@@ -78,6 +83,7 @@ public static class SpellCast
         tracker.Notify(SpellActionType.Request, spellId);
         EventSystem.OnUseActionSuccess(spellId, spell.Type);
 
+        var isAbility = spell.IsAbility();
         long castTime = (long)spell.CastTime.TotalMilliseconds;
         DService.Instance().Log.Debug($"[SpellCast] 已入列: {spell.Name}({spellId}) castTime={castTime}ms");
 
@@ -126,7 +132,7 @@ public static class SpellCast
         // 等 Effect 服务器确认（步骤 9）
         // 能力技可跳过（WaitServerAcq=false）
         if (!tracker.HasFlag(spellId, SpellActionType.Effect)
-            && (spell.IsAbility() && spell.WaitServerAcq || !spell.IsAbility()))
+            && (isAbility && spell.WaitServerAcq || !isAbility))
         {
             await Coroutine.Instance.WaitAsync(500,
                 () => !tracker.HasFlag(spellId, SpellActionType.Effect)
@@ -142,7 +148,8 @@ public static class SpellCast
         while (!GCDHelper.CanUseOffGcd())
             await Coroutine.Instance.WaitAsync(1);
 
-        runner.EventHandler?.OnSpellCastSuccess(slot, spell);
+        if (ShouldRaiseSpellCastSuccessCallback(isAbility, castTime))
+            runner.EventHandler?.OnSpellCastSuccess(slot, spell);
         DService.Instance().Log.Debug($"[SpellCast] 完成: {spell.Name}({spellId})");
 
         return true;
