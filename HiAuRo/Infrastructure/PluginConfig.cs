@@ -211,6 +211,9 @@ public sealed class PluginConfig : SettingsBase
     /// <summary>清理多少天以前的 Combat Recorder jsonl 日志。</summary>
     public int CombatRecorderKeepDays { get; set; } = 14;
 
+    /// <summary>Combat Recorder 额外跟踪的技能列表。</summary>
+    public List<CombatRecorderTrackedSkillConfig> CombatRecorderTrackedSkills { get; set; } = [];
+
     // ── 身位指示器 ──
 
     /// <summary>启用身位指示器 VFX</summary>
@@ -238,6 +241,12 @@ public sealed class OverlayWindowSetting
     public bool Visible { get; set; } = true;
     /// <summary>是否锁定</summary>
     public bool Locked { get; set; } = true;
+}
+
+public sealed class CombatRecorderTrackedSkillConfig
+{
+    /// <summary>技能 ID。</summary>
+    public uint ActionId { get; set; }
 }
 
 #region FactAxis

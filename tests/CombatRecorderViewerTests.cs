@@ -9,6 +9,7 @@ Test_CombatRecorder_主窗口入口应指向独立阅读器页面();
 Test_Grouping_按eventGroupId聚合prev和current();
 Test_Summary_生成左侧时间线摘要();
 Test_Diff_提取buff增删与量谱变化();
+Test_Grouping_保留GCD类型与自定义技能信息();
 Console.WriteLine("=== 全部通过 ===");
 
 void Test_CombatRecorder_主窗口入口应指向独立阅读器页面()
@@ -68,6 +69,31 @@ void Test_Diff_提取buff增删与量谱变化()
         throw new Exception("应识别移除 Buff");
 }
 
+void Test_Grouping_保留GCD类型与自定义技能信息()
+{
+    var current = MakeSnapshot("g4", "current", 16505, "真红核爆", "GcdReadyAndAction");
+    current.GcdKind = CombatRecorderGcdKind.Instant;
+    current.TrackedSkills =
+    [
+        new CombatTrackedSkillSnapshot
+        {
+            ActionId = 158,
+            ActionName = "魔纹步",
+            CooldownRemainingMs = 45000,
+            Charges = 2,
+            MaxCharges = 3
+        }
+    ];
+
+    var group = CombatRecorderViewerLogic.BuildGroups([current]).Single();
+    if (group.Current?.Raw.GcdKind != CombatRecorderGcdKind.Instant)
+        throw new Exception("阅读器分组后应保留 GCD 类型");
+    if (group.Current?.Raw.TrackedSkills.Count != 1)
+        throw new Exception("阅读器分组后应保留自定义技能信息");
+    if (group.Current.Raw.TrackedSkills[0].ActionName != "魔纹步")
+        throw new Exception("阅读器分组后应保留自定义技能名称");
+}
+
 static CombatFrameSnapshot MakeSnapshot(string groupId, string role, uint actionId, string actionName, string eventType)
 {
     return new CombatFrameSnapshot
@@ -81,6 +107,7 @@ static CombatFrameSnapshot MakeSnapshot(string groupId, string role, uint action
         ActionName = actionName,
         JobGauge = [],
         SelfBuffs = [],
-        TargetBuffs = []
+        TargetBuffs = [],
+        TrackedSkills = []
     };
 }

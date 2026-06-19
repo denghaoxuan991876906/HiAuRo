@@ -24,6 +24,13 @@ public enum CombatRecorderEventType
     ActionRejected
 }
 
+public enum CombatRecorderGcdKind
+{
+    Unknown,
+    Instant,
+    Casted
+}
+
 /// <summary>单条 jsonl 技能采样快照。</summary>
 public sealed class CombatFrameSnapshot
 {
@@ -71,6 +78,9 @@ public sealed class CombatFrameSnapshot
 
     [JsonPropertyName("isAbility")]
     public bool IsAbility { get; set; }
+
+    [JsonPropertyName("gcdKind")]
+    public CombatRecorderGcdKind GcdKind { get; set; }
 
     [JsonPropertyName("success")]
     public bool? Success { get; set; }
@@ -197,6 +207,9 @@ public sealed class CombatFrameSnapshot
 
     [JsonPropertyName("resolverResults")]
     public List<CombatResolverSnapshot> ResolverResults { get; set; } = [];
+
+    [JsonPropertyName("trackedSkills")]
+    public List<CombatTrackedSkillSnapshot> TrackedSkills { get; set; } = [];
 }
 
 public sealed class CombatBuffSnapshot
@@ -227,4 +240,22 @@ public sealed class CombatResolverSnapshot
 
     [JsonPropertyName("passedWindow")]
     public bool PassedWindow { get; set; }
+}
+
+public sealed class CombatTrackedSkillSnapshot
+{
+    [JsonPropertyName("actionId")]
+    public uint ActionId { get; set; }
+
+    [JsonPropertyName("actionName")]
+    public string ActionName { get; set; } = "";
+
+    [JsonPropertyName("cooldownRemainingMs")]
+    public float CooldownRemainingMs { get; set; }
+
+    [JsonPropertyName("charges")]
+    public int Charges { get; set; }
+
+    [JsonPropertyName("maxCharges")]
+    public int MaxCharges { get; set; }
 }

@@ -266,6 +266,10 @@
         const prev = group.prev;
         const current = group.current;
 
+        if ((prev?.gcdKind ?? null) !== (current?.gcdKind ?? null)) {
+            parts.push(`gcd ${formatGcdKind(prev?.gcdKind)} -> ${formatGcdKind(current?.gcdKind)}`);
+        }
+
         if ((prev?.mp ?? null) !== (current?.mp ?? null)) {
             parts.push(`MP ${formatNumber(prev?.mp)} -> ${formatNumber(current?.mp)}`);
         }
@@ -411,6 +415,7 @@
             ${warningBlock}
             ${renderOverview(group)}
             ${renderScalarSection(group)}
+            ${renderTrackedSkillsSection(group)}
             ${renderGaugeSection(group)}
             ${renderBuffSection("自身 Buff 变化", group.diff.selfBuffDiff)}
             ${renderBuffSection("目标 Buff 变化", group.diff.targetBuffDiff)}
@@ -425,6 +430,7 @@
               ${renderOverviewCard("技能", group.actionName)}
               ${renderOverviewCard("ActionId", String(group.actionId))}
               ${renderOverviewCard("事件", group.eventType)}
+              ${renderOverviewCard("GCD类型", formatGcdKind(snapshot.gcdKind))}
               ${renderOverviewCard("来源", snapshot.source || "unknown")}
               ${renderOverviewCard("时间", formatTime(group.timestamp))}
               ${renderOverviewCard("事件组", group.eventGroupId)}
@@ -476,6 +482,47 @@
               <div class="detail-heading">职业量谱</div>
               <div class="detail-body">
                 <table class="diff-table">
+                  <tbody>${rows}</tbody>
+                </table>
+              </div>
+            </section>
+        `;
+    }
+
+    function renderTrackedSkillsSection(group) {
+        const snapshot = group.current || group.prev || {};
+        const skills = snapshot.trackedSkills || [];
+        if (!skills.length) {
+            return `
+                <section class="detail-section">
+                  <div class="detail-heading">自定义技能</div>
+                  <div class="detail-body"><div class="value-muted">该记录未附带自定义技能信息。</div></div>
+                </section>
+            `;
+        }
+
+        const rows = skills.map((skill) => `
+            <tr>
+              <th>${escapeHtml(skill.actionName || `Action ${skill.actionId || 0}`)}</th>
+              <td>${escapeHtml(String(skill.actionId || 0))}</td>
+              <td>${escapeHtml(`${Math.round(Number(skill.cooldownRemainingMs || 0))}ms`)}</td>
+              <td>${escapeHtml(`${Number(skill.charges || 0)}/${Number(skill.maxCharges || 0)}`)}</td>
+            </tr>
+        `).join("");
+
+        return `
+            <section class="detail-section">
+              <div class="detail-heading">自定义技能</div>
+              <div class="detail-body">
+                <table class="diff-table">
+                  <thead>
+                    <tr>
+                      <th>技能</th>
+                      <th>ID</th>
+                      <th>CD</th>
+                      <th>层数</th>
+                    </tr>
+                  </thead>
                   <tbody>${rows}</tbody>
                 </table>
               </div>
@@ -582,6 +629,12 @@
     function formatDistance(value) {
         if (value == null || Number.isNaN(Number(value))) return "-";
         return `${Number(value).toFixed(1)}m`;
+    }
+
+    function formatGcdKind(value) {
+        if (value === "Instant" || value === 1) return "瞬发";
+        if (value === "Casted" || value === 2) return "读条";
+        return "-";
     }
 
     function formatValue(value) {

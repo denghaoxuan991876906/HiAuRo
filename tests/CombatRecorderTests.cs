@@ -8,9 +8,11 @@ Test_RingBuffer_只保留最近帧并能取上一帧();
 Test_EventWriter_默认只写事件帧();
 Test_EventWriter_上一帧模式最多写两条并共享事件组();
 Test_EventWriter_上一帧模式不污染缓存对象();
+Test_EventWriter_上一帧模式复制GCD类型与自定义技能信息();
 Test_EventFilter_GCD只记录刷新GCD时机();
 Test_EventFilter_能力技只记录成功效果时机();
 Test_GcdEffectDedup_已记录读条起手后应忽略同action效果();
+Test_GcdKind_读条开始和效果确认应能区分读条与瞬发();
 Console.WriteLine("=== 全部通过 ===");
 
 void Test_RingBuffer_只保留最近帧并能取上一帧()
@@ -86,6 +88,50 @@ void Test_EventWriter_上一帧模式不污染缓存对象()
         throw new Exception($"缓存对象被污染：role={cached.SampleRole}, group={cached.EventGroupId}");
 }
 
+void Test_EventWriter_上一帧模式复制GCD类型与自定义技能信息()
+{
+    var prev = MakeSnapshot(40, "cache");
+    prev.GcdKind = CombatRecorderGcdKind.Unknown;
+    prev.TrackedSkills =
+    [
+        new CombatTrackedSkillSnapshot
+        {
+            ActionId = 159,
+            ActionName = "魔泉",
+            CooldownRemainingMs = 12000,
+            Charges = 1,
+            MaxCharges = 2
+        }
+    ];
+
+    var current = MakeSnapshot(41, "current");
+    current.GcdKind = CombatRecorderGcdKind.Casted;
+    current.TrackedSkills =
+    [
+        new CombatTrackedSkillSnapshot
+        {
+            ActionId = 25794,
+            ActionName = "悖论",
+            CooldownRemainingMs = 0,
+            Charges = 0,
+            MaxCharges = 0
+        }
+    ];
+
+    var lines = CombatRecorderEventWriter.BuildEventSamples(
+        prev,
+        current,
+        includePreviousFrame: true,
+        eventGroupId: "evt-4");
+
+    if (lines[0].GcdKind != CombatRecorderGcdKind.Casted || lines[1].GcdKind != CombatRecorderGcdKind.Casted)
+        throw new Exception("prev/current 输出都应继承当前事件的 GCD 类型");
+    if (lines[0].TrackedSkills.Count != 1 || lines[0].TrackedSkills[0].ActionId != 25794)
+        throw new Exception("prev 输出应复制当前事件的自定义技能快照");
+    if (prev.TrackedSkills[0].ActionId != 159)
+        throw new Exception("缓存中的 tracked skills 不应被污染");
+}
+
 void Test_EventFilter_GCD只记录刷新GCD时机()
 {
     if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.UseActionSuccess, isAbilityAction: false, gcdJustActivated: false))
@@ -137,6 +183,33 @@ void Test_GcdEffectDedup_已记录读条起手后应忽略同action效果()
     }
 }
 
+void Test_GcdKind_读条开始和效果确认应能区分读条与瞬发()
+{
+    if (CombatRecorder.ResolveGcdKindForTests(
+            CombatRecorderEventType.GcdReadyAndAction,
+            pendingCastGcdActionId: 152,
+            actionId: 152) != CombatRecorderGcdKind.Casted)
+    {
+        throw new Exception("读条 GCD 在读条开始记录时应标记为 Casted");
+    }
+
+    if (CombatRecorder.ResolveGcdKindForTests(
+            CombatRecorderEventType.GcdReadyAndAction,
+            pendingCastGcdActionId: 152,
+            actionId: 3577) != CombatRecorderGcdKind.Instant)
+    {
+        throw new Exception("瞬发 GCD 在效果确认记录时应标记为 Instant");
+    }
+
+    if (CombatRecorder.ResolveGcdKindForTests(
+            CombatRecorderEventType.AbilityEffect,
+            pendingCastGcdActionId: 152,
+            actionId: 7561) != CombatRecorderGcdKind.Unknown)
+    {
+        throw new Exception("能力技不应被标记为 GCD 类型");
+    }
+}
+
 
 static CombatFrameSnapshot MakeSnapshot(long sampleIndex, string role)
 {
@@ -151,6 +224,7 @@ static CombatFrameSnapshot MakeSnapshot(long sampleIndex, string role)
         Source = "unknown",
         Job = 25,
         ActionId = 100,
-        ActionName = "Test Action"
+        ActionName = "Test Action",
+        TrackedSkills = []
     };
 }

@@ -175,7 +175,12 @@ public sealed class CombatRecorder
     {
         if (!IsEnabledForCurrentState()) return;
 
-        var current = CaptureSnapshot(eventType, actionId, success, cancelled);
+        var current = CaptureSnapshot(
+            eventType,
+            actionId,
+            success,
+            cancelled,
+            ResolveGcdKind(eventType, _pendingCastGcdActionId, actionId));
         var previous = _frames.GetLatest();
         var eventGroupId = $"{_sessionId}-{Interlocked.Increment(ref _sampleIndex):D8}";
         var samples = CombatRecorderEventWriter.BuildEventSamples(
@@ -191,7 +196,8 @@ public sealed class CombatRecorder
         CombatRecorderEventType eventType,
         uint actionId,
         bool? success,
-        bool cancelled = false)
+        bool cancelled = false,
+        CombatRecorderGcdKind gcdKind = CombatRecorderGcdKind.Unknown)
     {
         EnsureSession();
 
@@ -215,6 +221,7 @@ public sealed class CombatRecorder
             QueuedActionId = ReadQueuedActionId(),
             CastActionId = self?.CastActionID ?? 0,
             IsAbility = actionId != 0 && IsAbilityAction(actionId),
+            GcdKind = gcdKind,
             Success = success,
             Failed = success == false && !cancelled,
             Cancelled = cancelled,
@@ -243,7 +250,8 @@ public sealed class CombatRecorder
             CurrentAcrName = ACRLifecycle.CurrentAcrName,
             CurrentRotationName = ACRLifecycle.Runner.CurrentRotation?.GetType().Name ?? "",
             JobGauge = CaptureJobGauge(self),
-            ResolverResults = CaptureResolvers()
+            ResolverResults = CaptureResolvers(),
+            TrackedSkills = CaptureTrackedSkills()
         };
 
         snapshot.IsGcd = actionId != 0 && !snapshot.IsAbility;
@@ -271,6 +279,28 @@ public sealed class CombatRecorder
             CheckResult = r.CheckResult,
             PassedWindow = r.PassedWindow
         }).ToList();
+    }
+
+    private static List<CombatTrackedSkillSnapshot> CaptureTrackedSkills()
+    {
+        var configs = PluginConfig.Instance.CombatRecorderTrackedSkills;
+        if (configs.Count == 0) return [];
+
+        var result = new List<CombatTrackedSkillSnapshot>(configs.Count);
+        foreach (var item in configs)
+        {
+            if (item.ActionId == 0) continue;
+            result.Add(new CombatTrackedSkillSnapshot
+            {
+                ActionId = item.ActionId,
+                ActionName = GetActionName(item.ActionId),
+                CooldownRemainingMs = SpellHelper.GetCooldownRemaining(item.ActionId),
+                Charges = SpellHelper.GetCharges(item.ActionId),
+                MaxCharges = SpellHelper.GetMaxCharges(item.ActionId)
+            });
+        }
+
+        return result;
     }
 
     private static List<CombatBuffSnapshot> CaptureBuffs(IBattleChara? chara)
@@ -470,6 +500,12 @@ public sealed class CombatRecorder
         long nowTicks)
         => ShouldCaptureGcdEffect(actionId, pendingCastGcdActionId, pendingCastRecordedAtTicks, nowTicks);
 
+    internal static CombatRecorderGcdKind ResolveGcdKindForTests(
+        CombatRecorderEventType eventType,
+        uint pendingCastGcdActionId,
+        uint actionId)
+        => ResolveGcdKind(eventType, pendingCastGcdActionId, actionId);
+
     private static bool ShouldCaptureEvent(
         CombatRecorderEventType eventType,
         bool isAbilityAction,
@@ -482,6 +518,19 @@ public sealed class CombatRecorder
             CombatRecorderEventType.GcdReadyAndAction => !isAbilityAction && gcdJustActivated,
             _ => false
         };
+    }
+
+    private static CombatRecorderGcdKind ResolveGcdKind(
+        CombatRecorderEventType eventType,
+        uint pendingCastGcdActionId,
+        uint actionId)
+    {
+        if (eventType != CombatRecorderEventType.GcdReadyAndAction || actionId == 0)
+            return CombatRecorderGcdKind.Unknown;
+
+        return pendingCastGcdActionId == actionId
+            ? CombatRecorderGcdKind.Casted
+            : CombatRecorderGcdKind.Instant;
     }
 
     private static bool ShouldCaptureGcdEffect(

@@ -25,6 +25,8 @@ public static class CombatRecorderEventWriter
         previousOutput.Cancelled = current.Cancelled;
         previousOutput.IsGcd = current.IsGcd;
         previousOutput.IsAbility = current.IsAbility;
+        previousOutput.GcdKind = current.GcdKind;
+        previousOutput.TrackedSkills = current.TrackedSkills.Select(Clone).ToList();
         previousOutput.SampleRole = "prev";
 
         return [previousOutput, current];
@@ -49,6 +51,7 @@ public static class CombatRecorderEventWriter
             CastActionId = source.CastActionId,
             IsGcd = source.IsGcd,
             IsAbility = source.IsAbility,
+            GcdKind = source.GcdKind,
             Success = source.Success,
             Failed = source.Failed,
             Cancelled = source.Cancelled,
@@ -90,7 +93,8 @@ public static class CombatRecorderEventWriter
             QtStates = new Dictionary<string, bool>(source.QtStates),
             CurrentAcrName = source.CurrentAcrName,
             CurrentRotationName = source.CurrentRotationName,
-            ResolverResults = source.ResolverResults.Select(Clone).ToList()
+            ResolverResults = source.ResolverResults.Select(Clone).ToList(),
+            TrackedSkills = source.TrackedSkills.Select(Clone).ToList()
         };
     }
 
@@ -113,6 +117,18 @@ public static class CombatRecorderEventWriter
             Mode = source.Mode,
             CheckResult = source.CheckResult,
             PassedWindow = source.PassedWindow
+        };
+    }
+
+    private static CombatTrackedSkillSnapshot Clone(CombatTrackedSkillSnapshot source)
+    {
+        return new CombatTrackedSkillSnapshot
+        {
+            ActionId = source.ActionId,
+            ActionName = source.ActionName,
+            CooldownRemainingMs = source.CooldownRemainingMs,
+            Charges = source.Charges,
+            MaxCharges = source.MaxCharges
         };
     }
 }

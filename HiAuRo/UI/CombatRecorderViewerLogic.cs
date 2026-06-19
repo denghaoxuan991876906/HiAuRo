@@ -55,6 +55,7 @@ internal static class CombatRecorderViewerLogic
         AddRow(scalarRows, "HP", FormatNumber(prev?.Hp), FormatNumber(current?.Hp), ref hasAnyDiff);
         AddRow(scalarRows, "MP", FormatNumber(prev?.Mp), FormatNumber(current?.Mp), ref hasAnyDiff);
         AddRow(scalarRows, "GCD", FormatMilliseconds(prev?.GcdCooldown), FormatMilliseconds(current?.GcdCooldown), ref hasAnyDiff);
+        AddRow(scalarRows, "GCD类型", FormatGcdKind(prev?.GcdKind), FormatGcdKind(current?.GcdKind), ref hasAnyDiff);
         AddRow(scalarRows, "读条", FormatBool(prev?.IsCasting), FormatBool(current?.IsCasting), ref hasAnyDiff);
         AddRow(scalarRows, "移动", FormatBool(prev?.IsMoving), FormatBool(current?.IsMoving), ref hasAnyDiff);
         AddRow(scalarRows, "连击ID", FormatNumber(prev?.LastComboSpellId), FormatNumber(current?.LastComboSpellId), ref hasAnyDiff);
@@ -197,5 +198,12 @@ internal static class CombatRecorderViewerLogic
         null => "-",
         bool b => b ? "是" : "否",
         _ => value.ToString() ?? "-"
+    };
+
+    private static string FormatGcdKind(CombatRecorderGcdKind? value) => value switch
+    {
+        CombatRecorderGcdKind.Instant => "瞬发",
+        CombatRecorderGcdKind.Casted => "读条",
+        _ => "-"
     };
 }
