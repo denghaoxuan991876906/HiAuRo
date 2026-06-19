@@ -34,6 +34,7 @@ public sealed class CombatRecorder
     private uint _lastEffectActionId;
     private long _lastEffectAt;
     private bool _lastGcdActive;
+    private float _lastObservedGcdCooldownMs;
 
     private CombatRecorder() { }
 
@@ -86,10 +87,18 @@ public sealed class CombatRecorder
         _lastCacheAt = now;
 
         var gcdActive = GCDHelper.IsGCDActive();
-        var gcdJustActivated = !_lastGcdActive && gcdActive;
+        var gcdCooldown = GCDHelper.GetGCDCooldown();
+        var gcdDuration = GCDHelper.GetGCDDuration();
+        var gcdJustActivated = ShouldCaptureGcdStart(
+            _lastGcdActive,
+            gcdActive,
+            _lastObservedGcdCooldownMs,
+            gcdCooldown,
+            gcdDuration);
         if (ShouldCaptureEvent(CombatRecorderEventType.GcdReadyAndAction, isAbilityAction: false, gcdJustActivated))
             CaptureEvent(CombatRecorderEventType.GcdReadyAndAction, EventSystem.LastCompletedActionId, success: true);
         _lastGcdActive = gcdActive;
+        _lastObservedGcdCooldownMs = gcdCooldown;
 
         var snapshot = CaptureSnapshot(CombatRecorderEventType.Unknown, 0, success: null);
         snapshot.SampleRole = "cache";
@@ -445,6 +454,19 @@ public sealed class CombatRecorder
         bool gcdJustActivated)
         => ShouldCaptureEvent(eventType, isAbilityAction, gcdJustActivated);
 
+    internal static bool ShouldCaptureGcdStartForTests(
+        bool previousGcdActive,
+        bool currentGcdActive,
+        float previousGcdCooldownMs,
+        float currentGcdCooldownMs,
+        float currentGcdDurationMs)
+        => ShouldCaptureGcdStart(
+            previousGcdActive,
+            currentGcdActive,
+            previousGcdCooldownMs,
+            currentGcdCooldownMs,
+            currentGcdDurationMs);
+
     private static bool ShouldCaptureEvent(
         CombatRecorderEventType eventType,
         bool isAbilityAction,
@@ -458,9 +480,32 @@ public sealed class CombatRecorder
         };
     }
 
+    private static bool ShouldCaptureGcdStart(
+        bool previousGcdActive,
+        bool currentGcdActive,
+        float previousGcdCooldownMs,
+        float currentGcdCooldownMs,
+        float currentGcdDurationMs)
+    {
+        if (!previousGcdActive && currentGcdActive)
+            return true;
+
+        if (!currentGcdActive)
+            return false;
+
+        if (previousGcdCooldownMs > 1f)
+            return false;
+
+        if (currentGcdDurationMs <= 0f)
+            return false;
+
+        return currentGcdCooldownMs >= currentGcdDurationMs - 100f;
+    }
+
     private void ResetTransientState()
     {
         _lastGcdActive = false;
+        _lastObservedGcdCooldownMs = 0f;
         _lastEffectActionId = 0;
         _lastEffectAt = 0;
     }

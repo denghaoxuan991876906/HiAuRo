@@ -10,6 +10,7 @@ Test_EventWriter_上一帧模式最多写两条并共享事件组();
 Test_EventWriter_上一帧模式不污染缓存对象();
 Test_EventFilter_GCD只记录刷新GCD时机();
 Test_EventFilter_能力技只记录成功效果时机();
+Test_GcdStartDetection_错过边沿时仍能识别新GCD();
 Console.WriteLine("=== 全部通过 ===");
 
 void Test_RingBuffer_只保留最近帧并能取上一帧()
@@ -113,6 +114,29 @@ void Test_EventFilter_能力技只记录成功效果时机()
 
     if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.ActionRejected, isAbilityAction: true, gcdJustActivated: false))
         throw new Exception("ActionRejected 不应进入技能采样日志");
+}
+
+void Test_GcdStartDetection_错过边沿时仍能识别新GCD()
+{
+    if (!CombatRecorder.ShouldCaptureGcdStartForTests(
+            previousGcdActive: true,
+            currentGcdActive: true,
+            previousGcdCooldownMs: 0,
+            currentGcdCooldownMs: 2457,
+            currentGcdDurationMs: 2457))
+    {
+        throw new Exception("即使错过 inactive -> active 边沿，只要 GCD 从 0 跳到完整新周期，也应识别为新 GCD");
+    }
+
+    if (CombatRecorder.ShouldCaptureGcdStartForTests(
+            previousGcdActive: true,
+            currentGcdActive: true,
+            previousGcdCooldownMs: 1200,
+            currentGcdCooldownMs: 900,
+            currentGcdDurationMs: 2457))
+    {
+        throw new Exception("普通 GCD 倒计时推进不应被误判为新 GCD");
+    }
 }
 
 static CombatFrameSnapshot MakeSnapshot(long sampleIndex, string role)
