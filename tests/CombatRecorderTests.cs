@@ -9,6 +9,7 @@ Test_EventWriter_默认只写事件帧();
 Test_EventWriter_上一帧模式最多写两条并共享事件组();
 Test_EventWriter_上一帧模式不污染缓存对象();
 Test_EventWriter_上一帧模式复制GCD类型与自定义技能信息();
+Test_SessionRotation_新录制应生成新Session并重置计数();
 Test_EventFilter_GCD只记录刷新GCD时机();
 Test_EventFilter_能力技只记录成功效果时机();
 Test_GcdEffectDedup_已记录读条起手后应忽略同action效果();
@@ -130,6 +131,31 @@ void Test_EventWriter_上一帧模式复制GCD类型与自定义技能信息()
         throw new Exception("prev 输出应复制当前事件的自定义技能快照");
     if (prev.TrackedSkills[0].ActionId != 159)
         throw new Exception("缓存中的 tracked skills 不应被污染");
+}
+
+void Test_SessionRotation_新录制应生成新Session并重置计数()
+{
+    var firstSessionId = CombatRecorder.RotateSessionForTests(
+        existingSessionId: "20260619-120000-abcd1234",
+        existingFrameIndex: 15,
+        existingSampleIndex: 9,
+        now: new DateTime(2026, 6, 19, 12, 30, 0),
+        suffix: "efgh5678").SessionId;
+
+    if (firstSessionId != "20260619-123000-efgh5678")
+        throw new Exception($"新录制应生成新的 sessionId，实际 {firstSessionId}");
+
+    var rotated = CombatRecorder.RotateSessionForTests(
+        existingSessionId: firstSessionId,
+        existingFrameIndex: 15,
+        existingSampleIndex: 9,
+        now: new DateTime(2026, 6, 19, 12, 31, 0),
+        suffix: "ijkl9012");
+
+    if (rotated.SessionId != "20260619-123100-ijkl9012")
+        throw new Exception($"轮换后的 sessionId 不正确，实际 {rotated.SessionId}");
+    if (rotated.FrameIndex != 0 || rotated.SampleIndex != 0)
+        throw new Exception("新录制后 frame/sample 计数应重置为 0");
 }
 
 void Test_EventFilter_GCD只记录刷新GCD时机()

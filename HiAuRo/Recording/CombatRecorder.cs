@@ -122,6 +122,20 @@ public sealed class CombatRecorder
         catch (Exception ex) { DService.Instance().Log.Warning($"[CombatRecorder] 打开日志目录失败: {ex.Message}"); }
     }
 
+    public void StartNewSession()
+    {
+        lock (_lock)
+        {
+            var rotated = RotateSession(_sessionId, DateTime.Now, Guid.NewGuid().ToString("N")[..8]);
+            _sessionId = rotated.SessionId;
+            _sessionPath = BuildSessionPath(_sessionId);
+            _sampleIndex = rotated.SampleIndex;
+            _frameIndex = rotated.FrameIndex;
+            _frames.Clear();
+            ResetTransientState();
+        }
+    }
+
     private void OnUseAction(EventSystem.UseActionEvent ev)
     {
         if (ev is not { Result: true, ActionId: not 0, ActionType: ActionTypeFF.Action })
@@ -435,11 +449,11 @@ public sealed class CombatRecorder
         if (!string.IsNullOrEmpty(_sessionId) && !string.IsNullOrEmpty(_sessionPath))
             return;
 
-        var suffix = Guid.NewGuid().ToString("N")[..8];
-        _sessionId = $"{DateTime.Now:yyyyMMdd-HHmmss}-{suffix}";
-        var job = ((Jobs)Data.Me.ClassJob).ToString();
-        var dir = Path.Combine(LogRoot, job, DateTime.Now.ToString("yyyy-MM-dd"));
-        _sessionPath = Path.Combine(dir, $"session-{_sessionId}.jsonl");
+        var rotated = RotateSession(_sessionId, DateTime.Now, Guid.NewGuid().ToString("N")[..8]);
+        _sessionId = rotated.SessionId;
+        _sessionPath = BuildSessionPath(_sessionId);
+        _sampleIndex = rotated.SampleIndex;
+        _frameIndex = rotated.FrameIndex;
     }
 
     private bool IsEnabledForCurrentState()
@@ -506,6 +520,14 @@ public sealed class CombatRecorder
         uint actionId)
         => ResolveGcdKind(eventType, pendingCastGcdActionId, actionId);
 
+    internal static CombatRecorderSessionState RotateSessionForTests(
+        string existingSessionId,
+        long existingFrameIndex,
+        long existingSampleIndex,
+        DateTime now,
+        string suffix)
+        => RotateSession(existingSessionId, now, suffix);
+
     private static bool ShouldCaptureEvent(
         CombatRecorderEventType eventType,
         bool isAbilityAction,
@@ -531,6 +553,21 @@ public sealed class CombatRecorder
         return pendingCastGcdActionId == actionId
             ? CombatRecorderGcdKind.Casted
             : CombatRecorderGcdKind.Instant;
+    }
+
+    private static CombatRecorderSessionState RotateSession(string existingSessionId, DateTime now, string suffix)
+    {
+        return new CombatRecorderSessionState(
+            $"{now:yyyyMMdd-HHmmss}-{suffix}",
+            FrameIndex: 0,
+            SampleIndex: 0);
+    }
+
+    private string BuildSessionPath(string sessionId)
+    {
+        var job = ((Jobs)Data.Me.ClassJob).ToString();
+        var dir = Path.Combine(LogRoot, job, DateTime.Now.ToString("yyyy-MM-dd"));
+        return Path.Combine(dir, $"session-{sessionId}.jsonl");
     }
 
     private static bool ShouldCaptureGcdEffect(
@@ -599,3 +636,5 @@ public sealed class CombatRecorder
         return actionGroup != 0 && actionGroup != gcdGroup;
     }
 }
+
+internal readonly record struct CombatRecorderSessionState(string SessionId, long FrameIndex, long SampleIndex);

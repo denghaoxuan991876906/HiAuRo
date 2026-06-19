@@ -136,6 +136,13 @@ public sealed class CombatRecorderTabPage : TabPageBase
                 rec.OpenLogDirectory();
 
             ImGui.SameLine();
+            if (CL.PrimaryButton("新录制", new Vector2(90, 0)))
+            {
+                rec.StartNewSession();
+                DService.Instance().Chat.Print("[HiAuRo] Combat Recorder 已切换到新的录制文件");
+            }
+
+            ImGui.SameLine();
             if (CL.PrimaryButton("打开日志阅读器", new Vector2(120, 0)))
                 MainWindow.OpenEditor(CombatRecorderViewerPageConfig.FileName);
 
