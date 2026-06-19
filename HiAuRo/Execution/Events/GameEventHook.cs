@@ -703,7 +703,17 @@ public sealed class GameEventHook
                 }
 
                 var castObj = DService.Instance().ObjectTable.SearchByID(sourceId);
-                if (castObj is not IPlayerCharacter)
+                if (ShouldPublishSelfCastStart(castObj is IPlayerCharacter, actionId))
+                {
+                    Fire(new SelfCastStartCondParams
+                    {
+                        SourceID = sourceId,
+                        SpellId = actionId,
+                        TotalCastTimeInSec = packet->CastTime,
+                        StartCastTime = nowMs
+                    });
+                }
+                else
                 {
                     Fire(new EnemyCastSpellCondParams
                     {
@@ -730,6 +740,12 @@ public sealed class GameEventHook
     }
 
     private static float ConvertCastCoord(ushort raw) => raw * 3.0518043f * 0.0099999998f - 1000.0f;
+
+    internal static bool ShouldPublishSelfCastStartForTests(bool isPlayerCharacter, uint actionId)
+        => ShouldPublishSelfCastStart(isPlayerCharacter, actionId);
+
+    private static bool ShouldPublishSelfCastStart(bool isPlayerCharacter, uint actionId)
+        => isPlayerCharacter && actionId != 0;
 
     #endregion
 

@@ -33,7 +33,6 @@ public sealed class CombatRecorder
     private bool _lastManualPauseApplied;
     private uint _lastEffectActionId;
     private long _lastEffectAt;
-    private uint _lastObservedCastActionId;
     private uint _pendingCastGcdActionId;
     private long _pendingCastGcdRecordedAt;
 
@@ -82,20 +81,10 @@ public sealed class CombatRecorder
             return;
         }
 
-        var now = Environment.TickCount64;
         var interval = Math.Clamp(PluginConfig.Instance.CombatRecorderSampleIntervalMs, 30, 50);
+        var now = Environment.TickCount64;
         if (now - _lastCacheAt < interval) return;
         _lastCacheAt = now;
-
-        var self = Data.Me.Object as IBattleChara;
-        var castActionId = self is { IsCasting: true } ? self.CastActionID : 0;
-        if (ShouldCaptureCastedGcdStart(_lastObservedCastActionId, castActionId, castActionId != 0 && IsAbilityAction(castActionId)))
-        {
-            _pendingCastGcdActionId = castActionId;
-            _pendingCastGcdRecordedAt = now;
-            CaptureEvent(CombatRecorderEventType.GcdReadyAndAction, castActionId, success: true);
-        }
-        _lastObservedCastActionId = castActionId;
 
         var snapshot = CaptureSnapshot(CombatRecorderEventType.Unknown, 0, success: null);
         snapshot.SampleRole = "cache";
@@ -149,6 +138,12 @@ public sealed class CombatRecorder
     {
         switch (p)
         {
+            case SelfCastStartCondParams sc when IsSelfSource(sc.SourceID):
+                if (IsAbilityAction(sc.SpellId)) break;
+                _pendingCastGcdActionId = sc.SpellId;
+                _pendingCastGcdRecordedAt = sc.StartCastTime;
+                CaptureEvent(CombatRecorderEventType.GcdReadyAndAction, sc.SpellId, success: true);
+                break;
             case ReceviceAbilityEffectCondParams ae when IsSelfSource(ae.SourceID):
                 if (IsDuplicateEffect(ae.ActionId)) break;
                 if (IsAbilityAction(ae.ActionId))
@@ -468,12 +463,6 @@ public sealed class CombatRecorder
         bool gcdJustActivated)
         => ShouldCaptureEvent(eventType, isAbilityAction, gcdJustActivated);
 
-    internal static bool ShouldCaptureCastedGcdStartForTests(
-        uint previousCastActionId,
-        uint currentCastActionId,
-        bool isAbilityAction)
-        => ShouldCaptureCastedGcdStart(previousCastActionId, currentCastActionId, isAbilityAction);
-
     internal static bool ShouldCaptureGcdEffectForTests(
         uint actionId,
         uint pendingCastGcdActionId,
@@ -495,20 +484,6 @@ public sealed class CombatRecorder
         };
     }
 
-    private static bool ShouldCaptureCastedGcdStart(
-        uint previousCastActionId,
-        uint currentCastActionId,
-        bool isAbilityAction)
-    {
-        if (currentCastActionId == 0)
-            return false;
-
-        if (isAbilityAction)
-            return false;
-
-        return previousCastActionId != currentCastActionId;
-    }
-
     private static bool ShouldCaptureGcdEffect(
         uint actionId,
         uint pendingCastGcdActionId,
@@ -526,7 +501,6 @@ public sealed class CombatRecorder
 
     private void ResetTransientState()
     {
-        _lastObservedCastActionId = 0;
         _pendingCastGcdActionId = 0;
         _pendingCastGcdRecordedAt = 0;
         _lastEffectActionId = 0;

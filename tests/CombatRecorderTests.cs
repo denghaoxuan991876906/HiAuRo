@@ -10,7 +10,6 @@ Test_EventWriter_上一帧模式最多写两条并共享事件组();
 Test_EventWriter_上一帧模式不污染缓存对象();
 Test_EventFilter_GCD只记录刷新GCD时机();
 Test_EventFilter_能力技只记录成功效果时机();
-Test_CastedGcdStart_新读条应只记录一次();
 Test_GcdEffectDedup_已记录读条起手后应忽略同action效果();
 Console.WriteLine("=== 全部通过 ===");
 
@@ -115,25 +114,6 @@ void Test_EventFilter_能力技只记录成功效果时机()
 
     if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.ActionRejected, isAbilityAction: true, gcdJustActivated: false))
         throw new Exception("ActionRejected 不应进入技能采样日志");
-}
-
-void Test_CastedGcdStart_新读条应只记录一次()
-{
-    if (!CombatRecorder.ShouldCaptureCastedGcdStartForTests(
-            previousCastActionId: 0,
-            currentCastActionId: 152,
-            isAbilityAction: false))
-    {
-        throw new Exception("新的 GCD 读条开始时应记录");
-    }
-
-    if (CombatRecorder.ShouldCaptureCastedGcdStartForTests(
-            previousCastActionId: 152,
-            currentCastActionId: 152,
-            isAbilityAction: false))
-    {
-        throw new Exception("同一条读条不应重复记录");
-    }
 }
 
 void Test_GcdEffectDedup_已记录读条起手后应忽略同action效果()

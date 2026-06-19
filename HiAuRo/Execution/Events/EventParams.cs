@@ -157,6 +157,17 @@ public sealed class EnemyCastSpellCondParams : ITriggerCondParams
         $"Spell={LogHelper.Action(SpellId)} Source={LogHelper.Entity(SourceID)} DataId={DataId} time={TotalCastTimeInSec:F1} pos={CastPos} rot={CastRot:F1}";
 }
 
+public sealed class SelfCastStartCondParams : ITriggerCondParams
+{
+    public uint SourceID;
+    public uint SpellId;
+    public float TotalCastTimeInSec;
+    public long StartCastTime;
+
+    public override string ToString() =>
+        $"Spell={LogHelper.Action(SpellId)} Source={LogHelper.Entity(SourceID)} time={TotalCastTimeInSec:F1}";
+}
+
 public sealed class NpcYellCondParams : ITriggerCondParams
 {
     public ulong sourceId;
