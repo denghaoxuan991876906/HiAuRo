@@ -1,11 +1,18 @@
 (function () {
     const state = {
         file: null,
+        fileHandle: null,
         fileName: "",
         warnings: [],
         rows: [],
+        originalRows: [],
         groups: [],
         selectedGroupId: null,
+        trim: {
+            startGroupId: null,
+            endGroupId: null,
+            previewActive: false
+        },
         filters: {
             eventType: "all",
             search: "",
@@ -18,7 +25,15 @@
         fileInput: document.getElementById("fileInput"),
         btnChoose: document.getElementById("btnChoose"),
         btnReload: document.getElementById("btnReload"),
+        btnSetStart: document.getElementById("btnSetStart"),
+        btnSetEnd: document.getElementById("btnSetEnd"),
+        btnPreviewTrim: document.getElementById("btnPreviewTrim"),
+        btnResetTrim: document.getElementById("btnResetTrim"),
+        btnSaveTrim: document.getElementById("btnSaveTrim"),
         fileName: document.getElementById("fileName"),
+        trimStartInfo: document.getElementById("trimStartInfo"),
+        trimEndInfo: document.getElementById("trimEndInfo"),
+        trimStatus: document.getElementById("trimStatus"),
         filterType: document.getElementById("filterType"),
         searchInput: document.getElementById("searchInput"),
         changedOnly: document.getElementById("changedOnly"),
@@ -38,16 +53,58 @@
     render();
 
     function bindEvents() {
-        refs.btnChoose.addEventListener("click", () => refs.fileInput.click());
+        refs.btnChoose.addEventListener("click", async () => {
+            if (window.showOpenFilePicker) {
+                try {
+                    const handles = await window.showOpenFilePicker({
+                        types: [{ description: "JSONL", accept: { "application/json": [".jsonl", ".txt"] } }]
+                    });
+                    const handle = handles[0];
+                    const file = await handle.getFile();
+                    await loadFile(file, handle);
+                    return;
+                } catch (error) {
+                    if (error && error.name === "AbortError") return;
+                }
+            }
+            refs.fileInput.click();
+        });
         refs.btnReload.addEventListener("click", async () => {
             if (!state.file) return;
-            await loadFile(state.file);
+            await loadFile(state.file, state.fileHandle);
         });
 
         refs.fileInput.addEventListener("change", async (event) => {
             const file = event.target.files && event.target.files[0];
             if (!file) return;
-            await loadFile(file);
+            await loadFile(file, null);
+        });
+
+        refs.btnSetStart.addEventListener("click", () => {
+            if (!state.selectedGroupId) return;
+            state.trim.startGroupId = state.selectedGroupId;
+            updateTrimUi();
+        });
+
+        refs.btnSetEnd.addEventListener("click", () => {
+            if (!state.selectedGroupId) return;
+            state.trim.endGroupId = state.selectedGroupId;
+            updateTrimUi();
+        });
+
+        refs.btnPreviewTrim.addEventListener("click", () => {
+            if (!canPreviewTrim()) return;
+            applyTrimPreview();
+        });
+
+        refs.btnResetTrim.addEventListener("click", () => {
+            resetTrimPreview();
+        });
+
+        refs.btnSaveTrim.addEventListener("click", async () => {
+            if (!state.trim.previewActive || !state.fileHandle) return;
+            if (!window.confirm("会直接覆盖当前原始日志文件，只保留当前预览范围内的数据。确认继续吗？")) return;
+            await saveTrimmedFile();
         });
 
         refs.filterType.addEventListener("change", () => {
@@ -89,17 +146,23 @@
         });
     }
 
-    async function loadFile(file) {
+    async function loadFile(file, fileHandle) {
         state.file = file;
+        state.fileHandle = fileHandle;
         state.fileName = file.name;
         const text = await file.text();
         const parsed = parseJsonl(text);
         state.warnings = parsed.warnings;
+        state.originalRows = parsed.rows;
         state.rows = parsed.rows;
-        state.groups = buildGroups(parsed.rows);
+        state.groups = buildGroups(state.rows);
         state.selectedGroupId = state.groups.length ? state.groups[0].eventGroupId : null;
+        state.trim.startGroupId = null;
+        state.trim.endGroupId = null;
+        state.trim.previewActive = false;
         refs.btnReload.disabled = false;
         ensureSelectedGroupVisible();
+        updateTrimUi();
         render();
     }
 
@@ -339,6 +402,7 @@
         renderTimeline();
         renderDetails();
         refs.fileName.textContent = state.fileName || "未选择文件";
+        updateTrimUi();
     }
 
     function renderStats() {
@@ -379,12 +443,16 @@
         const badgeClass = group.eventType === "AbilityEffect" ? "ability" : "gcd";
         const badgeText = group.eventType === "AbilityEffect" ? "Ability" : "GCD";
         const selectedClass = group.eventGroupId === state.selectedGroupId ? "selected" : "";
+        const isStart = state.trim.startGroupId === group.eventGroupId;
+        const isEnd = state.trim.endGroupId === group.eventGroupId;
+        const marker = isStart && isEnd ? "起/止" : isStart ? "起点" : isEnd ? "终点" : "";
         return `
             <button class="event-row ${selectedClass}" data-group-id="${escapeHtml(group.eventGroupId)}">
               <div class="event-head">
                 <div class="event-title">
                   <span class="event-badge ${badgeClass}">${badgeText}</span>
                   <span class="event-name">${escapeHtml(group.actionName || `Action ${group.actionId}`)}</span>
+                  ${marker ? `<span class="event-badge">${escapeHtml(marker)}</span>` : ""}
                 </div>
                 <span class="event-time">${escapeHtml(formatTime(group.timestamp))}</span>
               </div>
@@ -584,6 +652,92 @@
               ${content}
             </div>
         `;
+    }
+
+    function canPreviewTrim() {
+        return !!state.trim.startGroupId && !!state.trim.endGroupId && state.originalRows.length > 0;
+    }
+
+    function applyTrimPreview() {
+        if (!canPreviewTrim()) return;
+        const bounds = getTrimBounds();
+        state.rows = state.originalRows.filter((row) => {
+            const time = Date.parse(row.timestamp || "") || 0;
+            return time >= bounds.startTime && time <= bounds.endTime;
+        });
+        state.groups = buildGroups(state.rows);
+        state.trim.previewActive = true;
+        ensureSelectedGroupVisible();
+        render();
+    }
+
+    function resetTrimPreview() {
+        state.rows = state.originalRows.slice();
+        state.groups = buildGroups(state.rows);
+        state.trim.previewActive = false;
+        ensureSelectedGroupVisible();
+        render();
+    }
+
+    function getTrimBounds() {
+        const ordered = buildGroups(state.originalRows);
+        const startGroup = ordered.find((group) => group.eventGroupId === state.trim.startGroupId);
+        const endGroup = ordered.find((group) => group.eventGroupId === state.trim.endGroupId);
+        if (!startGroup || !endGroup) {
+            throw new Error("未找到截断范围边界事件组");
+        }
+
+        const startTime = Math.min(
+            Date.parse(startGroup.prev?.timestamp || "") || Number.MAX_SAFE_INTEGER,
+            Date.parse(startGroup.current?.timestamp || "") || Number.MAX_SAFE_INTEGER
+        );
+        const endTime = Math.max(
+            Date.parse(endGroup.prev?.timestamp || "") || 0,
+            Date.parse(endGroup.current?.timestamp || "") || 0
+        );
+
+        return startTime <= endTime
+            ? { startTime, endTime, startGroup, endGroup }
+            : { startTime: endTime, endTime: startTime, startGroup: endGroup, endGroup: startGroup };
+    }
+
+    async function saveTrimmedFile() {
+        const lines = state.rows.map((row) => JSON.stringify(row)).join("\n");
+        const writer = await state.fileHandle.createWritable();
+        await writer.write(lines + (lines ? "\n" : ""));
+        await writer.close();
+        const freshFile = await state.fileHandle.getFile();
+        await loadFile(freshFile, state.fileHandle);
+        refs.trimStatus.textContent = "已覆盖保存截断后的原文件";
+    }
+
+    function updateTrimUi() {
+        refs.btnSetStart.disabled = !state.selectedGroupId;
+        refs.btnSetEnd.disabled = !state.selectedGroupId;
+        refs.btnPreviewTrim.disabled = !canPreviewTrim();
+        refs.btnResetTrim.disabled = !state.trim.previewActive;
+        refs.btnSaveTrim.disabled = !state.trim.previewActive || !state.fileHandle;
+
+        refs.trimStartInfo.textContent = formatGroupSelection(state.trim.startGroupId);
+        refs.trimEndInfo.textContent = formatGroupSelection(state.trim.endGroupId);
+
+        if (state.trim.previewActive) {
+            refs.trimStatus.textContent = state.fileHandle
+                ? "当前为截断预览，可直接覆盖原文件"
+                : "当前为截断预览；如需覆盖原文件，请用支持写权限的方式重新打开";
+        } else if (canPreviewTrim()) {
+            refs.trimStatus.textContent = "已选择范围，可预览截断结果";
+        } else {
+            refs.trimStatus.textContent = "未选择截断范围";
+        }
+    }
+
+    function formatGroupSelection(groupId) {
+        if (!groupId) return "未设置";
+        const group = state.groups.find((item) => item.eventGroupId === groupId)
+            || buildGroups(state.originalRows).find((item) => item.eventGroupId === groupId);
+        if (!group) return groupId;
+        return `${formatTime(group.timestamp)} · ${group.actionName} · ${group.eventType}`;
     }
 
     function buildBuffMap(buffs) {

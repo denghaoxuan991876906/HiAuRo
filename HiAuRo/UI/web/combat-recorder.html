@@ -42,6 +42,32 @@
     <div class="summary-item"><span class="summary-label">警告</span><span id="statWarnings">0</span></div>
   </section>
 
+  <section class="trim-bar">
+    <div class="trim-card">
+      <div class="trim-header">
+        <div class="trim-title">截断工具</div>
+        <div class="trim-subtitle" id="trimStatus">未选择截断范围</div>
+      </div>
+      <div class="trim-grid">
+        <div class="trim-slot">
+          <div class="trim-label">开始事件组</div>
+          <div class="trim-value" id="trimStartInfo">未设置</div>
+        </div>
+        <div class="trim-slot">
+          <div class="trim-label">结束事件组</div>
+          <div class="trim-value" id="trimEndInfo">未设置</div>
+        </div>
+      </div>
+      <div class="trim-actions">
+        <button class="p-btn" id="btnSetStart" disabled>设为开始</button>
+        <button class="p-btn" id="btnSetEnd" disabled>设为结束</button>
+        <button class="p-btn" id="btnPreviewTrim" disabled>预览截断</button>
+        <button class="p-btn" id="btnResetTrim" disabled>重置预览</button>
+        <button class="p-btn p-prim-col" id="btnSaveTrim" disabled>覆盖保存</button>
+      </div>
+    </div>
+  </section>
+
   <main class="layout">
     <aside class="timeline-panel">
       <div class="panel-header">

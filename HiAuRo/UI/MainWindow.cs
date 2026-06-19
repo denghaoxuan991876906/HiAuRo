@@ -591,6 +591,6 @@ public sealed class MainWindow : Window
         var port = Plugin.Instance?._uiManager?.WebServerPort ?? 5678;
         var url = $"http://localhost:{port}/{fileName}";
         if (query != null) url += "?" + query;
-        try { System.Diagnostics.Process.Start("explorer.exe", url); } catch { }
+        try { System.Diagnostics.Process.Start(EditorLaunchHelper.Build(url)); } catch { }
     }
 }

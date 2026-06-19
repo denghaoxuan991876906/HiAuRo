@@ -117,6 +117,70 @@ select {
     padding: 0 18px 12px;
 }
 
+.trim-bar {
+    padding: 0 18px 12px;
+}
+
+.trim-card {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 14px 16px;
+}
+
+.trim-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.trim-title {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.trim-subtitle {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.trim-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.trim-slot {
+    padding: 12px;
+    border-radius: 10px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+}
+
+.trim-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+}
+
+.trim-value {
+    font-size: 13px;
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.trim-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
 .summary-item {
     min-width: 116px;
     padding: 10px 12px;
