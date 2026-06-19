@@ -12,7 +12,7 @@ public sealed class CombatRecorderTabPage : TabPageBase
     private readonly Action _saveConfig;
 
     public CombatRecorderTabPage(PluginConfig config, Action saveConfig)
-        : base("战斗录制", "recording", IconHelper.Icons.Clock)
+        : base("战斗录制", "combat_recording", IconHelper.Icons.Clock)
     {
         _config = config;
         _saveConfig = saveConfig;

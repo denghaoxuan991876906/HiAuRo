@@ -84,13 +84,7 @@ public sealed class MainWindow : Window
 
     // ── 固定模块定义 ──
 
-    private static readonly (string Name, string Icon, string[] Tabs)[] _modules = new[]
-    {
-        ("主控", IconHelper.Icons.Settings, new[] { "status", "settings" }),
-        ("ACR",  IconHelper.Icons.Settings, new[] { "acr_list", "acr_debug" }),
-        ("调试", IconHelper.Icons.Bug, new[] { "debug", "vfx_test" }),
-        ("副本", IconHelper.Icons.Clock, new[] { "recording" }),
-    };
+    private static IReadOnlyList<ModuleDefinition> Modules => MainWindowNavigation.Modules;
 
     // ── 绘制入口 ──
 
@@ -297,9 +291,12 @@ public sealed class MainWindow : Window
         using var sidebarSp = new ImRaii.StyleDisposable();
         sidebarSp.Push(ImGuiStyleVar.ItemSpacing, new Vector2(4, 4));
 
-        for (var i = 0; i < _modules.Length; i++)
+        var modules = Modules;
+        for (var i = 0; i < modules.Count; i++)
         {
-            var (name, icon, _) = _modules[i];
+            var module = modules[i];
+            var icon = ResolveModuleIcon(module.IconKey);
+            var name = module.Name;
             if (SidebarCard(name, icon, i == _selectedCardIndex && _selectedPluginName == null))
             {
                 _selectedCardIndex = i;
@@ -319,7 +316,7 @@ public sealed class MainWindow : Window
                 var version = record.Plugin.Version;
                 if (SidebarCard(name, IconHelper.Icons.Puzzle, isSelected, version))
                 {
-                    _selectedCardIndex = _modules.Length;
+                    _selectedCardIndex = modules.Count;
                     _selectedPluginName = pluginName;
                 }
             }
@@ -412,7 +409,8 @@ public sealed class MainWindow : Window
         {
             // 子tab 仅在多 tab 模块显示；单 tab 模块（如副本）直接画内容，
             // 避免与 TabPage 内部 sub-tab（如 TimelineTabPage 的录制/事实轴/...）重叠成两层 tab
-            var moduleTabs = _modules[Math.Clamp(_selectedCardIndex, 0, _modules.Length - 1)].Tabs;
+            var modules = Modules;
+            var moduleTabs = modules[Math.Clamp(_selectedCardIndex, 0, modules.Count - 1)].Tabs;
             if (moduleTabs.Length > 1)
             {
                 var displayNames = moduleTabs.Select(rk =>
@@ -433,8 +431,9 @@ public sealed class MainWindow : Window
 
     private bool IsDebugModule()
     {
-        var moduleIndex = Math.Clamp(_selectedCardIndex, 0, _modules.Length - 1);
-        return _modules[moduleIndex].Name == "调试";
+        var modules = Modules;
+        var moduleIndex = Math.Clamp(_selectedCardIndex, 0, modules.Count - 1);
+        return modules[moduleIndex].Name == "调试";
     }
 
     /// <summary>开发者工具启用入口（未启用时显示）。</summary>
@@ -474,11 +473,19 @@ public sealed class MainWindow : Window
 
     private TabPageBase? GetCurrentTab()
     {
-        var moduleIndex = Math.Clamp(_selectedCardIndex, 0, _modules.Length - 1);
-        var tabIndex = Math.Clamp(_selectedTabIndex, 0, _modules[moduleIndex].Tabs.Length - 1);
-        var routeKey = _modules[moduleIndex].Tabs[tabIndex];
+        var modules = Modules;
+        var moduleIndex = Math.Clamp(_selectedCardIndex, 0, modules.Count - 1);
+        var tabIndex = Math.Clamp(_selectedTabIndex, 0, modules[moduleIndex].Tabs.Length - 1);
+        var routeKey = modules[moduleIndex].Tabs[tabIndex];
         return _tabPages.FirstOrDefault(t => t.RouteKey == routeKey);
     }
+
+    private static string ResolveModuleIcon(string iconKey) => iconKey switch
+    {
+        "bug" => IconHelper.Icons.Bug,
+        "clock" => IconHelper.Icons.Clock,
+        _ => IconHelper.Icons.Settings
+    };
 
     private void DrawPluginContent()
     {
