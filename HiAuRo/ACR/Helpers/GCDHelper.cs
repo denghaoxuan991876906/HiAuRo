@@ -20,15 +20,20 @@ public static class GCDHelper
         return Math.Max(0, detail->Total - detail->Elapsed) * 1000f;
     }
 
-    /// <summary>GCD 动态时长 (ms) —— 受技能速度/职业特性影响</summary>
-    public static unsafe float GetGCDDuration()
+    /// <summary>GCD 动态时长 (ms) —— 受技能速度/职业特性影响，默认用技能 9 的复唱组</summary>
+    public static unsafe float GetGCDDuration(uint actionId = 9)
     {
         var am = ActionManager.Instance();
         if (am == null) return 2500f;
 
-        var recastGroup = am->GetRecastGroup((int)ActionType.Action, 9);
+        var recastGroup = ResolveRecastGroupForDuration(
+            id => am->GetRecastGroup((int)ActionType.Action, id),
+            actionId);
         return am->GetRecastTimeForGroup(recastGroup) * 1000f;
     }
+
+    internal static int ResolveRecastGroupForDuration(Func<uint, int> getRecastGroup, uint actionId = 9)
+        => getRecastGroup(actionId);
 
     /// <summary>GCD 是否可预输入 (剩余时间 &lt;= ActionQueueInMs)，含咏唱中检查、初始状态</summary>
     public static bool CanUseGCD()

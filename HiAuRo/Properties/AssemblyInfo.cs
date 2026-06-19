@@ -7,3 +7,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("CombatRecorderViewerTests")]
 [assembly: InternalsVisibleTo("GameEventHookTests")]
 [assembly: InternalsVisibleTo("SpellCastCallbackTests")]
+[assembly: InternalsVisibleTo("GCDHelperTests")]
