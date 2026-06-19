@@ -24,3 +24,5 @@ opencode.json
 skills-lock.json
 /tools/log-viewer
 /.worktrees
+/Recordings
+/tests
