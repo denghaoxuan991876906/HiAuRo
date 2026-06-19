@@ -35,6 +35,8 @@ public sealed class CombatRecorder
     private long _lastEffectAt;
     private bool _lastGcdActive;
     private float _lastObservedGcdCooldownMs;
+    private uint _lastRecordedManualGcdActionId;
+    private long _lastRecordedManualGcdAt;
 
     private CombatRecorder() { }
 
@@ -138,9 +140,35 @@ public sealed class CombatRecorder
 
     private void OnUseAction(EventSystem.UseActionEvent ev)
     {
-        if (ev is { Result: true, ActionId: not 0, ActionType: ActionTypeFF.Action }
-            && ShouldCaptureEvent(CombatRecorderEventType.UseActionSuccess, IsAbilityAction(ev.ActionId), gcdJustActivated: false))
-            CaptureEvent(CombatRecorderEventType.UseActionSuccess, ev.ActionId, success: true);
+        if (ev is not { Result: true, ActionId: not 0, ActionType: ActionTypeFF.Action })
+            return;
+
+        var isAbilityAction = IsAbilityAction(ev.ActionId);
+        if (!ShouldCaptureEvent(CombatRecorderEventType.UseActionSuccess, isAbilityAction, gcdJustActivated: false))
+            return;
+
+        if (!isAbilityAction
+            && PluginConfig.Instance.CombatRecorderSourceMode == CombatRecorderSourceMode.Manual)
+        {
+            var gcdCooldown = GCDHelper.GetGCDCooldown();
+            var gcdDuration = GCDHelper.GetGCDDuration();
+            var nowTicks = Environment.TickCount64;
+            if (!ShouldCaptureManualGcdUse(
+                    ev.ActionId,
+                    _lastRecordedManualGcdActionId,
+                    _lastRecordedManualGcdAt,
+                    nowTicks,
+                    gcdCooldown,
+                    gcdDuration))
+            {
+                return;
+            }
+
+            _lastRecordedManualGcdActionId = ev.ActionId;
+            _lastRecordedManualGcdAt = nowTicks;
+        }
+
+        CaptureEvent(CombatRecorderEventType.UseActionSuccess, ev.ActionId, success: true);
     }
 
     private void OnGameEvent(ITriggerCondParams p)
@@ -467,6 +495,21 @@ public sealed class CombatRecorder
             currentGcdCooldownMs,
             currentGcdDurationMs);
 
+    internal static bool ShouldCaptureManualGcdUseForTests(
+        uint actionId,
+        uint lastRecordedActionId,
+        long lastRecordedAtTicks,
+        long nowTicks,
+        float gcdCooldownMs,
+        float gcdDurationMs)
+        => ShouldCaptureManualGcdUse(
+            actionId,
+            lastRecordedActionId,
+            lastRecordedAtTicks,
+            nowTicks,
+            gcdCooldownMs,
+            gcdDurationMs);
+
     private static bool ShouldCaptureEvent(
         CombatRecorderEventType eventType,
         bool isAbilityAction,
@@ -503,10 +546,32 @@ public sealed class CombatRecorder
         return currentGcdCooldownMs >= currentGcdDurationMs - 100f;
     }
 
+    private static bool ShouldCaptureManualGcdUse(
+        uint actionId,
+        uint lastRecordedActionId,
+        long lastRecordedAtTicks,
+        long nowTicks,
+        float gcdCooldownMs,
+        float gcdDurationMs)
+    {
+        if (gcdDurationMs <= 0f)
+            return false;
+
+        if (gcdCooldownMs < gcdDurationMs - 100f)
+            return false;
+
+        if (lastRecordedActionId != actionId)
+            return true;
+
+        return nowTicks - lastRecordedAtTicks >= 250;
+    }
+
     private void ResetTransientState()
     {
         _lastGcdActive = false;
         _lastObservedGcdCooldownMs = 0f;
+        _lastRecordedManualGcdActionId = 0;
+        _lastRecordedManualGcdAt = 0;
         _lastEffectActionId = 0;
         _lastEffectAt = 0;
     }

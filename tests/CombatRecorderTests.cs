@@ -11,6 +11,7 @@ Test_EventWriter_上一帧模式不污染缓存对象();
 Test_EventFilter_GCD只记录刷新GCD时机();
 Test_EventFilter_能力技只记录成功效果时机();
 Test_GcdStartDetection_错过边沿时仍能识别新GCD();
+Test_GcdDedup_手动连点同一gcd只应记录一次();
 Console.WriteLine("=== 全部通过 ===");
 
 void Test_RingBuffer_只保留最近帧并能取上一帧()
@@ -136,6 +137,42 @@ void Test_GcdStartDetection_错过边沿时仍能识别新GCD()
             currentGcdDurationMs: 2457))
     {
         throw new Exception("普通 GCD 倒计时推进不应被误判为新 GCD");
+    }
+}
+
+void Test_GcdDedup_手动连点同一gcd只应记录一次()
+{
+    if (!CombatRecorder.ShouldCaptureManualGcdUseForTests(
+            actionId: 152,
+            lastRecordedActionId: 0,
+            lastRecordedAtTicks: 0,
+            nowTicks: 1000,
+            gcdCooldownMs: 2457,
+            gcdDurationMs: 2457))
+    {
+        throw new Exception("首次手动 GCD 成功应记录");
+    }
+
+    if (CombatRecorder.ShouldCaptureManualGcdUseForTests(
+            actionId: 152,
+            lastRecordedActionId: 152,
+            lastRecordedAtTicks: 1000,
+            nowTicks: 1100,
+            gcdCooldownMs: 2400,
+            gcdDurationMs: 2457))
+    {
+        throw new Exception("同一 GCD 窗口内手动连点不应重复记录");
+    }
+
+    if (!CombatRecorder.ShouldCaptureManualGcdUseForTests(
+            actionId: 3577,
+            lastRecordedActionId: 152,
+            lastRecordedAtTicks: 1000,
+            nowTicks: 4000,
+            gcdCooldownMs: 2457,
+            gcdDurationMs: 2457))
+    {
+        throw new Exception("新的 GCD 窗口应允许记录新的技能");
     }
 }
 
