@@ -38,7 +38,11 @@ public static class EventSystem
     /// <summary>去重：自记录 ID 集合，防止 OnPostUseAction 同 ID 二次覆盖</summary>
     private static readonly HashSet<uint> _selfRecordedIds = [];
 
-    /// <summary>SlotExecutor 自行调用的记录入口（绕过 OmenTools Hook）</summary>
+    /// <summary>
+    /// SlotExecutor 自行调用的记录入口（绕过 OmenTools Hook）。
+    /// 调用时机是 UseAction 返回成功或检测到已排队；因此 RecentlyUsed 记录的是提交时间，
+    /// 不是读条完成时间，也不是服务端 ActionEffect 结算时间。
+    /// </summary>
     public static void OnUseActionSuccess(uint actionId, HiAuRo.ACR.SpellType spellType)
     {
         _selfRecordedIds.Add(actionId);

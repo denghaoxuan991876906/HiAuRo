@@ -3,19 +3,20 @@ namespace HiAuRo.ACR;
 /// <summary>
 /// 技能使用历史跟踪 —— 记录每个技能最近一次成功执行的时间
 /// ACR 作者通过 Check() 中判断 RecentlyUsed() 避免重复释放
+/// 注意：这里的“使用”时间来自 UseAction 成功/排队确认，不是读条完成或 ActionEffect 结算。
 /// </summary>
 public static class SpellHistoryHelper
 {
     /// <summary>技能最后使用时间戳 (DateTime.Ticks)</summary>
     private static readonly Dictionary<uint, long> _history = [];
 
-    /// <summary>记录技能使用</summary>
+    /// <summary>记录技能提交/排队确认时间，供 RecentlyUsed 查询。</summary>
     public static void RecordSpell(uint spellId)
     {
         _history[spellId] = DateTime.Now.Ticks;
     }
 
-    /// <summary>技能是否在指定毫秒内使用过</summary>
+    /// <summary>技能是否在指定毫秒内提交/排队确认过。</summary>
     public static bool RecentlyUsed(uint spellId, int withinMs = 500)
     {
         if (!_history.TryGetValue(spellId, out var lastTick))
