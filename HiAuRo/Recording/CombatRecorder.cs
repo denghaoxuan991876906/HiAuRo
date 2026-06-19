@@ -29,13 +29,11 @@ public sealed class CombatRecorder
     private long _sampleIndex;
     private long _frameIndex;
     private long _lastCacheAt;
-    private uint _lastQueuedActionId;
-    private uint _lastCastActionId;
-    private bool _lastGcdReady = true;
     private bool _initialized;
     private bool _lastManualPauseApplied;
     private uint _lastEffectActionId;
     private long _lastEffectAt;
+    private bool _lastGcdActive;
 
     private CombatRecorder() { }
 
@@ -78,6 +76,7 @@ public sealed class CombatRecorder
         if (!IsEnabledForCurrentState())
         {
             _frames.Clear();
+            ResetTransientState();
             return;
         }
 
@@ -86,30 +85,11 @@ public sealed class CombatRecorder
         if (now - _lastCacheAt < interval) return;
         _lastCacheAt = now;
 
-        var queued = ReadQueuedActionId();
-        if (_lastQueuedActionId != queued)
-        {
-            _lastQueuedActionId = queued;
-            if (queued != 0)
-                CaptureEvent(CombatRecorderEventType.QueuedActionChanged, queued, success: null);
-        }
-
-        var self = Data.Me.Object as IBattleChara;
-        var castAction = self is { IsCasting: true } ? self.CastActionID : 0;
-        if (castAction != 0 && castAction != _lastCastActionId)
-        {
-            _lastCastActionId = castAction;
-            CaptureEvent(CombatRecorderEventType.CastStart, castAction, success: null);
-        }
-        else if (castAction == 0)
-        {
-            _lastCastActionId = 0;
-        }
-
-        var gcdReady = GCDHelper.IsGCDReady();
-        if (!_lastGcdReady && gcdReady && EventSystem.LastCompletedActionId != 0)
+        var gcdActive = GCDHelper.IsGCDActive();
+        var gcdJustActivated = !_lastGcdActive && gcdActive;
+        if (ShouldCaptureEvent(CombatRecorderEventType.GcdReadyAndAction, isAbilityAction: false, gcdJustActivated))
             CaptureEvent(CombatRecorderEventType.GcdReadyAndAction, EventSystem.LastCompletedActionId, success: true);
-        _lastGcdReady = gcdReady;
+        _lastGcdActive = gcdActive;
 
         var snapshot = CaptureSnapshot(CombatRecorderEventType.Unknown, 0, success: null);
         snapshot.SampleRole = "cache";
@@ -149,7 +129,8 @@ public sealed class CombatRecorder
 
     private void OnUseAction(EventSystem.UseActionEvent ev)
     {
-        if (ev is { Result: true, ActionId: not 0, ActionType: ActionTypeFF.Action })
+        if (ev is { Result: true, ActionId: not 0, ActionType: ActionTypeFF.Action }
+            && ShouldCaptureEvent(CombatRecorderEventType.UseActionSuccess, IsAbilityAction(ev.ActionId), gcdJustActivated: false))
             CaptureEvent(CombatRecorderEventType.UseActionSuccess, ev.ActionId, success: true);
     }
 
@@ -159,23 +140,15 @@ public sealed class CombatRecorder
         {
             case ReceviceAbilityEffectCondParams ae when IsSelfSource(ae.SourceID):
                 if (IsDuplicateEffect(ae.ActionId)) break;
-                CaptureEvent(
-                    IsAbilityAction(ae.ActionId) ? CombatRecorderEventType.AbilityEffect : CombatRecorderEventType.ActionEffect,
-                    ae.ActionId,
-                    success: true);
+                if (!IsAbilityAction(ae.ActionId)) break;
+                if (!ShouldCaptureEvent(CombatRecorderEventType.AbilityEffect, isAbilityAction: true, gcdJustActivated: false)) break;
+                CaptureEvent(CombatRecorderEventType.AbilityEffect, ae.ActionId, success: true);
                 break;
             case ReceviceNoTargetAbilityEffectCondParams ne when IsSelfSource(ne.SourceID):
                 if (IsDuplicateEffect(ne.ActionId)) break;
-                CaptureEvent(
-                    IsAbilityAction(ne.ActionId) ? CombatRecorderEventType.AbilityEffect : CombatRecorderEventType.ActionEffect,
-                    ne.ActionId,
-                    success: true);
-                break;
-            case ActorControlParams ac when IsSelfSource(ac.SourceID) && ac.Command == 15:
-                CaptureEvent(CombatRecorderEventType.CastCancelled, ac.P3, success: false, cancelled: true);
-                break;
-            case ActorControlParams ac when IsSelfSource(ac.SourceID) && ac.Command == 700:
-                CaptureEvent(CombatRecorderEventType.ActionRejected, ac.P3, success: false);
+                if (!IsAbilityAction(ne.ActionId)) break;
+                if (!ShouldCaptureEvent(CombatRecorderEventType.AbilityEffect, isAbilityAction: true, gcdJustActivated: false)) break;
+                CaptureEvent(CombatRecorderEventType.AbilityEffect, ne.ActionId, success: true);
                 break;
         }
     }
@@ -465,6 +438,32 @@ public sealed class CombatRecorder
     }
 
     private static bool IsSelfSource(uint sourceId) => sourceId == (Data.Me.Object?.EntityID ?? 0);
+
+    internal static bool ShouldCaptureEventForTests(
+        CombatRecorderEventType eventType,
+        bool isAbilityAction,
+        bool gcdJustActivated)
+        => ShouldCaptureEvent(eventType, isAbilityAction, gcdJustActivated);
+
+    private static bool ShouldCaptureEvent(
+        CombatRecorderEventType eventType,
+        bool isAbilityAction,
+        bool gcdJustActivated)
+    {
+        return eventType switch
+        {
+            CombatRecorderEventType.AbilityEffect => isAbilityAction,
+            CombatRecorderEventType.GcdReadyAndAction => !isAbilityAction && gcdJustActivated,
+            _ => false
+        };
+    }
+
+    private void ResetTransientState()
+    {
+        _lastGcdActive = false;
+        _lastEffectActionId = 0;
+        _lastEffectAt = 0;
+    }
 
     private bool IsDuplicateEffect(uint actionId)
     {

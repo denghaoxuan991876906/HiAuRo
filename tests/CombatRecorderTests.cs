@@ -8,6 +8,8 @@ Test_RingBuffer_只保留最近帧并能取上一帧();
 Test_EventWriter_默认只写事件帧();
 Test_EventWriter_上一帧模式最多写两条并共享事件组();
 Test_EventWriter_上一帧模式不污染缓存对象();
+Test_EventFilter_GCD只记录刷新GCD时机();
+Test_EventFilter_能力技只记录成功效果时机();
 Console.WriteLine("=== 全部通过 ===");
 
 void Test_RingBuffer_只保留最近帧并能取上一帧()
@@ -81,6 +83,36 @@ void Test_EventWriter_上一帧模式不污染缓存对象()
         throw new Exception("prev 输出应复制缓存快照，不能直接复用 ring buffer 对象");
     if (cached.SampleRole != "cache" || cached.EventGroupId != "")
         throw new Exception($"缓存对象被污染：role={cached.SampleRole}, group={cached.EventGroupId}");
+}
+
+void Test_EventFilter_GCD只记录刷新GCD时机()
+{
+    if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.UseActionSuccess, isAbilityAction: false, gcdJustActivated: false))
+        throw new Exception("GCD 不应在按下技能时的 UseActionSuccess 直接记录");
+
+    if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.ActionEffect, isAbilityAction: false, gcdJustActivated: false))
+        throw new Exception("GCD 不应在 ActionEffect 时重复记录");
+
+    if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.CastStart, isAbilityAction: false, gcdJustActivated: false))
+        throw new Exception("GCD 不应在 CastStart 时记录");
+
+    if (!CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.GcdReadyAndAction, isAbilityAction: false, gcdJustActivated: true))
+        throw new Exception("GCD 应只在真正刷新 GCD 计时器时记录");
+}
+
+void Test_EventFilter_能力技只记录成功效果时机()
+{
+    if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.UseActionSuccess, isAbilityAction: true, gcdJustActivated: false))
+        throw new Exception("能力技不应在 UseActionSuccess 提前记录");
+
+    if (!CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.AbilityEffect, isAbilityAction: true, gcdJustActivated: false))
+        throw new Exception("能力技应在成功效果时记录");
+
+    if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.QueuedActionChanged, isAbilityAction: true, gcdJustActivated: false))
+        throw new Exception("QueuedActionChanged 不应落盘");
+
+    if (CombatRecorder.ShouldCaptureEventForTests(CombatRecorderEventType.ActionRejected, isAbilityAction: true, gcdJustActivated: false))
+        throw new Exception("ActionRejected 不应进入技能采样日志");
 }
 
 static CombatFrameSnapshot MakeSnapshot(long sampleIndex, string role)
