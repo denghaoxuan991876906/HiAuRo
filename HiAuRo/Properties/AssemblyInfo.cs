@@ -8,3 +8,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("GameEventHookTests")]
 [assembly: InternalsVisibleTo("SpellCastCallbackTests")]
 [assembly: InternalsVisibleTo("GCDHelperTests")]
+[assembly: InternalsVisibleTo("CombatCommandTests")]

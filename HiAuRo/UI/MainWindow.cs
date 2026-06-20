@@ -37,6 +37,8 @@ public sealed class MainWindow : Window
         [
             new StatusTabPage(_config, _saveConfig),
             new SettingsTabPage(_config, _saveConfig),
+            new CombatSettingsTabPage(_config, _saveConfig),
+            new CommandHelpTabPage(),
             new DebugTabPage(),
             new AcrListTabPage(_config, _saveConfig),
             new AcrDebugTabPage(),

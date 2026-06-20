@@ -12,7 +12,7 @@ public static class CommandMgr
 {
     private const string MainCommand = "/hi";
 
-    public static void ApplyCombatCommandForTests(PluginConfig cfg, string rawArgs)
+    internal static void ApplyCombatCommandForTests(PluginConfig cfg, string rawArgs)
     {
         ApplyCombatCommandCore(cfg, rawArgs, null);
     }
