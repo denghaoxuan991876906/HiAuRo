@@ -1,5 +1,6 @@
 using HiAuRo.Infrastructure;
 using HiAuRo.ImGuiLib;
+using HiAuRo.Rendering;
 using HiAuRo.Runtime;
 using CL = HiAuRo.ImGuiLib.ComponentLibrary;
 
@@ -20,7 +21,47 @@ public sealed class CombatSettingsTabPage : TabPageBase
     public override void DrawContent()
     {
         ImGui.Spacing();
-        CL.Card("基础参数", () => { });
+        CL.Card("基础参数", () =>
+        {
+            var aq = _config.ActionQueueInMs;
+            var maxAb = _config.MaxAbilityTimesInGcd;
+            var abInterval = _config.AbilityIntervalMs;
+            var aoe = _config.AoeCount;
+            var changed = false;
+
+            CL.FormRow("技能队列窗口 (ms)", () =>
+            {
+                ImGui.SetNextItemWidth(120);
+                changed |= ImGui.InputInt("##combat_aq_window", ref aq, 50, 100);
+            });
+
+            CL.FormRow("GCD 内能力技次数", () =>
+            {
+                ImGui.SetNextItemWidth(120);
+                changed |= ImGui.InputInt("##combat_max_ability_times", ref maxAb);
+            });
+
+            CL.FormRow("能力技间隔 (ms)", () =>
+            {
+                ImGui.SetNextItemWidth(120);
+                changed |= ImGui.InputInt("##combat_ability_interval", ref abInterval, 50, 100);
+            });
+
+            CL.FormRow("AOE 判定人数", () =>
+            {
+                ImGui.SetNextItemWidth(120);
+                changed |= ImGui.InputInt("##combat_aoe_count", ref aoe);
+            });
+
+            if (changed)
+            {
+                _config.ActionQueueInMs = aq;
+                _config.MaxAbilityTimesInGcd = maxAb;
+                _config.AbilityIntervalMs = abInterval;
+                _config.AoeCount = aoe;
+                _saveConfig();
+            }
+        });
         CL.Card("目标选择器", () =>
         {
             var tgtChanged = false;
@@ -76,7 +117,74 @@ public sealed class CombatSettingsTabPage : TabPageBase
                 _saveConfig();
             }
         });
-        CL.Card("战斗增强", () => { });
-        CL.Card("身位显示", () => { });
+        CL.Card("战斗增强", () =>
+        {
+            var enableSkillRangeExtension = _config.EnableSkillRangeExtension;
+            var skillRangeExtension = _config.SkillRangeExtension;
+            var enableAntiKnockback = _config.EnableAntiKnockback;
+            var enableNoDashDisplacement = _config.EnableNoDashDisplacement;
+            var noDashMode = (int)_config.NoDashDisplacementFilterMode;
+            var enableAnimationLockClamp = _config.EnableAnimationLockClamp;
+            var animationLockClampSeconds = _config.AnimationLockClampSeconds;
+            var changed = false;
+
+            changed |= CL.Switch("combat_enhance_range_ext", "启用技能距离扩展", ref enableSkillRangeExtension);
+
+            CL.FormRow("技能距离扩展值", () =>
+            {
+                ImGui.SetNextItemWidth(120);
+                changed |= ImGui.InputFloat("##combat_skill_range_extension", ref skillRangeExtension, 0.5f, 1.0f, "%.1f");
+            });
+
+            changed |= CL.Switch("combat_enhance_anti_knockback", "启用防击退", ref enableAntiKnockback);
+            changed |= CL.Switch("combat_enhance_no_dash_displacement", "启用冲锋不位移", ref enableNoDashDisplacement);
+
+            var noDashModeNames = Enum.GetNames<NoDashDisplacementFilterMode>();
+            if (CL.Select("combat_no_dash_filter_mode", "冲锋不位移过滤模式", ref noDashMode, noDashModeNames))
+                changed = true;
+
+            changed |= CL.Switch("combat_enhance_animlock_clamp", "启用动画锁清理", ref enableAnimationLockClamp);
+
+            CL.FormRow("动画锁清理值 (秒)", () =>
+            {
+                ImGui.SetNextItemWidth(120);
+                changed |= ImGui.InputFloat("##combat_animlock_clamp_seconds", ref animationLockClampSeconds, 0.1f, 0.5f, "%.1f");
+            });
+
+            if (changed)
+            {
+                _config.EnableSkillRangeExtension = enableSkillRangeExtension;
+                _config.SkillRangeExtension = skillRangeExtension;
+                _config.EnableAntiKnockback = enableAntiKnockback;
+                _config.EnableNoDashDisplacement = enableNoDashDisplacement;
+                _config.NoDashDisplacementFilterMode = (NoDashDisplacementFilterMode)noDashMode;
+                _config.EnableAnimationLockClamp = enableAnimationLockClamp;
+                _config.AnimationLockClampSeconds = animationLockClampSeconds;
+                _saveConfig();
+                CombatEnhancementManager.Instance.SyncFromConfig(_config);
+            }
+        });
+        CL.Card("身位显示", () =>
+        {
+            var showPos = _config.ShowPositional;
+            var showHitbox = _config.ShowTargetHitbox;
+            var showAutoAttackRange = _config.ShowAutoAttackRange;
+            var changed = false;
+
+            changed |= CL.Switch("combat_show_positional", "显示身位提示", ref showPos);
+            changed |= CL.Switch("combat_show_target_hitbox", "显示目标可攻击范围", ref showHitbox);
+            changed |= CL.Switch("combat_show_auto_attack_range", "显示自动攻击范围", ref showAutoAttackRange);
+
+            if (changed)
+            {
+                _config.ShowPositional = showPos;
+                _config.ShowTargetHitbox = showHitbox;
+                _config.ShowAutoAttackRange = showAutoAttackRange;
+                if (!showPos)
+                    PositionalVfx.Clear();
+
+                _saveConfig();
+            }
+        });
     }
 }
