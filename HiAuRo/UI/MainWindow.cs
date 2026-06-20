@@ -588,6 +588,26 @@ public sealed class MainWindow : Window
         _ => type.ToString()
     };
 
+    public void OpenRoute(string routeKey)
+    {
+        _selectedPluginName = null;
+
+        var modules = Modules;
+        for (var i = 0; i < modules.Count; i++)
+        {
+            var tabIndex = Array.IndexOf(modules[i].Tabs, routeKey);
+            if (tabIndex < 0) continue;
+
+            _selectedCardIndex = i;
+            _selectedTabIndex = tabIndex;
+            _lastCardIndex = i;
+            IsOpen = true;
+            return;
+        }
+
+        IsOpen = true;
+    }
+
     public static void OpenEditor(string fileName, string? query = null)
     {
         var port = Plugin.Instance?._uiManager?.WebServerPort ?? 5678;

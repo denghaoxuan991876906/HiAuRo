@@ -13,7 +13,7 @@ public sealed class CombatEnhancementManager
     private readonly AnimationLockClampService _animlock = new();
     private bool _initialized;
 
-    public void Init()
+    public void Init(PluginConfig config)
     {
         if (_initialized)
             return;
@@ -23,11 +23,14 @@ public sealed class CombatEnhancementManager
         _dash.Init();
         _animlock.Init();
         _initialized = true;
-        SyncFromConfig(PluginConfig.Instance);
+        SyncFromConfig(config);
     }
 
     public void SyncFromConfig(PluginConfig config)
     {
+        if (!_initialized)
+            return;
+
         _range.SyncFromConfig(config);
         _knockback.SyncFromConfig(config);
         _dash.SyncFromConfig(config);

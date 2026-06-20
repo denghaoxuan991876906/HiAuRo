@@ -10,6 +10,8 @@ Test_战斗增强命令_范围值应可更新配置();
 Test_战斗增强命令_动画锁值应可更新配置();
 Test_战斗增强命令_可切换冲锋过滤模式();
 Test_战斗增强命令_可添加和移除冲锋技能();
+Test_战斗增强命令_可切换技能距离扩展开关();
+Test_战斗增强命令_可切换防击退与动画锁开关();
 Console.WriteLine("=== 全部通过 ===");
 
 void Test_战斗增强_默认配置应可实例化()
@@ -64,4 +66,32 @@ void Test_战斗增强命令_可添加和移除冲锋技能()
     CommandMgr.ApplyCombatCommandForTests(config, "dash remove 123");
     if (config.NoDashDisplacementActionIds.Contains(123u))
         throw new Exception("dash remove 123 应移除技能");
+}
+
+void Test_战斗增强命令_可切换技能距离扩展开关()
+{
+    var config = new PluginConfig();
+    CommandMgr.ApplyCombatCommandForTests(config, "range on");
+    if (!config.EnableSkillRangeExtension)
+        throw new Exception("range on 应启用技能距离扩展");
+
+    CommandMgr.ApplyCombatCommandForTests(config, "range toggle");
+    if (config.EnableSkillRangeExtension)
+        throw new Exception("range toggle 应切换技能距离扩展开关");
+}
+
+void Test_战斗增强命令_可切换防击退与动画锁开关()
+{
+    var config = new PluginConfig();
+    CommandMgr.ApplyCombatCommandForTests(config, "knockback on");
+    if (!config.EnableAntiKnockback)
+        throw new Exception("knockback on 应启用防击退");
+
+    CommandMgr.ApplyCombatCommandForTests(config, "animlock on");
+    if (!config.EnableAnimationLockClamp)
+        throw new Exception("animlock on 应启用动画锁清理");
+
+    CommandMgr.ApplyCombatCommandForTests(config, "animlock toggle");
+    if (config.EnableAnimationLockClamp)
+        throw new Exception("animlock toggle 应切换动画锁清理开关");
 }

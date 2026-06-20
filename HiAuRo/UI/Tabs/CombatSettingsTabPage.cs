@@ -30,6 +30,8 @@ public sealed class CombatSettingsTabPage : TabPageBase
             var maxAb = _config.MaxAbilityTimesInGcd;
             var abInterval = _config.AbilityIntervalMs;
             var aoe = _config.AoeCount;
+            var debug = _config.DebugEnabled;
+            var selfAxisRole = (int)_config.SelfAxisRole;
             var changed = false;
 
             CL.FormRow("技能队列窗口 (ms)", () =>
@@ -56,12 +58,23 @@ public sealed class CombatSettingsTabPage : TabPageBase
                 changed |= ImGui.InputInt("##combat_aoe_count", ref aoe);
             });
 
+            CL.FormRow("Debug 日志", () =>
+            {
+                changed |= CL.Switch("combat_debug_log", ref debug);
+            });
+
+            var selfAxisRoleNames = Enum.GetNames<AxisRole>();
+            if (CL.Select("combat_self_axis_role", "全轴自身职能", ref selfAxisRole, selfAxisRoleNames))
+                changed = true;
+
             if (changed)
             {
                 _config.ActionQueueInMs = aq;
                 _config.MaxAbilityTimesInGcd = maxAb;
                 _config.AbilityIntervalMs = abInterval;
                 _config.AoeCount = aoe;
+                _config.DebugEnabled = debug;
+                _config.SelfAxisRole = (AxisRole)selfAxisRole;
                 _saveConfig();
             }
         });

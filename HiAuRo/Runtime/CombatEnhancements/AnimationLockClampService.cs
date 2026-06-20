@@ -75,6 +75,7 @@ public unsafe sealed class AnimationLockClampService
 
     private void ActionManagerUpdateDetour(ActionManager* actionManager)
     {
+        ClampAnimationLock(actionManager);
         _actionManagerUpdateHook!.Original(actionManager);
         ClampAnimationLock(actionManager);
     }
@@ -87,6 +88,12 @@ public unsafe sealed class AnimationLockClampService
         ActionEffectHandler.TargetEffects* effects,
         GameObjectId* targets)
     {
+        if (_enabled && header != null)
+        {
+            header->AnimationLock = MathF.Min(header->AnimationLock, _clampValue);
+            header->Flags = (byte)(header->Flags & ~2);
+        }
+
         _processPacketActionEffectHook!.Original(casterEntityId, caster, targetPos, header, effects, targets);
         ClampAnimationLock(ActionManager.Instance());
     }

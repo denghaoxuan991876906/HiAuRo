@@ -77,9 +77,9 @@ public partial class Plugin : IDalamudPlugin
             }
 
             CommandMgr.Init();
-            CombatEnhancementManager.Instance.Init();
             EventSystem.Init();
             GameEventHook.Instance.Init();
+            CombatEnhancementManager.Instance.Init(_config);
             ScriptManager.SetHostDllPath(_pluginInterface.AssemblyLocation.Directory?.FullName ?? "");
             ScriptEngine.Instance.Init();
             EncounterRecorder.Instance.Init();
@@ -255,9 +255,9 @@ public partial class Plugin : IDalamudPlugin
         EncounterRecorder.Instance.Shutdown();
         ScriptEngine.Instance.Shutdown();
         ScriptManager.Shutdown();
+        CombatEnhancementManager.Instance.Shutdown();
         GameEventHook.Instance.Shutdown();
         EventSystem.Shutdown();
-        CombatEnhancementManager.Instance.Shutdown();
         CommandMgr.Shutdown();
 
         PluginLifecycle.Shutdown();
@@ -300,6 +300,11 @@ public partial class Plugin : IDalamudPlugin
     public void ToggleMainWindow()
     {
         _mainWindow.IsOpen = !_mainWindow.IsOpen;
+    }
+
+    public void OpenMainWindowRoute(string routeKey)
+    {
+        _mainWindow.OpenRoute(routeKey);
     }
 
     #region 日志

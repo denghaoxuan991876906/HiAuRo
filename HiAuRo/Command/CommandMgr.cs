@@ -22,7 +22,7 @@ public static class CommandMgr
     {
         DService.Instance().Command.AddHandler(MainCommand, new CommandInfo(OnCommand)
         {
-            HelpMessage = "HiAuRo: /hi on|off|toggle|status|panel|reload|fact|assist [load|unload]|debug|gallery|catalog [export|upload]|target [on|off|toggle|status|logic|range|keep|dummy|countdown|hostile|death|aggro]"
+            HelpMessage = CommandHelpCatalog.MainHelpMessage
         });
     }
 
@@ -167,6 +167,9 @@ public static class CommandMgr
 
         switch (args)
         {
+            case "status":
+                print?.Invoke(BuildCombatStatusMessage(cfg));
+                return true;
             case "range on":
                 cfg.EnableSkillRangeExtension = true;
                 print?.Invoke("[HiAuRo] 技能距离扩展: 已启用");
@@ -175,6 +178,13 @@ public static class CommandMgr
                 cfg.EnableSkillRangeExtension = false;
                 print?.Invoke("[HiAuRo] 技能距离扩展: 已禁用");
                 return true;
+            case "range toggle":
+                cfg.EnableSkillRangeExtension = !cfg.EnableSkillRangeExtension;
+                print?.Invoke($"[HiAuRo] 技能距离扩展: {(cfg.EnableSkillRangeExtension ? "已启用" : "已禁用")}");
+                return true;
+            case "range status":
+                print?.Invoke($"[HiAuRo] 技能距离扩展: {(cfg.EnableSkillRangeExtension ? "启用" : "禁用")} | 值: {cfg.SkillRangeExtension:F1}");
+                return true;
             case "knockback on":
                 cfg.EnableAntiKnockback = true;
                 print?.Invoke("[HiAuRo] 防击退: 已启用");
@@ -182,6 +192,28 @@ public static class CommandMgr
             case "knockback off":
                 cfg.EnableAntiKnockback = false;
                 print?.Invoke("[HiAuRo] 防击退: 已禁用");
+                return true;
+            case "knockback toggle":
+                cfg.EnableAntiKnockback = !cfg.EnableAntiKnockback;
+                print?.Invoke($"[HiAuRo] 防击退: {(cfg.EnableAntiKnockback ? "已启用" : "已禁用")}");
+                return true;
+            case "knockback status":
+                print?.Invoke($"[HiAuRo] 防击退: {(cfg.EnableAntiKnockback ? "启用" : "禁用")}");
+                return true;
+            case "dash on":
+                cfg.EnableNoDashDisplacement = true;
+                print?.Invoke("[HiAuRo] 冲锋不位移: 已启用");
+                return true;
+            case "dash off":
+                cfg.EnableNoDashDisplacement = false;
+                print?.Invoke("[HiAuRo] 冲锋不位移: 已禁用");
+                return true;
+            case "dash toggle":
+                cfg.EnableNoDashDisplacement = !cfg.EnableNoDashDisplacement;
+                print?.Invoke($"[HiAuRo] 冲锋不位移: {(cfg.EnableNoDashDisplacement ? "已启用" : "已禁用")}");
+                return true;
+            case "dash status":
+                print?.Invoke($"[HiAuRo] 冲锋不位移: {(cfg.EnableNoDashDisplacement ? "启用" : "禁用")} | 模式: {cfg.NoDashDisplacementFilterMode} | 数量: {cfg.NoDashDisplacementActionIds.Count}");
                 return true;
             case "dash mode blacklist":
                 cfg.NoDashDisplacementFilterMode = NoDashDisplacementFilterMode.Blacklist;
@@ -192,7 +224,22 @@ public static class CommandMgr
                 print?.Invoke("[HiAuRo] 冲锋不位移过滤模式: Whitelist");
                 return true;
             case "dash list":
-                print?.Invoke($"[HiAuRo] 冲锋不位移列表: {string.Join(", ", cfg.NoDashDisplacementActionIds)}");
+                print?.Invoke($"[HiAuRo] 冲锋不位移列表: {(cfg.NoDashDisplacementActionIds.Count == 0 ? "(空)" : string.Join(", ", cfg.NoDashDisplacementActionIds))}");
+                return true;
+            case "animlock on":
+                cfg.EnableAnimationLockClamp = true;
+                print?.Invoke("[HiAuRo] 动画锁清理: 已启用");
+                return true;
+            case "animlock off":
+                cfg.EnableAnimationLockClamp = false;
+                print?.Invoke("[HiAuRo] 动画锁清理: 已禁用");
+                return true;
+            case "animlock toggle":
+                cfg.EnableAnimationLockClamp = !cfg.EnableAnimationLockClamp;
+                print?.Invoke($"[HiAuRo] 动画锁清理: {(cfg.EnableAnimationLockClamp ? "已启用" : "已禁用")}");
+                return true;
+            case "animlock status":
+                print?.Invoke($"[HiAuRo] 动画锁清理: {(cfg.EnableAnimationLockClamp ? "启用" : "禁用")} | 值: {cfg.AnimationLockClampSeconds:F1}");
                 return true;
         }
 
@@ -212,18 +259,27 @@ public static class CommandMgr
 
         if (args.StartsWith("dash add ") && uint.TryParse(args["dash add ".Length..], out var addId))
         {
-            NoDashDisplacementService.TryAddActionId(cfg.NoDashDisplacementActionIds, addId);
+            if (NoDashDisplacementService.TryAddActionId(cfg.NoDashDisplacementActionIds, addId))
+                print?.Invoke($"[HiAuRo] 已添加冲锋技能: {addId}");
+            else
+                print?.Invoke($"[HiAuRo] 冲锋技能添加失败: {addId}");
             return true;
         }
 
         if (args.StartsWith("dash remove ") && uint.TryParse(args["dash remove ".Length..], out var removeId))
         {
-            NoDashDisplacementService.RemoveActionId(cfg.NoDashDisplacementActionIds, removeId);
+            if (NoDashDisplacementService.RemoveActionId(cfg.NoDashDisplacementActionIds, removeId))
+                print?.Invoke($"[HiAuRo] 已移除冲锋技能: {removeId}");
+            else
+                print?.Invoke($"[HiAuRo] 冲锋技能不存在: {removeId}");
             return true;
         }
 
         return false;
     }
+
+    private static string BuildCombatStatusMessage(PluginConfig cfg)
+        => $"[HiAuRo] 战斗增强 | 距离扩展: {(cfg.EnableSkillRangeExtension ? "启用" : "禁用")} ({cfg.SkillRangeExtension:F1}) | 防击退: {(cfg.EnableAntiKnockback ? "启用" : "禁用")} | 冲锋不位移: {(cfg.EnableNoDashDisplacement ? "启用" : "禁用")} [{cfg.NoDashDisplacementFilterMode}, {cfg.NoDashDisplacementActionIds.Count}] | 动画锁清理: {(cfg.EnableAnimationLockClamp ? "启用" : "禁用")} ({cfg.AnimationLockClampSeconds:F1})";
 
     private static void OnCommand(string command, string arguments)
     {
@@ -236,7 +292,7 @@ public static class CommandMgr
                 break;
             case "help":
             case "commands":
-                Plugin.Instance.ToggleMainWindow();
+                Plugin.Instance.OpenMainWindowRoute("command_help");
                 break;
             case "on":
                 Runtime.RuntimeCore.Start();
@@ -365,7 +421,7 @@ public static class CommandMgr
                     }
                     else
                     {
-                        DService.Instance().Chat.Print("[HiAuRo] 用法: /hi combat range on|off|value <0-10> | knockback on|off | dash mode blacklist|whitelist | dash list | dash add <actionId> | dash remove <actionId> | animlock value <0-2>");
+                        DService.Instance().Chat.Print(CommandHelpCatalog.CombatHelpMessage);
                     }
                 }
                 else if (args.StartsWith("target logic "))
@@ -390,7 +446,7 @@ public static class CommandMgr
                 }
                 else
                 {
-                    DService.Instance().Chat.Print("[HiAuRo] 用法: /hi on|off|toggle|status|panel|reload|fact|assist [load|unload]|debug|gallery|catalog [export|upload]|target [on|off|toggle|status|logic|range|keep|dummy]");
+                    DService.Instance().Chat.Print(CommandHelpCatalog.MainHelpMessage);
                 }
                 break;
         }
