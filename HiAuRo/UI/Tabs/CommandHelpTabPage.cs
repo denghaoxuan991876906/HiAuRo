@@ -14,17 +14,30 @@ public sealed class CommandHelpTabPage : TabPageBase
     public override void DrawContent()
     {
         ImGui.Spacing();
-        foreach (var group in CommandHelpCatalog.GetGroups())
+        ImGui.TextColored(Theme.Colors.TextTertiary, "点击分组标题可展开或收起命令列表。");
+        ImGui.Spacing();
+
+        var groups = CommandHelpCatalog.GetGroups();
+        for (var index = 0; index < groups.Count; index++)
         {
-            CL.Card(group.Name, () =>
+            var group = groups[index];
+            CL.Card(() =>
             {
-                foreach (var item in group.Items)
+                ImGui.SetNextItemOpen(index == 0, ImGuiCond.Once);
+                CL.Collapsible(group.Name, () =>
                 {
-                    ImGui.Text(item.Syntax);
-                    ImGui.TextColored(Theme.Colors.TextSecondary, item.Description);
-                    ImGui.TextColored(Theme.Colors.TextTertiary, $"示例: {item.Example}");
-                    ImGui.Spacing();
-                }
+                    for (var itemIndex = 0; itemIndex < group.Items.Count; itemIndex++)
+                    {
+                        var item = group.Items[itemIndex];
+                        if (itemIndex > 0)
+                            ImGui.Separator();
+
+                        ImGui.Text(item.Syntax);
+                        ImGui.TextColored(Theme.Colors.TextSecondary, item.Description);
+                        ImGui.TextColored(Theme.Colors.TextTertiary, $"示例: {item.Example}");
+                        ImGui.Spacing();
+                    }
+                });
             });
         }
     }
