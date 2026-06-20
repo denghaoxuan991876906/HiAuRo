@@ -232,6 +232,13 @@ select {
     overflow: visible;
 }
 
+.timeline-panel {
+    position: sticky;
+    top: 18px;
+    max-height: calc(100vh - 36px);
+    overflow: hidden;
+}
+
 .panel-header {
     padding: 14px 16px;
     border-bottom: 1px solid var(--border);
@@ -252,6 +259,11 @@ select {
 .timeline-list,
 .details-scroll {
     overflow: visible;
+}
+
+.timeline-list {
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .event-row {
