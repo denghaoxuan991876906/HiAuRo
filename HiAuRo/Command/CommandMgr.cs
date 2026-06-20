@@ -12,6 +12,11 @@ public static class CommandMgr
 {
     private const string MainCommand = "/hi";
 
+    public static void ApplyCombatCommandForTests(PluginConfig cfg, string rawArgs)
+    {
+        ApplyCombatCommandCore(cfg, rawArgs, null);
+    }
+
     public static void Init()
     {
         DService.Instance().Command.AddHandler(MainCommand, new CommandInfo(OnCommand)
@@ -149,6 +154,53 @@ public static class CommandMgr
         }
     }
 
+    private static bool ApplyCombatCommand(PluginConfig cfg, string rawArgs, Dalamud.Plugin.Services.IChatGui? chat)
+    {
+        Action<string>? print = chat is null ? null : message => chat.Print(message);
+        return ApplyCombatCommandCore(cfg, rawArgs, print);
+    }
+
+    private static bool ApplyCombatCommandCore(PluginConfig cfg, string rawArgs, Action<string>? print)
+    {
+        var args = rawArgs.Trim().ToLowerInvariant();
+
+        switch (args)
+        {
+            case "range on":
+                cfg.EnableSkillRangeExtension = true;
+                print?.Invoke("[HiAuRo] 技能距离扩展: 已启用");
+                return true;
+            case "range off":
+                cfg.EnableSkillRangeExtension = false;
+                print?.Invoke("[HiAuRo] 技能距离扩展: 已禁用");
+                return true;
+            case "knockback on":
+                cfg.EnableAntiKnockback = true;
+                print?.Invoke("[HiAuRo] 防击退: 已启用");
+                return true;
+            case "knockback off":
+                cfg.EnableAntiKnockback = false;
+                print?.Invoke("[HiAuRo] 防击退: 已禁用");
+                return true;
+        }
+
+        if (args.StartsWith("range value ") && float.TryParse(args["range value ".Length..], out var range))
+        {
+            cfg.SkillRangeExtension = Math.Clamp(range, 0f, 10f);
+            print?.Invoke($"[HiAuRo] 技能距离扩展值: {cfg.SkillRangeExtension:F1}");
+            return true;
+        }
+
+        if (args.StartsWith("animlock value ") && float.TryParse(args["animlock value ".Length..], out var clamp))
+        {
+            cfg.AnimationLockClampSeconds = Math.Clamp(clamp, 0f, 2f);
+            print?.Invoke($"[HiAuRo] 动画锁清理值: {cfg.AnimationLockClampSeconds:F1}");
+            return true;
+        }
+
+        return false;
+    }
+
     private static void OnCommand(string command, string arguments)
     {
         var args = arguments.Trim().ToLower();
@@ -156,6 +208,10 @@ public static class CommandMgr
         switch (args)
         {
             case "":
+                Plugin.Instance.ToggleMainWindow();
+                break;
+            case "help":
+            case "commands":
                 Plugin.Instance.ToggleMainWindow();
                 break;
             case "on":
@@ -275,7 +331,20 @@ public static class CommandMgr
                 HandleTargetCommand("aggro", "off");
                 break;
             default:
-                if (args.StartsWith("target logic "))
+                if (args.StartsWith("combat "))
+                {
+                    var cfg = PluginConfig.Instance;
+                    if (ApplyCombatCommand(cfg, args["combat ".Length..], DService.Instance().Chat))
+                    {
+                        cfg.Save();
+                        CombatEnhancementManager.Instance.SyncFromConfig(cfg);
+                    }
+                    else
+                    {
+                        DService.Instance().Chat.Print("[HiAuRo] 用法: /hi combat range on|off|value <0-10> | knockback on|off | animlock value <0-2>");
+                    }
+                }
+                else if (args.StartsWith("target logic "))
                 {
                     var mode = args["target logic ".Length..].Trim();
                     HandleTargetCommand("logic", mode);
