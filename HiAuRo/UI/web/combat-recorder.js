@@ -500,7 +500,7 @@
     function renderScalarSection(group) {
         const rows = group.diff.scalarRows.map((row) => `
             <tr class="${row.changed ? "changed" : ""}">
-              <th>${escapeHtml(row.label)}</th>
+              <td class="label-cell">${escapeHtml(row.label)}</td>
               <td class="${row.changed ? "" : "value-muted"}">${escapeHtml(row.before)}</td>
               <td class="${row.changed ? "delta-text" : "value-muted"}">${escapeHtml(row.after)}</td>
             </tr>
@@ -511,6 +511,13 @@
               <div class="detail-heading">资源与战斗状态</div>
               <div class="detail-body">
                 <table class="diff-table">
+                  <thead>
+                    <tr>
+                      <th class="label-cell">字段</th>
+                      <th>Before</th>
+                      <th>Current</th>
+                    </tr>
+                  </thead>
                   <tbody>${rows}</tbody>
                 </table>
               </div>
@@ -530,7 +537,7 @@
 
         const rows = group.diff.gaugeRows.map((row) => `
             <tr class="${row.changed ? "changed" : ""}">
-              <th>${escapeHtml(row.label)}</th>
+              <td class="label-cell">${escapeHtml(row.label)}</td>
               <td class="${row.changed ? "" : "value-muted"}">${escapeHtml(row.before)}</td>
               <td class="${row.changed ? "delta-text" : "value-muted"}">${escapeHtml(row.after)}</td>
             </tr>
@@ -541,6 +548,13 @@
               <div class="detail-heading">职业量谱</div>
               <div class="detail-body">
                 <table class="diff-table">
+                  <thead>
+                    <tr>
+                      <th class="label-cell">字段</th>
+                      <th>Before</th>
+                      <th>Current</th>
+                    </tr>
+                  </thead>
                   <tbody>${rows}</tbody>
                 </table>
               </div>
@@ -562,7 +576,7 @@
 
         const rows = skills.map((skill) => `
             <tr>
-              <th>${escapeHtml(skill.actionName || `Action ${skill.actionId || 0}`)}</th>
+              <td class="label-cell">${escapeHtml(skill.actionName || `Action ${skill.actionId || 0}`)}</td>
               <td>${escapeHtml(String(skill.actionId || 0))}</td>
               <td>${escapeHtml(`${Math.round(Number(skill.cooldownRemainingMs || 0))}ms`)}</td>
               <td>${escapeHtml(`${Number(skill.charges || 0)}/${Number(skill.maxCharges || 0)}`)}</td>
@@ -576,7 +590,7 @@
                 <table class="diff-table">
                   <thead>
                     <tr>
-                      <th>技能</th>
+                      <th class="label-cell">技能</th>
                       <th>ID</th>
                       <th>CD</th>
                       <th>层数</th>
@@ -622,17 +636,17 @@
               <div class="detail-body">
                 <table class="diff-table">
                   <tbody>
-                    <tr><th>Phase</th><td>${escapeHtml(debug.phase || "-")}</td><th>SlotSource</th><td>${escapeHtml(debug.slotSource || "-")}</td></tr>
-                    <tr><th>CanGcd</th><td>${escapeHtml(formatBoolean(debug.canGcd))}</td><th>CanOgcd</th><td>${escapeHtml(formatBoolean(debug.canOgcd))}</td></tr>
-                    <tr><th>HasNextSlot</th><td>${escapeHtml(formatBoolean(debug.hasNextSlot))}</td><th>HasWaitGcdSlot</th><td>${escapeHtml(formatBoolean(debug.hasWaitGcdSlot))}</td></tr>
-                    <tr><th>HasCurrSlot</th><td>${escapeHtml(formatBoolean(debug.hasCurrSlot))}</td><th></th><td></td></tr>
+                    <tr><td class="label-cell">Phase</td><td>${escapeHtml(debug.phase || "-")}</td><td class="label-cell">SlotSource</td><td>${escapeHtml(debug.slotSource || "-")}</td></tr>
+                    <tr><td class="label-cell">CanGcd</td><td>${escapeHtml(formatBoolean(debug.canGcd))}</td><td class="label-cell">CanOgcd</td><td>${escapeHtml(formatBoolean(debug.canOgcd))}</td></tr>
+                    <tr><td class="label-cell">HasNextSlot</td><td>${escapeHtml(formatBoolean(debug.hasNextSlot))}</td><td class="label-cell">HasWaitGcdSlot</td><td>${escapeHtml(formatBoolean(debug.hasWaitGcdSlot))}</td></tr>
+                    <tr><td class="label-cell">HasCurrSlot</td><td>${escapeHtml(formatBoolean(debug.hasCurrSlot))}</td><td class="label-cell"></td><td></td></tr>
                   </tbody>
                 </table>
                 ${resolvers ? `
                     <div class="detail-heading" style="margin-top:12px;">Resolver Results</div>
                     <table class="diff-table">
                       <thead>
-                        <tr><th>Resolver</th><th>Mode</th><th>Check</th><th>Passed</th></tr>
+                        <tr><th class="label-cell">Resolver</th><th>Mode</th><th>Check</th><th>Passed</th></tr>
                       </thead>
                       <tbody>${resolvers}</tbody>
                     </table>

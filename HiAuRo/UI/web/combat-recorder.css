@@ -391,6 +391,7 @@ select {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
+    table-layout: fixed;
 }
 
 .diff-table th,
@@ -404,7 +405,20 @@ select {
     color: var(--text-muted);
     font-weight: 600;
     text-align: left;
-    width: 28%;
+    background: rgba(246, 248, 251, 0.65);
+}
+
+.diff-table th:first-child,
+.diff-table td.label-cell {
+    width: 26%;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.diff-table th:not(:first-child),
+.diff-table td:not(.label-cell) {
+    width: 37%;
+    word-break: break-word;
 }
 
 .diff-table tr.changed {
