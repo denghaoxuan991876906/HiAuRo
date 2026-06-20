@@ -607,10 +607,10 @@
         return `
             <section class="detail-section">
               <div class="detail-heading">${escapeHtml(title)}</div>
-              <div class="detail-body two-col">
-                ${renderTagColumn("新增", diff.added, "added")}
-                ${renderTagColumn("移除", diff.removed, "removed")}
-                ${renderTagColumn("变化", diff.changed, "changed")}
+              <div class="detail-body buff-grid">
+                ${renderListColumn("新增", diff.added, "added")}
+                ${renderListColumn("移除", diff.removed, "removed")}
+                ${renderListColumn("变化", diff.changed, "changed")}
               </div>
             </section>
         `;
@@ -684,9 +684,9 @@
         `;
     }
 
-    function renderTagColumn(label, items, className) {
+    function renderListColumn(label, items, className) {
         const content = items.length
-            ? `<div class="tag-list">${items.map(item => `<span class="tag ${className}">${escapeHtml(item)}</span>`).join("")}</div>`
+            ? `<div class="stack-list">${items.map(item => `<div class="stack-item ${className}">${escapeHtml(item)}</div>`).join("")}</div>`
             : `<div class="value-muted">无</div>`;
         return `
             <div>

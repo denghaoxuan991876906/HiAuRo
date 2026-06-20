@@ -442,39 +442,42 @@ select {
     color: var(--accent-strong);
 }
 
-.tag-list {
-    display: flex;
-    flex-wrap: wrap;
+.buff-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.stack-list {
+    display: grid;
     gap: 8px;
 }
 
-.tag {
-    display: inline-block;
-    gap: 6px;
-    padding: 6px 10px;
-    border-radius: 999px;
+.stack-item {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 10px;
     font-size: 12px;
     border: 1px solid var(--border);
     background: var(--bg-soft);
     white-space: normal;
     word-break: break-word;
     line-height: 1.45;
-    max-width: 100%;
 }
 
-.tag.added {
+.stack-item.added {
     background: rgba(31, 143, 99, 0.12);
     color: var(--gcd);
     border-color: rgba(31, 143, 99, 0.2);
 }
 
-.tag.removed {
+.stack-item.removed {
     background: rgba(179, 58, 58, 0.1);
     color: var(--danger);
     border-color: rgba(179, 58, 58, 0.18);
 }
 
-.tag.changed {
+.stack-item.changed {
     background: rgba(24, 105, 201, 0.08);
     color: var(--accent-strong);
     border-color: rgba(24, 105, 201, 0.16);
