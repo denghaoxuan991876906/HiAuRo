@@ -2,6 +2,8 @@ using HiAuRo.Infrastructure;
 using HiAuRo.ImGuiLib;
 using HiAuRo.Rendering;
 using HiAuRo.Runtime;
+using HiAuRo.Runtime.CombatEnhancements;
+using System.Numerics;
 using CL = HiAuRo.ImGuiLib.ComponentLibrary;
 
 namespace HiAuRo.UI.Tabs;
@@ -10,6 +12,7 @@ public sealed class CombatSettingsTabPage : TabPageBase
 {
     private readonly PluginConfig _config;
     private readonly Action _saveConfig;
+    private string _dashActionInput = "";
 
     public CombatSettingsTabPage(PluginConfig config, Action saveConfig)
         : base("战斗设置", "combat_settings", IconHelper.Icons.Settings)
@@ -142,6 +145,34 @@ public sealed class CombatSettingsTabPage : TabPageBase
             var noDashModeNames = Enum.GetNames<NoDashDisplacementFilterMode>();
             if (CL.Select("combat_no_dash_filter_mode", "冲锋不位移过滤模式", ref noDashMode, noDashModeNames))
                 changed = true;
+
+            CL.FormRow("冲锋技能列表", () =>
+            {
+                CL.InputText("dash_action_input", "Action ID", ref _dashActionInput, 16, 120f);
+                ImGui.SameLine();
+                if (CL.PrimaryButton("添加技能", new Vector2(90, 0))
+                    && uint.TryParse(_dashActionInput.Trim(), out var actionId)
+                    && NoDashDisplacementService.TryAddActionId(_config.NoDashDisplacementActionIds, actionId))
+                {
+                    _dashActionInput = "";
+                    _saveConfig();
+                    CombatEnhancementManager.Instance.SyncFromConfig(_config);
+                }
+            });
+
+            for (var i = 0; i < _config.NoDashDisplacementActionIds.Count; i++)
+            {
+                var actionId = _config.NoDashDisplacementActionIds[i];
+                ImGui.Text(actionId.ToString());
+                ImGui.SameLine();
+                if (CL.DangerButton($"删除##dash_{i}", new Vector2(56, 0)))
+                {
+                    _config.NoDashDisplacementActionIds.RemoveAt(i);
+                    _saveConfig();
+                    CombatEnhancementManager.Instance.SyncFromConfig(_config);
+                    break;
+                }
+            }
 
             changed |= CL.Switch("combat_enhance_animlock_clamp", "启用动画锁清理", ref enableAnimationLockClamp);
 

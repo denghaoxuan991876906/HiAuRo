@@ -2,6 +2,7 @@ using Dalamud.Game.Command;
 using HiAuRo.Execution;
 using HiAuRo.Infrastructure;
 using HiAuRo.Runtime;
+using HiAuRo.Runtime.CombatEnhancements;
 
 namespace HiAuRo.Command;
 
@@ -182,6 +183,17 @@ public static class CommandMgr
                 cfg.EnableAntiKnockback = false;
                 print?.Invoke("[HiAuRo] 防击退: 已禁用");
                 return true;
+            case "dash mode blacklist":
+                cfg.NoDashDisplacementFilterMode = NoDashDisplacementFilterMode.Blacklist;
+                print?.Invoke("[HiAuRo] 冲锋不位移过滤模式: Blacklist");
+                return true;
+            case "dash mode whitelist":
+                cfg.NoDashDisplacementFilterMode = NoDashDisplacementFilterMode.Whitelist;
+                print?.Invoke("[HiAuRo] 冲锋不位移过滤模式: Whitelist");
+                return true;
+            case "dash list":
+                print?.Invoke($"[HiAuRo] 冲锋不位移列表: {string.Join(", ", cfg.NoDashDisplacementActionIds)}");
+                return true;
         }
 
         if (args.StartsWith("range value ") && float.TryParse(args["range value ".Length..], out var range))
@@ -195,6 +207,18 @@ public static class CommandMgr
         {
             cfg.AnimationLockClampSeconds = Math.Clamp(clamp, 0f, 2f);
             print?.Invoke($"[HiAuRo] 动画锁清理值: {cfg.AnimationLockClampSeconds:F1}");
+            return true;
+        }
+
+        if (args.StartsWith("dash add ") && uint.TryParse(args["dash add ".Length..], out var addId))
+        {
+            NoDashDisplacementService.TryAddActionId(cfg.NoDashDisplacementActionIds, addId);
+            return true;
+        }
+
+        if (args.StartsWith("dash remove ") && uint.TryParse(args["dash remove ".Length..], out var removeId))
+        {
+            NoDashDisplacementService.RemoveActionId(cfg.NoDashDisplacementActionIds, removeId);
             return true;
         }
 
@@ -341,7 +365,7 @@ public static class CommandMgr
                     }
                     else
                     {
-                        DService.Instance().Chat.Print("[HiAuRo] 用法: /hi combat range on|off|value <0-10> | knockback on|off | animlock value <0-2>");
+                        DService.Instance().Chat.Print("[HiAuRo] 用法: /hi combat range on|off|value <0-10> | knockback on|off | dash mode blacklist|whitelist | dash list | dash add <actionId> | dash remove <actionId> | animlock value <0-2>");
                     }
                 }
                 else if (args.StartsWith("target logic "))
