@@ -1,7 +1,5 @@
-using System.Numerics;
 using HiAuRo.Infrastructure;
 using HiAuRo.ImGuiLib;
-using HiAuRo.Rendering;
 using CL = HiAuRo.ImGuiLib.ComponentLibrary;
 
 namespace HiAuRo.UI.Tabs;
@@ -70,69 +68,6 @@ public sealed class SettingsTabPage : TabPageBase
             }
         });
 
-        // ── 战斗参数 ──
-        CL.Card("战斗参数", () =>
-        {
-            var aq = _config.ActionQueueInMs;
-            var maxAb = _config.MaxAbilityTimesInGcd;
-            var abInterval = _config.AbilityIntervalMs;
-            var aoe = _config.AoeCount;
-            var range = _config.AttackRange;
-            var debug = _config.DebugEnabled;
-            var changed = false;
-
-            CL.FormRow("技能队列窗口 (ms)", () =>
-            {
-                ImGui.SetNextItemWidth(120);
-                changed |= ImGui.InputInt("##aq_window", ref aq, 50, 100);
-            });
-
-            CL.FormRow("GCD 内能力技上限", () =>
-            {
-                ImGui.SetNextItemWidth(120);
-                changed |= ImGui.InputInt("##max_ab", ref maxAb, 1, 10);
-            });
-
-            CL.FormRow("能力技间隔 (ms)", () =>
-            {
-                ImGui.SetNextItemWidth(120);
-                changed |= ImGui.InputInt("##ab_interval", ref abInterval, 50, 100);
-            });
-
-            CL.FormRow("AOE 判定敌人数", () =>
-            {
-                ImGui.SetNextItemWidth(120);
-                changed |= ImGui.InputInt("##aoe_count", ref aoe, 1, 5);
-            });
-
-            changed |= CL.Slider("attack_range", "攻击距离", ref range, 5f, 40f, "%.1f");
-
-            CL.FormRow("Debug 日志", () =>
-            {
-                changed |= CL.Switch("debug_log", ref debug);
-            });
-
-            var selfAxisRole = (int)_config.SelfAxisRole;
-            var selfAxisRoleNames = Enum.GetNames<AxisRole>();
-            if (CL.Select("self_axis_role", "全轴自身职能", ref selfAxisRole, selfAxisRoleNames))
-            {
-                _config.SelfAxisRole = (AxisRole)selfAxisRole;
-                changed = true;
-            }
-            ImGui.TextColored(Theme.Colors.TextSecondary, "执行轴/事实轴/辅助轴共用");
-
-            if (changed)
-            {
-                _config.ActionQueueInMs = aq;
-                _config.MaxAbilityTimesInGcd = maxAb;
-                _config.AbilityIntervalMs = abInterval;
-                _config.AoeCount = aoe;
-                _config.AttackRange = range;
-                _config.DebugEnabled = debug;
-                _saveConfig();
-            }
-        });
-
         CL.Card("战斗录制", () =>
         {
             var logRoot = _config.CombatRecorderLogRoot ?? "";
@@ -154,44 +89,6 @@ public sealed class SettingsTabPage : TabPageBase
             }
 
             ImGui.TextColored(Theme.Colors.TextTertiary, "Combat Recorder 新日志会保存到这个目录，而不是 C 盘 AppData。");
-        });
-
-        // ── 身位指示器 ──
-        CL.Card("身位指示器", () =>
-        {
-            var showPos = _config.ShowPositional;
-            var showHitbox = _config.ShowTargetHitbox;
-            var showAA = _config.ShowAutoAttackRange;
-            var changed = false;
-
-            CL.FormRow("启用身位指示器", () =>
-            {
-                changed |= CL.Switch("show_positional", ref showPos);
-            });
-
-            if (showPos)
-            {
-                ImGui.Indent(16f);
-                CL.FormRow("显示目标攻击范围圈", () =>
-                {
-                    changed |= CL.Switch("show_hitbox", ref showHitbox);
-                });
-                CL.FormRow("显示自动攻击范围圈", () =>
-                {
-                    changed |= CL.Switch("show_aa_range", ref showAA);
-                });
-                ImGui.Unindent(16f);
-            }
-
-            if (changed)
-            {
-                _config.ShowPositional = showPos;
-                _config.ShowTargetHitbox = showHitbox;
-                _config.ShowAutoAttackRange = showAA;
-                if (!showPos)
-                    PositionalVfx.Clear();
-                _saveConfig();
-            }
         });
 
         // ── 触发器目录同步 ──
