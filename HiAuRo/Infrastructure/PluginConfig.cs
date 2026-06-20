@@ -41,6 +41,12 @@ public enum BgEffectMode
     LeyLines = 6,
 }
 
+public enum NoDashDisplacementFilterMode
+{
+    Blacklist = 0,
+    Whitelist = 1
+}
+
 /// <summary>
 /// HiAuRo 主配置对象 —— 走 Dalamud 原生 IPluginConfiguration 序列化
 /// </summary>
@@ -79,6 +85,18 @@ public sealed class PluginConfig : SettingsBase
 
     /// <summary>攻击距离</summary>
     public float AttackRange { get; set; } = 25f;
+
+    public bool EnableSkillRangeExtension { get; set; }
+    public float SkillRangeExtension { get; set; } = 3f;
+
+    public bool EnableAntiKnockback { get; set; }
+
+    public bool EnableNoDashDisplacement { get; set; }
+    public NoDashDisplacementFilterMode NoDashDisplacementFilterMode { get; set; } = NoDashDisplacementFilterMode.Blacklist;
+    public List<uint> NoDashDisplacementActionIds { get; set; } = [];
+
+    public bool EnableAnimationLockClamp { get; set; }
+    public float AnimationLockClampSeconds { get; set; } = 0.5f;
 
     /// <summary>UI 渲染模式</summary>
     public UIMode UIMode { get; set; } = UIMode.ImGui;
