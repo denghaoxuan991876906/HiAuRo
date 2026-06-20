@@ -10,6 +10,7 @@ public sealed class CombatRecorderEventGroupView
     public required DateTimeOffset Timestamp { get; init; }
     public CombatRecorderSnapshotView? Prev { get; init; }
     public CombatRecorderSnapshotView? Current { get; init; }
+    public HiAuRo.Recording.CombatRunnerDebugSnapshot? RunnerDebug { get; init; }
     public required string SummaryText { get; init; }
     public required CombatRecorderDiffView Diff { get; init; }
     public bool HasDiff => Diff.HasAnyDiff;

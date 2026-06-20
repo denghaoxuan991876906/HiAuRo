@@ -48,33 +48,26 @@ public sealed class CombatRecorderTabPage : TabPageBase
 
             var onlyCombat = _config.CombatRecorderOnlyInCombat;
             var onlyJob = _config.CombatRecorderOnlyCurrentJob;
-            var includePrev = _config.CombatRecorderIncludePreviousFrame;
             var includeBuffs = _config.CombatRecorderIncludeBuffDetails;
             var includeResolvers = _config.CombatRecorderIncludeResolverResults;
             var changed = false;
 
             changed |= CL.Switch("combat_rec_only_combat", "仅战斗中录制", ref onlyCombat);
             changed |= CL.Switch("combat_rec_only_job", "仅当前职业录制", ref onlyJob);
-            changed |= CL.Switch("combat_rec_prev", "记录上一帧", ref includePrev);
-            changed |= CL.Switch("combat_rec_buffs", "记录 Buff 明细", ref includeBuffs);
+            changed |= CL.Switch("combat_rec_buffs", "记录 Buff 细节", ref includeBuffs);
             changed |= CL.Switch("combat_rec_resolvers", "记录 resolver 结果", ref includeResolvers);
 
             if (changed)
             {
                 _config.CombatRecorderOnlyInCombat = onlyCombat;
                 _config.CombatRecorderOnlyCurrentJob = onlyJob;
-                _config.CombatRecorderIncludePreviousFrame = includePrev;
                 _config.CombatRecorderIncludeBuffDetails = includeBuffs;
                 _config.CombatRecorderIncludeResolverResults = includeResolvers;
                 _saveConfig();
             }
 
-            var interval = Math.Clamp(_config.CombatRecorderSampleIntervalMs, 30, 50);
-            if (CL.SliderInt("combat_rec_interval", "缓存间隔(ms)", ref interval, 30, 50))
-            {
-                _config.CombatRecorderSampleIntervalMs = interval;
-                _saveConfig();
-            }
+            ImGui.TextColored(Theme.Colors.TextSecondary, "录制器会每帧缓存最近 1 秒上下文，只在技能确认成功后一帧写 1 条事件记录。");
+            ImGui.TextColored(Theme.Colors.TextSecondary, "若战斗中 GCD 超过 1 秒不变化，会额外写 1 条 stall 诊断事件。");
 
             var keepDays = Math.Max(1, _config.CombatRecorderKeepDays);
             if (CL.InputNumber("combat_rec_keep_days", "日志保留天数", ref keepDays, 1))
@@ -85,9 +78,9 @@ public sealed class CombatRecorderTabPage : TabPageBase
 
             ImGui.Spacing();
             ComponentLibrary.SectionHeader("自定义技能");
-            ImGui.TextColored(Theme.Colors.TextSecondary, $"当前职业 {currentJob} 的技能会额外写入技能ID、技能名、剩余CD、当前层数与最大层数。");
+            ImGui.TextColored(Theme.Colors.TextSecondary, $"当前职业 {currentJob} 的技能会额外写入技能 ID、技能名、剩余 CD、当前层数与最大层数。");
 
-            CL.InputText("combat_rec_tracked_skill_input", "技能ID", ref _trackedSkillInput, 16, 120f);
+            CL.InputText("combat_rec_tracked_skill_input", "技能 ID", ref _trackedSkillInput, 16, 120f);
             ImGui.SameLine();
             if (CL.PrimaryButton("添加技能", new Vector2(90, 0)) && TryAddTrackedSkill(_trackedSkillInput, currentJob))
             {
@@ -101,7 +94,7 @@ public sealed class CombatRecorderTabPage : TabPageBase
             }
             else if (ImGui.BeginTable("##combat_rec_tracked_skills", 4, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
             {
-                ImGui.TableSetupColumn("技能ID", ImGuiTableColumnFlags.WidthFixed, 80f);
+                ImGui.TableSetupColumn("技能 ID", ImGuiTableColumnFlags.WidthFixed, 80f);
                 ImGui.TableSetupColumn("技能名", ImGuiTableColumnFlags.WidthStretch);
                 ImGui.TableSetupColumn("当前值", ImGuiTableColumnFlags.WidthFixed, 180f);
                 ImGui.TableSetupColumn("操作", ImGuiTableColumnFlags.WidthFixed, 70f);

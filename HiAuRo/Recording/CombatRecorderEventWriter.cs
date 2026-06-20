@@ -2,37 +2,42 @@ namespace HiAuRo.Recording;
 
 public static class CombatRecorderEventWriter
 {
-    public static IReadOnlyList<CombatFrameSnapshot> BuildEventSamples(
-        CombatFrameSnapshot? previous,
+    public static CombatFrameSnapshot BuildEventSample(
+        CombatFrameSnapshot? before,
         CombatFrameSnapshot current,
-        bool includePreviousFrame,
         string eventGroupId)
     {
         current.EventGroupId = eventGroupId;
         current.SampleRole = "current";
-
-        if (!includePreviousFrame || previous == null)
-            return [current];
-
-        var previousOutput = Clone(previous);
-        previousOutput.EventGroupId = eventGroupId;
-        previousOutput.EventType = current.EventType;
-        previousOutput.Source = current.Source;
-        previousOutput.ActionId = current.ActionId;
-        previousOutput.ActionName = current.ActionName;
-        previousOutput.Success = current.Success;
-        previousOutput.Failed = current.Failed;
-        previousOutput.Cancelled = current.Cancelled;
-        previousOutput.IsGcd = current.IsGcd;
-        previousOutput.IsAbility = current.IsAbility;
-        previousOutput.GcdKind = current.GcdKind;
-        previousOutput.TrackedSkills = current.TrackedSkills.Select(Clone).ToList();
-        previousOutput.SampleRole = "prev";
-
-        return [previousOutput, current];
+        current.Before = before == null ? null : CloneAsBefore(before, current, eventGroupId);
+        return current;
     }
 
-    private static CombatFrameSnapshot Clone(CombatFrameSnapshot source)
+    private static CombatFrameSnapshot CloneAsBefore(
+        CombatFrameSnapshot source,
+        CombatFrameSnapshot current,
+        string eventGroupId)
+    {
+        var before = Clone(source);
+        before.EventGroupId = eventGroupId;
+        before.EventType = current.EventType;
+        before.Source = current.Source;
+        before.ActionId = current.ActionId;
+        before.ActionName = current.ActionName;
+        before.Success = current.Success;
+        before.Failed = current.Failed;
+        before.Cancelled = current.Cancelled;
+        before.IsGcd = current.IsGcd;
+        before.IsAbility = current.IsAbility;
+        before.GcdKind = current.GcdKind;
+        before.TrackedSkills = current.TrackedSkills.Select(Clone).ToList();
+        before.SampleRole = "before";
+        before.Before = null;
+        before.RunnerDebug = null;
+        return before;
+    }
+
+    public static CombatFrameSnapshot Clone(CombatFrameSnapshot source)
     {
         return new CombatFrameSnapshot
         {
@@ -94,8 +99,52 @@ public static class CombatRecorderEventWriter
             CurrentAcrName = source.CurrentAcrName,
             CurrentRotationName = source.CurrentRotationName,
             ResolverResults = source.ResolverResults.Select(Clone).ToList(),
-            TrackedSkills = source.TrackedSkills.Select(Clone).ToList()
+            TrackedSkills = source.TrackedSkills.Select(Clone).ToList(),
+            RunnerDebug = source.RunnerDebug == null ? null : Clone(source.RunnerDebug)
         };
+    }
+
+    public static CombatFrameSnapshot CreateFromCacheSample(CombatFrameCacheSample source)
+    {
+        var snapshot = new CombatFrameSnapshot
+        {
+            Timestamp = source.Timestamp,
+            SampleIndex = source.SampleIndex,
+            SessionId = source.SessionId,
+            SampleRole = "before",
+            Source = "cache",
+            Job = source.Job,
+            Hp = source.Hp,
+            MaxHp = source.MaxHp,
+            Mp = source.Mp,
+            MaxMp = source.MaxMp,
+            Level = source.Level,
+            InCombat = source.InCombat,
+            IsMoving = source.IsMoving,
+            IsCasting = source.IsCasting,
+            TotalCastTime = source.TotalCastTime,
+            CurrentCastTime = source.CurrentCastTime,
+            GcdCooldown = source.GcdCooldown,
+            GcdDuration = source.GcdDuration,
+            LastComboSpellId = source.LastComboSpellId,
+            TargetId = source.TargetId,
+            TargetName = source.TargetName,
+            Distance = source.Distance,
+            IsBoss = source.IsBoss,
+            IsDead = source.IsDead,
+            IsTargetable = source.IsTargetable,
+            TargetHp = source.TargetHp,
+            TargetMaxHp = source.TargetMaxHp,
+            QtStates = new Dictionary<string, bool>(source.QtStates),
+            JobGauge = new Dictionary<string, object?>(source.JobGauge),
+            SelfBuffs = source.SelfBuffs.Select(Clone).ToList(),
+            TargetBuffs = source.TargetBuffs.Select(Clone).ToList()
+        };
+
+        snapshot.HpPercent = Percent(snapshot.Hp, snapshot.MaxHp);
+        snapshot.MpPercent = Percent(snapshot.Mp, snapshot.MaxMp);
+        snapshot.TargetHpPercent = Percent(snapshot.TargetHp, snapshot.TargetMaxHp);
+        return snapshot;
     }
 
     private static CombatBuffSnapshot Clone(CombatBuffSnapshot source)
@@ -131,4 +180,20 @@ public static class CombatRecorderEventWriter
             MaxCharges = source.MaxCharges
         };
     }
+
+    private static CombatRunnerDebugSnapshot Clone(CombatRunnerDebugSnapshot source)
+    {
+        return new CombatRunnerDebugSnapshot
+        {
+            Phase = source.Phase,
+            SlotSource = source.SlotSource,
+            CanGcd = source.CanGcd,
+            CanOgcd = source.CanOgcd,
+            HasNextSlot = source.HasNextSlot,
+            HasWaitGcdSlot = source.HasWaitGcdSlot,
+            HasCurrSlot = source.HasCurrSlot
+        };
+    }
+
+    private static float Percent(uint value, uint max) => max > 0 ? (float)value / max : 0f;
 }

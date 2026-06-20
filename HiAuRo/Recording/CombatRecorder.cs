@@ -23,18 +23,21 @@ public sealed class CombatRecorder
     };
 
     private readonly object _lock = new();
-    private readonly CombatFrameRingBuffer _frames = new(5);
+    private readonly CombatFrameWindowBuffer _frames = new(1000);
     private string _sessionId = "";
     private string _sessionPath = "";
     private long _sampleIndex;
     private long _frameIndex;
-    private long _lastCacheAt;
     private bool _initialized;
     private bool _lastManualPauseApplied;
     private uint _lastEffectActionId;
     private long _lastEffectAt;
     private uint _pendingCastGcdActionId;
     private long _pendingCastGcdRecordedAt;
+    private readonly Queue<PendingCombatRecorderEvent> _pendingEvents = new();
+    private float _lastObservedGcdCooldown = -1;
+    private long _lastGcdCooldownChangedAt;
+    private long _lastStallReportedAt;
 
     private CombatRecorder() { }
 
@@ -80,14 +83,10 @@ public sealed class CombatRecorder
             return;
         }
 
-        var interval = Math.Clamp(PluginConfig.Instance.CombatRecorderSampleIntervalMs, 30, 50);
         var now = Environment.TickCount64;
-        if (now - _lastCacheAt < interval) return;
-        _lastCacheAt = now;
-
-        var snapshot = CaptureSnapshot(CombatRecorderEventType.Unknown, 0, success: null);
-        snapshot.SampleRole = "cache";
-        _frames.Push(snapshot);
+        _frames.Push(CaptureCacheSample(now));
+        ProcessPendingEvent(now);
+        TryEmitStallEvent(now);
     }
 
     public int ClearOldLogs(int keepDays)
@@ -155,7 +154,6 @@ public sealed class CombatRecorder
                 if (IsAbilityAction(sc.SpellId)) break;
                 _pendingCastGcdActionId = sc.SpellId;
                 _pendingCastGcdRecordedAt = sc.StartCastTime;
-                CaptureEvent(CombatRecorderEventType.GcdReadyAndAction, sc.SpellId, success: true);
                 break;
             case ReceviceAbilityEffectCondParams ae when IsSelfSource(ae.SourceID):
                 if (IsDuplicateEffect(ae.ActionId)) break;
@@ -188,21 +186,13 @@ public sealed class CombatRecorder
     {
         if (!IsEnabledForCurrentState()) return;
 
-        var current = CaptureSnapshot(
+        _pendingEvents.Enqueue(new PendingCombatRecorderEvent(
             eventType,
             actionId,
             success,
             cancelled,
-            ResolveGcdKind(eventType, _pendingCastGcdActionId, actionId));
-        var previous = _frames.GetLatest();
-        var eventGroupId = $"{_sessionId}-{Interlocked.Increment(ref _sampleIndex):D8}";
-        var samples = CombatRecorderEventWriter.BuildEventSamples(
-            previous,
-            current,
-            PluginConfig.Instance.CombatRecorderIncludePreviousFrame,
-            eventGroupId);
-
-        WriteSamples(samples);
+            ResolveGcdKind(eventType, _pendingCastGcdActionId, actionId),
+            EventTick: Environment.TickCount64));
     }
 
     private CombatFrameSnapshot CaptureSnapshot(
@@ -282,9 +272,52 @@ public sealed class CombatRecorder
         return snapshot;
     }
 
-    private List<CombatResolverSnapshot> CaptureResolvers()
+    private CombatFrameCacheSample CaptureCacheSample(long nowTick)
     {
-        if (!PluginConfig.Instance.CombatRecorderIncludeResolverResults) return [];
+        EnsureSession();
+
+        var self = Data.Me.Object as IBattleChara;
+        var target = Data.Target.Current;
+        var targetBattle = target as IBattleChara;
+        var sample = new CombatFrameCacheSample
+        {
+            SampleIndex = _sampleIndex,
+            Tick = nowTick,
+            Timestamp = DateTimeOffset.UtcNow,
+            SessionId = _sessionId,
+            Job = Data.Me.ClassJob,
+            Hp = self?.CurrentHp ?? 0,
+            MaxHp = self?.MaxHp ?? 0,
+            Mp = self?.CurrentMp ?? 0,
+            MaxMp = self?.MaxMp ?? 0,
+            Level = Data.Me.CurrentLevel,
+            InCombat = Data.Combat.InCombat,
+            IsMoving = Data.Me.IsMoving,
+            IsCasting = self?.IsCasting ?? Data.Combat.IsCasting,
+            TotalCastTime = self?.TotalCastTime ?? 0,
+            CurrentCastTime = self?.CurrentCastTime ?? 0,
+            GcdCooldown = GCDHelper.GetGCDCooldown(),
+            GcdDuration = GCDHelper.GetGCDDuration(),
+            LastComboSpellId = EventSystem.LastComboSpellId,
+            TargetId = target?.EntityID ?? 0,
+            TargetName = target?.Name ?? "",
+            Distance = target != null ? Data.Me.DistanceToObject2D(target) : 0,
+            IsBoss = targetBattle?.MaxHp > 100000,
+            IsDead = target?.IsDead ?? false,
+            IsTargetable = target?.IsTargetable ?? false,
+            TargetHp = targetBattle?.CurrentHp ?? 0,
+            TargetMaxHp = targetBattle?.MaxHp ?? 0,
+            QtStates = QTHelper.GetAll().ToDictionary(q => q.Id, q => q.Value),
+            JobGauge = CaptureJobGauge(self),
+            SelfBuffs = CaptureBuffs(self),
+            TargetBuffs = CaptureBuffs(targetBattle)
+        };
+        return sample;
+    }
+
+    private List<CombatResolverSnapshot> CaptureResolvers(bool forceInclude = false)
+    {
+        if (!forceInclude && !PluginConfig.Instance.CombatRecorderIncludeResolverResults) return [];
         return ACRLifecycle.Runner.Debug.Resolvers.Select(r => new CombatResolverSnapshot
         {
             Name = r.Name,
@@ -292,6 +325,21 @@ public sealed class CombatRecorder
             CheckResult = r.CheckResult,
             PassedWindow = r.PassedWindow
         }).ToList();
+    }
+
+    private static CombatRunnerDebugSnapshot CaptureRunnerDebug()
+    {
+        var debug = ACRLifecycle.Runner.Debug;
+        return new CombatRunnerDebugSnapshot
+        {
+            Phase = debug.Phase,
+            SlotSource = debug.SlotSource,
+            CanGcd = debug.CanGcd,
+            CanOgcd = debug.CanOgcd,
+            HasNextSlot = debug.HasNextSlot,
+            HasWaitGcdSlot = debug.HasWaitGcdSlot,
+            HasCurrSlot = debug.HasCurrSlot
+        };
     }
 
     private static List<CombatTrackedSkillSnapshot> CaptureTrackedSkills()
@@ -409,6 +457,71 @@ public sealed class CombatRecorder
         }
     }
 
+    private void ProcessPendingEvent(long nowTick)
+    {
+        if (_pendingEvents.Count == 0) return;
+
+        var afterCache = CaptureCacheSample(nowTick);
+        while (_pendingEvents.Count > 0)
+        {
+            var pending = _pendingEvents.Dequeue();
+            var current = CaptureSnapshot(
+                pending.EventType,
+                pending.ActionId,
+                pending.Success,
+                pending.Cancelled,
+                pending.GcdKind);
+
+            var beforeSample = SelectDiffBaseSample(_frames.GetWindowSnapshot(), afterCache, pending.EventTick);
+            var before = beforeSample == null ? null : CombatRecorderEventWriter.CreateFromCacheSample(beforeSample);
+            var eventGroupId = $"{_sessionId}-{Interlocked.Increment(ref _sampleIndex):D8}";
+            var line = CombatRecorderEventWriter.BuildEventSample(before, current, eventGroupId);
+
+            if (pending.EventType == CombatRecorderEventType.StallDetected)
+            {
+                line.RunnerDebug = CaptureRunnerDebug();
+                line.ResolverResults = CaptureResolvers(forceInclude: true);
+            }
+
+            WriteSamples([line]);
+        }
+    }
+
+    private void TryEmitStallEvent(long nowTick)
+    {
+        var gcdCooldown = GCDHelper.GetGCDCooldown();
+        if (gcdCooldown != _lastObservedGcdCooldown)
+        {
+            _lastObservedGcdCooldown = gcdCooldown;
+            _lastGcdCooldownChangedAt = nowTick;
+            return;
+        }
+
+        var unchangedForMs = _lastGcdCooldownChangedAt == 0 ? 0 : nowTick - _lastGcdCooldownChangedAt;
+        if (!ShouldEmitStallEvent(
+                inCombat: Data.Combat.InCombat,
+                runtimeRunning: RuntimeCore.IsRunning,
+                acrAvailable: ACRLifecycle.CurrentEntry != null,
+                isPaused: MainControlHelper.IsPaused,
+                gcdCooldown: gcdCooldown,
+                lastObservedGcdCooldown: _lastObservedGcdCooldown,
+                unchangedForMs: unchangedForMs,
+                lastReportedAt: _lastStallReportedAt,
+                nowTicks: nowTick))
+        {
+            return;
+        }
+
+        _lastStallReportedAt = nowTick;
+        _pendingEvents.Enqueue(new PendingCombatRecorderEvent(
+            CombatRecorderEventType.StallDetected,
+            ActionId: 0,
+            Success: null,
+            Cancelled: false,
+            GcdKind: CombatRecorderGcdKind.Unknown,
+            EventTick: nowTick));
+    }
+
     private void EnsureSession()
     {
         if (!string.IsNullOrEmpty(_sessionId) && !string.IsNullOrEmpty(_sessionPath))
@@ -493,6 +606,24 @@ public sealed class CombatRecorder
         string suffix)
         => RotateSession(existingSessionId, now, suffix);
 
+    internal static CombatFrameCacheSample? SelectDiffBaseSampleForTests(
+        IReadOnlyList<CombatFrameCacheSample> window,
+        CombatFrameCacheSample after,
+        long eventTick)
+        => SelectDiffBaseSample(window, after, eventTick);
+
+    internal static bool ShouldEmitStallEventForTests(
+        bool inCombat,
+        bool runtimeRunning,
+        bool acrAvailable,
+        bool isPaused,
+        float gcdCooldown,
+        float lastObservedGcdCooldown,
+        long unchangedForMs,
+        long lastReportedAt,
+        long nowTicks)
+        => ShouldEmitStallEvent(inCombat, runtimeRunning, acrAvailable, isPaused, gcdCooldown, lastObservedGcdCooldown, unchangedForMs, lastReportedAt, nowTicks);
+
     public static string ResolveLogRootForTests(string configuredPath, string fallbackRoot)
         => ResolveLogRoot(configuredPath, fallbackRoot);
 
@@ -516,6 +647,63 @@ public sealed class CombatRecorder
             CombatRecorderEventType.GcdReadyAndAction => !isAbilityAction && gcdJustActivated,
             _ => false
         };
+    }
+
+    private static CombatFrameCacheSample? SelectDiffBaseSample(
+        IReadOnlyList<CombatFrameCacheSample> window,
+        CombatFrameCacheSample after,
+        long eventTick)
+    {
+        for (var i = window.Count - 1; i >= 0; i--)
+        {
+            var sample = window[i];
+            if (sample.Tick > eventTick) continue;
+            if (!HasMeaningfulDiff(sample, after)) continue;
+            return sample;
+        }
+
+        return window.LastOrDefault(sample => sample.Tick <= eventTick);
+    }
+
+    private static bool HasMeaningfulDiff(CombatFrameCacheSample before, CombatFrameCacheSample after)
+    {
+        if (before.Hp != after.Hp || before.Mp != after.Mp)
+            return true;
+        if (before.IsMoving != after.IsMoving || before.IsCasting != after.IsCasting)
+            return true;
+        if (before.GcdCooldown != after.GcdCooldown || before.LastComboSpellId != after.LastComboSpellId)
+            return true;
+        if (before.TargetHp != after.TargetHp || before.TargetId != after.TargetId)
+            return true;
+        if (!before.QtStates.OrderBy(x => x.Key).SequenceEqual(after.QtStates.OrderBy(x => x.Key)))
+            return true;
+        if (!before.JobGauge.OrderBy(x => x.Key).SequenceEqual(after.JobGauge.OrderBy(x => x.Key)))
+            return true;
+        if (before.SelfBuffs.Count != after.SelfBuffs.Count || before.TargetBuffs.Count != after.TargetBuffs.Count)
+            return true;
+        return false;
+    }
+
+    private static bool ShouldEmitStallEvent(
+        bool inCombat,
+        bool runtimeRunning,
+        bool acrAvailable,
+        bool isPaused,
+        float gcdCooldown,
+        float lastObservedGcdCooldown,
+        long unchangedForMs,
+        long lastReportedAt,
+        long nowTicks)
+    {
+        if (!inCombat || !runtimeRunning || !acrAvailable || isPaused)
+            return false;
+        if (gcdCooldown <= 0 || gcdCooldown != lastObservedGcdCooldown)
+            return false;
+        if (unchangedForMs < 1000)
+            return false;
+        if (lastReportedAt != 0 && nowTicks - lastReportedAt < 1000)
+            return false;
+        return true;
     }
 
     private static CombatRecorderGcdKind ResolveGcdKind(
@@ -700,6 +888,10 @@ public sealed class CombatRecorder
         _pendingCastGcdRecordedAt = 0;
         _lastEffectActionId = 0;
         _lastEffectAt = 0;
+        _pendingEvents.Clear();
+        _lastObservedGcdCooldown = -1;
+        _lastGcdCooldownChangedAt = 0;
+        _lastStallReportedAt = 0;
     }
 
     private bool IsDuplicateEffect(uint actionId)
@@ -747,3 +939,11 @@ public sealed class CombatRecorder
 }
 
 internal readonly record struct CombatRecorderSessionState(string SessionId, long FrameIndex, long SampleIndex);
+
+internal sealed record PendingCombatRecorderEvent(
+    CombatRecorderEventType EventType,
+    uint ActionId,
+    bool? Success,
+    bool Cancelled,
+    CombatRecorderGcdKind GcdKind,
+    long EventTick);

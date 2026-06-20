@@ -21,7 +21,8 @@ public enum CombatRecorderEventType
     AbilityEffect,
     GcdReadyAndAction,
     CastCancelled,
-    ActionRejected
+    ActionRejected,
+    StallDetected
 }
 
 public enum CombatRecorderGcdKind
@@ -210,6 +211,12 @@ public sealed class CombatFrameSnapshot
 
     [JsonPropertyName("trackedSkills")]
     public List<CombatTrackedSkillSnapshot> TrackedSkills { get; set; } = [];
+
+    [JsonPropertyName("before")]
+    public CombatFrameSnapshot? Before { get; set; }
+
+    [JsonPropertyName("runnerDebug")]
+    public CombatRunnerDebugSnapshot? RunnerDebug { get; set; }
 }
 
 public sealed class CombatBuffSnapshot
@@ -258,4 +265,28 @@ public sealed class CombatTrackedSkillSnapshot
 
     [JsonPropertyName("maxCharges")]
     public int MaxCharges { get; set; }
+}
+
+public sealed class CombatRunnerDebugSnapshot
+{
+    [JsonPropertyName("phase")]
+    public string Phase { get; set; } = "";
+
+    [JsonPropertyName("slotSource")]
+    public string SlotSource { get; set; } = "";
+
+    [JsonPropertyName("canGcd")]
+    public bool CanGcd { get; set; }
+
+    [JsonPropertyName("canOgcd")]
+    public bool CanOgcd { get; set; }
+
+    [JsonPropertyName("hasNextSlot")]
+    public bool HasNextSlot { get; set; }
+
+    [JsonPropertyName("hasWaitGcdSlot")]
+    public bool HasWaitGcdSlot { get; set; }
+
+    [JsonPropertyName("hasCurrSlot")]
+    public bool HasCurrSlot { get; set; }
 }

@@ -6,38 +6,11 @@ internal static class CombatRecorderViewerLogic
 {
     public static IReadOnlyList<CombatRecorderEventGroupView> BuildGroups(IEnumerable<CombatFrameSnapshot> rows)
     {
-        var groups = rows
-            .GroupBy(row => row.EventGroupId)
-            .Select(group =>
-            {
-                var ordered = group
-                    .OrderBy(row => row.SampleRole == "prev" ? 0 : 1)
-                    .ThenBy(row => row.Timestamp)
-                    .ToList();
-
-                var prev = ordered.FirstOrDefault(row => row.SampleRole == "prev");
-                var current = ordered.FirstOrDefault(row => row.SampleRole == "current") ?? ordered.LastOrDefault();
-                var anchor = current ?? prev ?? throw new InvalidOperationException("空事件组");
-                var diff = BuildDiff(prev, current);
-
-                return new CombatRecorderEventGroupView
-                {
-                    EventGroupId = anchor.EventGroupId,
-                    SessionId = anchor.SessionId,
-                    EventType = anchor.EventType,
-                    ActionId = anchor.ActionId,
-                    ActionName = string.IsNullOrWhiteSpace(anchor.ActionName) ? $"Action {anchor.ActionId}" : anchor.ActionName,
-                    Timestamp = anchor.Timestamp,
-                    Prev = prev == null ? null : new CombatRecorderSnapshotView { Raw = prev },
-                    Current = current == null ? null : new CombatRecorderSnapshotView { Raw = current },
-                    SummaryText = BuildSummary(anchor.ActionName, diff, prev, current),
-                    Diff = diff
-                };
-            })
+        return rows
+            .GroupBy(row => string.IsNullOrWhiteSpace(row.EventGroupId) ? $"__ungrouped_{row.SampleIndex}" : row.EventGroupId)
+            .Select(BuildGroup)
             .OrderBy(group => group.Timestamp)
             .ToList();
-
-        return groups;
     }
 
     public static CombatRecorderDiffView BuildDiff(CombatRecorderEventGroupView group)
@@ -45,6 +18,34 @@ internal static class CombatRecorderViewerLogic
 
     public static string BuildSummary(CombatRecorderEventGroupView group)
         => group.SummaryText;
+
+    private static CombatRecorderEventGroupView BuildGroup(IGrouping<string, CombatFrameSnapshot> group)
+    {
+        var ordered = group.OrderBy(row => row.Timestamp).ToList();
+        var current = ordered.FirstOrDefault(row => row.SampleRole == "current")
+            ?? ordered.FirstOrDefault(row => row.Before != null)
+            ?? ordered.LastOrDefault();
+        var prev = current?.Before
+            ?? ordered.FirstOrDefault(row => row.SampleRole is "before" or "prev");
+
+        var anchor = current ?? prev ?? throw new InvalidOperationException("empty event group");
+        var diff = BuildDiff(prev, current);
+
+        return new CombatRecorderEventGroupView
+        {
+            EventGroupId = anchor.EventGroupId,
+            SessionId = anchor.SessionId,
+            EventType = anchor.EventType,
+            ActionId = anchor.ActionId,
+            ActionName = string.IsNullOrWhiteSpace(anchor.ActionName) ? $"Action {anchor.ActionId}" : anchor.ActionName,
+            Timestamp = anchor.Timestamp,
+            Prev = prev == null ? null : new CombatRecorderSnapshotView { Raw = prev },
+            Current = current == null ? null : new CombatRecorderSnapshotView { Raw = current },
+            RunnerDebug = current?.RunnerDebug,
+            SummaryText = BuildSummary(diff, prev, current),
+            Diff = diff
+        };
+    }
 
     private static CombatRecorderDiffView BuildDiff(CombatFrameSnapshot? prev, CombatFrameSnapshot? current)
     {
@@ -62,9 +63,7 @@ internal static class CombatRecorderViewerLogic
         AddRow(scalarRows, "目标HP%", FormatPercent(prev?.TargetHpPercent), FormatPercent(current?.TargetHpPercent), ref hasAnyDiff);
 
         foreach (var key in UniqueKeys(prev?.JobGauge, current?.JobGauge))
-        {
             AddRow(gaugeRows, key, FormatValue(prev?.JobGauge.GetValueOrDefault(key)), FormatValue(current?.JobGauge.GetValueOrDefault(key)), ref hasAnyDiff);
-        }
 
         var selfBuffDiff = BuildBuffDiff(prev?.SelfBuffs, current?.SelfBuffs);
         var targetBuffDiff = BuildBuffDiff(prev?.TargetBuffs, current?.TargetBuffs);
@@ -80,7 +79,7 @@ internal static class CombatRecorderViewerLogic
         };
     }
 
-    private static string BuildSummary(string actionName, CombatRecorderDiffView diff, CombatFrameSnapshot? prev, CombatFrameSnapshot? current)
+    private static string BuildSummary(CombatRecorderDiffView diff, CombatFrameSnapshot? prev, CombatFrameSnapshot? current)
     {
         var parts = new List<string>();
 
@@ -91,11 +90,9 @@ internal static class CombatRecorderViewerLogic
         {
             var before = FormatValue(prev?.JobGauge.GetValueOrDefault(key));
             var after = FormatValue(current?.JobGauge.GetValueOrDefault(key));
-            if (before != after)
-            {
-                parts.Add($"{key} {before} -> {after}");
-                break;
-            }
+            if (before == after) continue;
+            parts.Add($"{key} {before} -> {after}");
+            break;
         }
 
         var selfCount = diff.SelfBuffDiff.Added.Count + diff.SelfBuffDiff.Removed.Count + diff.SelfBuffDiff.Changed.Count;
@@ -145,7 +142,6 @@ internal static class CombatRecorderViewerLogic
                 diffParts.Add($"层数 {before.Stack} -> {after.Stack}");
             if (before.RemainMs != after.RemainMs)
                 diffParts.Add($"剩余 {FormatMilliseconds(before.RemainMs)} -> {FormatMilliseconds(after.RemainMs)}");
-
             if (diffParts.Count > 0)
                 changed.Add($"{after.Name} ({after.Id}) | {string.Join(" | ", diffParts)}");
         }

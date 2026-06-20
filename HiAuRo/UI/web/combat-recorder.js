@@ -69,6 +69,7 @@
             }
             refs.fileInput.click();
         });
+
         refs.btnReload.addEventListener("click", async () => {
             if (!state.file) return;
             await loadFile(state.file, state.fileHandle);
@@ -97,9 +98,7 @@
             applyTrimPreview();
         });
 
-        refs.btnResetTrim.addEventListener("click", () => {
-            resetTrimPreview();
-        });
+        refs.btnResetTrim.addEventListener("click", () => resetTrimPreview());
 
         refs.btnSaveTrim.addEventListener("click", async () => {
             if (!state.trim.previewActive || !state.fileHandle) return;
@@ -200,17 +199,28 @@
                     actionName: row.actionName || `Action ${row.actionId || 0}`,
                     timestamp: row.timestamp || "",
                     prev: null,
-                    current: null
+                    current: null,
+                    runnerDebug: null
                 };
                 groupMap.set(groupId, group);
             }
 
-            if (row.sampleRole === "prev" && !group.prev) {
+            if (row.sampleRole === "current") {
+                if (!group.current) group.current = row;
+                if (row.before && !group.prev) group.prev = row.before;
+                if (row.runnerDebug && !group.runnerDebug) group.runnerDebug = row.runnerDebug;
+                return;
+            }
+
+            if ((row.sampleRole === "before" || row.sampleRole === "prev") && !group.prev) {
                 group.prev = row;
-            } else if (row.sampleRole === "current" && !group.current) {
+                return;
+            }
+
+            if (!group.current) {
                 group.current = row;
-            } else if (!group.current) {
-                group.current = row;
+                if (row.before && !group.prev) group.prev = row.before;
+                if (row.runnerDebug && !group.runnerDebug) group.runnerDebug = row.runnerDebug;
             }
         });
 
@@ -251,18 +261,17 @@
         };
 
         let hasAnyDiff = false;
-
         hasAnyDiff = pushScalar("HP", prev?.hp, current?.hp, formatNumber) || hasAnyDiff;
         hasAnyDiff = pushScalar("MP", prev?.mp, current?.mp, formatNumber) || hasAnyDiff;
         hasAnyDiff = pushScalar("GCD", prev?.gcdCooldown, current?.gcdCooldown, formatMilliseconds) || hasAnyDiff;
+        hasAnyDiff = pushScalar("GCD类型", prev?.gcdKind, current?.gcdKind, formatGcdKind) || hasAnyDiff;
         hasAnyDiff = pushScalar("读条", prev?.isCasting, current?.isCasting, formatBoolean) || hasAnyDiff;
         hasAnyDiff = pushScalar("移动", prev?.isMoving, current?.isMoving, formatBoolean) || hasAnyDiff;
         hasAnyDiff = pushScalar("连击ID", prev?.lastComboSpellId, current?.lastComboSpellId, formatNumber) || hasAnyDiff;
         hasAnyDiff = pushScalar("目标HP%", prev?.targetHpPercent, current?.targetHpPercent, formatPercent) || hasAnyDiff;
         hasAnyDiff = pushScalar("距离", prev?.distance, current?.distance, formatDistance) || hasAnyDiff;
 
-        const gaugeKeys = uniqueKeys(prev?.jobGauge, current?.jobGauge);
-        gaugeKeys.forEach((key) => {
+        uniqueKeys(prev?.jobGauge, current?.jobGauge).forEach((key) => {
             const before = formatValue(prev?.jobGauge?.[key]);
             const after = formatValue(current?.jobGauge?.[key]);
             const changed = before !== after;
@@ -305,15 +314,12 @@
             if (!before || !after) return;
 
             const changes = [];
-            if ((before.stack || 0) !== (after.stack || 0)) {
+            if ((before.stack || 0) !== (after.stack || 0))
                 changes.push(`层数 ${before.stack || 0} -> ${after.stack || 0}`);
-            }
-            if ((before.remainMs || 0) !== (after.remainMs || 0)) {
+            if ((before.remainMs || 0) !== (after.remainMs || 0))
                 changes.push(`剩余 ${formatMilliseconds(before.remainMs)} -> ${formatMilliseconds(after.remainMs)}`);
-            }
-            if (changes.length) {
+            if (changes.length)
                 changed.push(`${after.name} (${after.id}) | ${changes.join(" | ")}`);
-            }
         });
 
         return {
@@ -329,16 +335,10 @@
         const prev = group.prev;
         const current = group.current;
 
-        if ((prev?.gcdKind ?? null) !== (current?.gcdKind ?? null)) {
-            parts.push(`gcd ${formatGcdKind(prev?.gcdKind)} -> ${formatGcdKind(current?.gcdKind)}`);
-        }
-
-        if ((prev?.mp ?? null) !== (current?.mp ?? null)) {
+        if ((prev?.mp ?? null) !== (current?.mp ?? null))
             parts.push(`MP ${formatNumber(prev?.mp)} -> ${formatNumber(current?.mp)}`);
-        }
 
-        const gaugePriority = ["astralFireStacks", "umbralIceStacks", "umbralHearts", "astralSoulStacks", "polyglotStacks", "isParadoxActive"];
-        for (const key of gaugePriority) {
+        for (const key of uniqueKeys(prev?.jobGauge, current?.jobGauge)) {
             const before = formatValue(prev?.jobGauge?.[key]);
             const after = formatValue(current?.jobGauge?.[key]);
             if (before !== after) {
@@ -348,22 +348,18 @@
         }
 
         const selfBuffChanges = diff.selfBuffDiff.added.length + diff.selfBuffDiff.removed.length + diff.selfBuffDiff.changed.length;
-        if (selfBuffChanges > 0) {
+        if (selfBuffChanges > 0)
             parts.push(`selfBuff ${selfBuffChanges}项变化`);
-        }
 
         const targetBuffChanges = diff.targetBuffDiff.added.length + diff.targetBuffDiff.removed.length + diff.targetBuffDiff.changed.length;
-        if (targetBuffChanges > 0) {
+        if (targetBuffChanges > 0)
             parts.push(`targetBuff ${targetBuffChanges}项变化`);
-        }
 
-        if ((prev?.targetHpPercent ?? null) !== (current?.targetHpPercent ?? null)) {
+        if ((prev?.targetHpPercent ?? null) !== (current?.targetHpPercent ?? null))
             parts.push(`target ${formatPercent(prev?.targetHpPercent)} -> ${formatPercent(current?.targetHpPercent)}`);
-        }
 
-        if (!parts.length) {
+        if (!parts.length)
             parts.push(diff.hasAnyDiff ? "存在差异" : "无关键差异");
-        }
 
         return parts.join(" | ");
     }
@@ -371,14 +367,10 @@
     function getFilteredGroups() {
         const search = state.filters.search.toLowerCase();
         return state.groups.filter((group) => {
-            if (state.filters.eventType !== "all" && group.eventType !== state.filters.eventType) {
+            if (state.filters.eventType !== "all" && group.eventType !== state.filters.eventType)
                 return false;
-            }
-
-            if (state.filters.changedOnly && !group.hasDiff) {
+            if (state.filters.changedOnly && !group.hasDiff)
                 return false;
-            }
-
             if (!search) return true;
             const haystack = `${group.actionName} ${group.actionId} ${group.eventType}`.toLowerCase();
             return haystack.includes(search);
@@ -392,9 +384,8 @@
             return;
         }
 
-        if (!groups.some(group => group.eventGroupId === state.selectedGroupId)) {
+        if (!groups.some(group => group.eventGroupId === state.selectedGroupId))
             state.selectedGroupId = groups[0].eventGroupId;
-        }
     }
 
     function render() {
@@ -419,12 +410,11 @@
 
     function renderTimeline() {
         const groups = getFilteredGroups();
-
         if (!groups.length) {
             refs.timelineList.innerHTML = `
                 <div class="empty-state">
                   <div class="empty-title">${state.fileName ? "没有符合条件的事件组" : "选择一份 Combat Recorder 日志"}</div>
-                  <div class="empty-copy">${state.fileName ? "调整筛选条件，或关闭“只看有变化项”后再试。" : "页面会按 eventGroupId 聚合，并展示每次技能的 prev/current 差异。"}</div>
+                  <div class="empty-copy">${state.fileName ? "调整筛选条件，或关闭“只看有变化项”后再试。" : "页面会按 eventGroupId 聚合，并展示每次技能事件的 before/current 差异。"}</div>
                 </div>
             `;
             return;
@@ -440,8 +430,8 @@
     }
 
     function renderTimelineRow(group) {
-        const badgeClass = group.eventType === "AbilityEffect" ? "ability" : "gcd";
-        const badgeText = group.eventType === "AbilityEffect" ? "Ability" : "GCD";
+        const badgeClass = group.eventType === "AbilityEffect" ? "ability" : group.eventType === "StallDetected" ? "diagnostic" : "gcd";
+        const badgeText = group.eventType === "AbilityEffect" ? "Ability" : group.eventType === "StallDetected" ? "STALL" : "GCD";
         const selectedClass = group.eventGroupId === state.selectedGroupId ? "selected" : "";
         const isStart = state.trim.startGroupId === group.eventGroupId;
         const isEnd = state.trim.endGroupId === group.eventGroupId;
@@ -474,7 +464,7 @@
             return;
         }
 
-        refs.detailsSubtitle.textContent = `${group.actionName} · ${group.eventType}`;
+        refs.detailsSubtitle.textContent = `${group.actionName} / ${group.eventType}`;
         const warningBlock = state.warnings.length
             ? `<div class="warning-banner">解析时跳过 ${state.warnings.length} 行异常记录。</div>`
             : "";
@@ -487,6 +477,7 @@
             ${renderGaugeSection(group)}
             ${renderBuffSection("自身 Buff 变化", group.diff.selfBuffDiff)}
             ${renderBuffSection("目标 Buff 变化", group.diff.targetBuffDiff)}
+            ${renderRunnerDebugSection(group)}
             ${renderRawSection(group)}
         `;
     }
@@ -611,17 +602,54 @@
         `;
     }
 
-    function renderRawSection(group) {
-        if (!state.filters.showRawJson) {
+    function renderRunnerDebugSection(group) {
+        if (!group.runnerDebug && !(group.current?.resolverResults || []).length)
             return "";
-        }
 
+        const debug = group.runnerDebug || {};
+        const resolvers = (group.current?.resolverResults || []).map((resolver) => `
+            <tr>
+              <th>${escapeHtml(resolver.name || "-")}</th>
+              <td>${escapeHtml(resolver.mode || "-")}</td>
+              <td>${escapeHtml(String(resolver.checkResult ?? "-"))}</td>
+              <td>${escapeHtml(resolver.passedWindow ? "是" : "否")}</td>
+            </tr>
+        `).join("");
+
+        return `
+            <section class="detail-section">
+              <div class="detail-heading">Runner Debug</div>
+              <div class="detail-body">
+                <table class="diff-table">
+                  <tbody>
+                    <tr><th>Phase</th><td>${escapeHtml(debug.phase || "-")}</td><th>SlotSource</th><td>${escapeHtml(debug.slotSource || "-")}</td></tr>
+                    <tr><th>CanGcd</th><td>${escapeHtml(formatBoolean(debug.canGcd))}</td><th>CanOgcd</th><td>${escapeHtml(formatBoolean(debug.canOgcd))}</td></tr>
+                    <tr><th>HasNextSlot</th><td>${escapeHtml(formatBoolean(debug.hasNextSlot))}</td><th>HasWaitGcdSlot</th><td>${escapeHtml(formatBoolean(debug.hasWaitGcdSlot))}</td></tr>
+                    <tr><th>HasCurrSlot</th><td>${escapeHtml(formatBoolean(debug.hasCurrSlot))}</td><th></th><td></td></tr>
+                  </tbody>
+                </table>
+                ${resolvers ? `
+                    <div class="detail-heading" style="margin-top:12px;">Resolver Results</div>
+                    <table class="diff-table">
+                      <thead>
+                        <tr><th>Resolver</th><th>Mode</th><th>Check</th><th>Passed</th></tr>
+                      </thead>
+                      <tbody>${resolvers}</tbody>
+                    </table>
+                ` : `<div class="value-muted">该事件没有 resolver 结果。</div>`}
+              </div>
+            </section>
+        `;
+    }
+
+    function renderRawSection(group) {
+        if (!state.filters.showRawJson) return "";
         return `
             <details class="detail-section">
               <summary>原始 JSON</summary>
               <div class="detail-body two-col">
                 <div>
-                  <div class="detail-heading">prev</div>
+                  <div class="detail-heading">before</div>
                   <pre class="raw-json">${escapeHtml(JSON.stringify(group.prev, null, 2) || "null")}</pre>
                 </div>
                 <div>
@@ -683,9 +711,8 @@
         const ordered = buildGroups(state.originalRows);
         const startGroup = ordered.find((group) => group.eventGroupId === state.trim.startGroupId);
         const endGroup = ordered.find((group) => group.eventGroupId === state.trim.endGroupId);
-        if (!startGroup || !endGroup) {
+        if (!startGroup || !endGroup)
             throw new Error("未找到截断范围边界事件组");
-        }
 
         const startTime = Math.min(
             Date.parse(startGroup.prev?.timestamp || "") || Number.MAX_SAFE_INTEGER,
@@ -737,7 +764,7 @@
         const group = state.groups.find((item) => item.eventGroupId === groupId)
             || buildGroups(state.originalRows).find((item) => item.eventGroupId === groupId);
         if (!group) return groupId;
-        return `${formatTime(group.timestamp)} · ${group.actionName} · ${group.eventType}`;
+        return `${formatTime(group.timestamp)} / ${group.actionName} / ${group.eventType}`;
     }
 
     function buildBuffMap(buffs) {
