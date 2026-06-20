@@ -79,6 +79,19 @@ select {
     box-shadow: var(--shadow);
 }
 
+.viewer-version {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 12px;
+    border-radius: 8px;
+    background: rgba(24, 105, 201, 0.1);
+    border: 1px solid rgba(24, 105, 201, 0.18);
+    color: var(--accent-strong);
+    font-size: 12px;
+    font-weight: 700;
+}
+
 .filter-select,
 .filter-input {
     min-height: 34px;
