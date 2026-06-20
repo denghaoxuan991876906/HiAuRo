@@ -279,9 +279,8 @@ select {
 .event-name {
     font-size: 14px;
     font-weight: 700;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    word-break: break-word;
 }
 
 .event-time {
@@ -313,6 +312,8 @@ select {
     color: var(--text-sub);
     font-size: 12px;
     line-height: 1.45;
+    white-space: normal;
+    word-break: break-word;
 }
 
 .empty-state {
@@ -361,6 +362,7 @@ select {
     font-size: 14px;
     font-weight: 700;
     word-break: break-word;
+    white-space: normal;
 }
 
 .detail-section {
@@ -419,6 +421,7 @@ select {
 .diff-table td:not(.label-cell) {
     width: 37%;
     word-break: break-word;
+    white-space: normal;
 }
 
 .diff-table tr.changed {
@@ -446,14 +449,17 @@ select {
 }
 
 .tag {
-    display: inline-flex;
-    align-items: center;
+    display: inline-block;
     gap: 6px;
     padding: 6px 10px;
     border-radius: 999px;
     font-size: 12px;
     border: 1px solid var(--border);
     background: var(--bg-soft);
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.45;
+    max-width: 100%;
 }
 
 .tag.added {
