@@ -77,6 +77,7 @@ public partial class Plugin : IDalamudPlugin
             }
 
             CommandMgr.Init();
+            CombatEnhancementManager.Instance.Init();
             EventSystem.Init();
             GameEventHook.Instance.Init();
             ScriptManager.SetHostDllPath(_pluginInterface.AssemblyLocation.Directory?.FullName ?? "");
@@ -256,6 +257,7 @@ public partial class Plugin : IDalamudPlugin
         ScriptManager.Shutdown();
         GameEventHook.Instance.Shutdown();
         EventSystem.Shutdown();
+        CombatEnhancementManager.Instance.Shutdown();
         CommandMgr.Shutdown();
 
         PluginLifecycle.Shutdown();
