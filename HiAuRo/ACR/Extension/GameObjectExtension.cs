@@ -1,8 +1,8 @@
 using System.Numerics;
+using Dalamud.Game.ClientState.Objects.Enums;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using OmenTools.Dalamud.Services.ObjectTable.Abstractions.ObjectKinds;
 using CSGameObject = FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject;
-using CSCharacter = FFXIVClientStructs.FFXIV.Client.Game.Character.Character;
 using FFXIVClientStructs.FFXIV.Client.UI;
 
 namespace HiAuRo.ACR.Extension;
@@ -18,8 +18,7 @@ public static class GameObjectExtension
     public static bool HasAura(this IBattleChara? bc, uint auraId, float timeLeft = 0)
     {
         if (bc == null) return false;
-        var s = bc.StatusList.FirstOrDefault(x => x.StatusID == auraId);
-        if (s == null) return false;
+        if (!bc.StatusList.TryGetStatus(auraId, out var s, out _) || s == null) return false;
         return timeLeft <= 0 || s.RemainingTime >= timeLeft;
     }
 
@@ -32,7 +31,7 @@ public static class GameObjectExtension
     public static int GetAuraStack(this IBattleChara bc, uint id)
     {
         if (bc == null) return 0;
-        var st = bc.StatusList.FirstOrDefault(s => s.StatusID == id);
+        bc.StatusList.TryGetStatus(id, out var st, out _);
         // FFXIVClientStructs Status.StackCount 已在 DT 版本移除，改用 Param 近似
         return st != null ? st.Param > 0 ? st.Param : 1 : 0;
     }
@@ -40,11 +39,7 @@ public static class GameObjectExtension
     public static bool HasAnyAura(this IBattleChara bc, List<uint> auras, float timeLeft = 0)
     {
         if (bc == null) return false;
-        return auras.Any(id =>
-        {
-            var s = bc.StatusList.FirstOrDefault(x => x.StatusID == id);
-            return s != null && (timeLeft <= 0 || s.RemainingTime >= timeLeft);
-        });
+        return auras.Any(id => bc.HasAura(id, timeLeft));
     }
 
     public static float GetAuraTimeLeft(this IBattleChara bc, uint auraId, bool fromSelf = true)
@@ -100,8 +95,8 @@ public static class GameObjectExtension
     public static bool IsDps(this ICharacter c)
         => c != null && (IsMelee(c) || IsRanged(c) || IsCaster(c));
 
-    public static unsafe bool IsInParty(this ICharacter c)
-        => c != null && ((CSCharacter*)c.Address)->IsPartyMember;
+    public static bool IsInParty(this ICharacter c)
+        => c != null && (c.StatusFlags & StatusFlags.PartyMember) != 0;
 
     private static bool IsRole(uint jobId, params uint[] ids)
         => ids.Contains(jobId);

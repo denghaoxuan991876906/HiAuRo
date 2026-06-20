@@ -11,31 +11,14 @@ public static class AuraHelper
     public static bool HasAura(IGameObject? target, uint buffId)
     {
         if (target is not IBattleChara bc) return false;
-        var list = bc.StatusList;
-        for (int i = 0; i < list.Length; i++)
-        {
-            var status = list[i];
-            if (status != null && status.StatusID == buffId) return true;
-        }
-        return false;
+        return bc.StatusList.HasStatus(buffId);
     }
 
     /// <summary>指定对象是否存在任意 buff</summary>
     public static bool HasAnyAura(IGameObject? target, params uint[] buffIds)
     {
         if (target is not IBattleChara bc) return false;
-        var list = bc.StatusList;
-        for (int i = 0; i < list.Length; i++)
-        {
-            var status = list[i];
-            if (status == null) continue;
-            var sid = status.StatusID;
-            for (int j = 0; j < buffIds.Length; j++)
-            {
-                if (sid == buffIds[j]) return true;
-            }
-        }
-        return false;
+        return buffIds.Any(bc.StatusList.HasStatus);
     }
 
     /// <summary>指定对象上 buff 剩余时间 (ms)。不存在时返回 0</summary>

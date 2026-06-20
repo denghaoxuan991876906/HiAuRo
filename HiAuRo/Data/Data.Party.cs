@@ -54,7 +54,6 @@ public static partial class Data
             {
                 if (member.GameObject == null) continue;
 
-                // 先直接转型，避免 CreateObjectReference 原生调用
                 var player = member.GameObject as IPlayerCharacter
                     ?? DService.Instance().ObjectTable.CreateObjectReference(member.GameObject.Address) as IPlayerCharacter;
                 if (player == null) continue;
@@ -136,18 +135,7 @@ public static partial class Data
         private static bool HasTankStance(IPlayerCharacter player)
         {
             if (player is not IBattleChara bc) return false;
-            var list = bc.StatusList;
-            for (int i = 0; i < list.Length; i++)
-            {
-                var status = list[i];
-                if (status == null) continue;
-                var sid = status.StatusID;
-                for (int j = 0; j < TankStances.Length; j++)
-                {
-                    if (sid == TankStances[j]) return true;
-                }
-            }
-            return false;
+            return TankStances.Any(bc.StatusList.HasStatus);
         }
     }
 }

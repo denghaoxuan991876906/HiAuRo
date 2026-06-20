@@ -48,15 +48,15 @@ public static partial class Data
             Me.Object is ICharacter c && c.StatusFlags.HasFlag(StatusFlags.InCombat);
 
         public static bool IsCasting =>
-            DService.Instance().Condition is { } cond && cond[ConditionFlag.Casting];
+            DService.Instance().Condition.IsCasting;
 
         public static bool IsBoundByDuty =>
-            DService.Instance().Condition is { } cond && cond[ConditionFlag.BoundByDuty];
+            DService.Instance().Condition.IsBoundByDuty;
 
         public static bool IsOnMount =>
-            DService.Instance().Condition is { } cond && cond[ConditionFlag.Mounted];
+            DService.Instance().Condition.IsOnMount;
 
         public static bool IsBetweenAreas =>
-            DService.Instance().Condition is { } cond && cond[ConditionFlag.BetweenAreas];
+            DService.Instance().Condition.IsBetweenAreas;
     }
 }
