@@ -9,3 +9,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("SpellCastCallbackTests")]
 [assembly: InternalsVisibleTo("GCDHelperTests")]
 [assembly: InternalsVisibleTo("CombatCommandTests")]
+[assembly: InternalsVisibleTo("OverlayVisibilityTests")]

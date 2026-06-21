@@ -138,11 +138,18 @@ internal class UIManager : IDisposable
         try { if (_positionalOverlay != null) { _windowSystem.RemoveWindow(_positionalOverlay); _positionalOverlay = null; } } catch { }
     }
 
+    internal static bool ShouldShowStatusBar(bool allOverlaysVisible, bool hasLoadedAcr)
+        => allOverlaysVisible && hasLoadedAcr;
+
+    internal static bool ShouldShowPanel(bool allOverlaysVisible, bool hasLoadedAcr, bool panelVisible)
+        => allOverlaysVisible && hasLoadedAcr && panelVisible;
+
     public void SetAllOverlaysVisible(bool visible)
     {
-        if (_overlayStatusBar != null) _overlayStatusBar.IsOpen = visible;
-        if (_overlayQtPanel != null) _overlayQtPanel.IsOpen = visible;
-        if (_overlayHotkeyPanel != null) _overlayHotkeyPanel.IsOpen = visible;
+        var hasLoadedAcr = Runtime.ACRLifecycle.CurrentEntry != null;
+        if (_overlayStatusBar != null) _overlayStatusBar.IsOpen = ShouldShowStatusBar(visible, hasLoadedAcr);
+        if (_overlayQtPanel != null) _overlayQtPanel.IsOpen = ShouldShowPanel(visible, hasLoadedAcr, _config.QtPanelVisible);
+        if (_overlayHotkeyPanel != null) _overlayHotkeyPanel.IsOpen = ShouldShowPanel(visible, hasLoadedAcr, _config.HotkeyPanelVisible);
 
         var overlays = _config.Overlays ?? [];
         if (visible)
@@ -153,12 +160,13 @@ internal class UIManager : IDisposable
 
     public void SyncPanelVisibility()
     {
-        if (_overlayStatusBar != null && _overlayStatusBar.IsOpen && !_config.AllOverlaysVisible)
-            _overlayStatusBar.IsOpen = false;
+        var hasLoadedAcr = Runtime.ACRLifecycle.CurrentEntry != null;
+        if (_overlayStatusBar != null)
+            _overlayStatusBar.IsOpen = ShouldShowStatusBar(_config.AllOverlaysVisible, hasLoadedAcr);
         if (_overlayQtPanel != null)
-            _overlayQtPanel.IsOpen = _config.AllOverlaysVisible && _config.QtPanelVisible;
+            _overlayQtPanel.IsOpen = ShouldShowPanel(_config.AllOverlaysVisible, hasLoadedAcr, _config.QtPanelVisible);
         if (_overlayHotkeyPanel != null)
-            _overlayHotkeyPanel.IsOpen = _config.AllOverlaysVisible && _config.HotkeyPanelVisible;
+            _overlayHotkeyPanel.IsOpen = ShouldShowPanel(_config.AllOverlaysVisible, hasLoadedAcr, _config.HotkeyPanelVisible);
     }
 
     /// <summary>打开日志窗口</summary>
