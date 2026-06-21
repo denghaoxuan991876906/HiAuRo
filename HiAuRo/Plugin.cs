@@ -1,7 +1,6 @@
 using System.Linq;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
-using HiAuRo.Authoring;
 using HiAuRo.Command;
 using HiAuRo.Execution;
 using HiAuRo.Script;
@@ -121,7 +120,6 @@ public partial class Plugin : IDalamudPlugin
             if (_uiBridge != null)
             {
                 RegisterUiHandlers(_uiBridge);
-                AuthoringServer.Instance.Register(_uiBridge);
             }
 
             _mainWindow = new MainWindow(_config, () => _config.Save());
