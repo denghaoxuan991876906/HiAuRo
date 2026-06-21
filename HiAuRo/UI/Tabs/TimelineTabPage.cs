@@ -127,7 +127,7 @@ public sealed class TimelineTabPage : TabPageBase
         ComponentLibrary.SectionHeader("事实轴");
         {
             if (ComponentLibrary.PrimaryButton("打开事实轴编辑器"))
-                OpenEditor("fact-editor.html");
+                OpenEditor();
 
             ImGui.Spacing();
 
@@ -215,10 +215,10 @@ public sealed class TimelineTabPage : TabPageBase
         ComponentLibrary.SectionHeader("执行轴");
         {
             if (ComponentLibrary.PrimaryButton("打开 axflow 编辑器"))
-                OpenEditor("axflow-editor.html");
+                OpenEditor();
             ImGui.SameLine();
             if (ComponentLibrary.DefaultButton("打开通用编辑器"))
-                OpenEditor("editor.html");
+                OpenEditor();
 
             ImGui.Spacing();
             ComponentLibrary.Divider();
@@ -329,7 +329,7 @@ public sealed class TimelineTabPage : TabPageBase
         ComponentLibrary.SectionHeader("辅助轴");
         {
             if (ComponentLibrary.PrimaryButton("打开编辑器"))
-                OpenEditor("editor.html", "axis=assist");
+                OpenEditor();
 
             ImGui.Spacing();
             ComponentLibrary.Divider();
@@ -391,8 +391,8 @@ public sealed class TimelineTabPage : TabPageBase
         }
     }
 
-    private static void OpenEditor(string fileName, string? query = null)
+    private static void OpenEditor()
     {
-        MainWindow.OpenEditor(fileName, query);
+        MainWindow.OpenEditor();
     }
 }

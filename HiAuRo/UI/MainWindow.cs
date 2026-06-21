@@ -608,9 +608,9 @@ public sealed class MainWindow : Window
         IsOpen = true;
     }
 
-    public static void OpenEditor(string fileName, string? query = null)
+    public static void OpenEditor()
     {
-        var url = EditorLaunchHelper.BuildWebToolsUrl(fileName, query);
+        var url = EditorLaunchHelper.BuildWebToolsUrl();
         try { System.Diagnostics.Process.Start(EditorLaunchHelper.Build(url)); } catch { }
     }
 }

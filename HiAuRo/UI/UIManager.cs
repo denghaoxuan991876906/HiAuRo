@@ -16,7 +16,6 @@ internal class UIManager : IDisposable
     private readonly IDalamudPluginInterface _pluginInterface;
     private readonly WindowSystem _windowSystem;
     private readonly Action _saveConfig;
-    private readonly string _webRoot;
 
     private WebUiServer? _uiServer;
     private WebUiBridge? _uiBridge;
@@ -42,13 +41,12 @@ internal class UIManager : IDisposable
     public BrowsingwayIpc? BrowsingwayIpc => _browsingwayIpc;
 
     public UIManager(PluginConfig config, IDalamudPluginInterface pluginInterface,
-                     WindowSystem windowSystem, Action saveConfig, string webRoot)
+                     WindowSystem windowSystem, Action saveConfig)
     {
         _config = config;
         _pluginInterface = pluginInterface;
         _windowSystem = windowSystem;
         _saveConfig = saveConfig;
-        _webRoot = webRoot;
     }
 
     /// <summary>根据当前配置初始化 UI 资源</summary>
@@ -67,7 +65,7 @@ internal class UIManager : IDisposable
         try
         {
             _uiBridge = new WebUiBridge();
-            _uiServer = new WebUiServer(_webRoot, _uiBridge);
+            _uiServer = new WebUiServer(_pluginInterface.AssemblyLocation.Directory?.FullName ?? ".", _uiBridge);
             _uiServer.Start();
             DService.Instance().Log.Information($"[UIManager] WebUiServer 启动完成 端口={_uiServer.Port}");
 

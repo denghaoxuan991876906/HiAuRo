@@ -61,20 +61,6 @@ public partial class Plugin : IDalamudPlugin
             }), "HelperUpdater");
             DService.Instance().Log.Information("[Lifecycle] HelperUpdater 异步更新已启动");
 
-            var webRoot = Path.Combine(_pluginInterface.ConfigDirectory.FullName, "web");
-            var sourceWebRoot = Path.Combine(_pluginInterface.AssemblyLocation.Directory?.FullName ?? ".", "UI", "web");
-
-            // 始终覆盖更新 web 前端文件
-            if (Directory.Exists(sourceWebRoot))
-            {
-                CopyDirectory(sourceWebRoot, webRoot);
-                DService.Instance().Log.Information($"[UI] web文件已复制: {sourceWebRoot} → {webRoot}");
-            }
-            else
-            {
-                DService.Instance().Log.Error($"[UI] web源目录不存在: {sourceWebRoot}, 悬浮窗将无内容!");
-            }
-
             CommandMgr.Init();
             EventSystem.Init();
             GameEventHook.Instance.Init();
@@ -114,7 +100,7 @@ public partial class Plugin : IDalamudPlugin
             _vfxRenderer = new VfxRenderer();
             DService.Instance().Log.Information($"[VFX] VfxRenderer 初始化完成, IsAvailable={VfxNative.IsAvailable}");
             _uiManager = new UIManager(_config, _pluginInterface, _windowSystem,
-                () => _config.Save(), webRoot);
+                () => _config.Save());
             _uiManager.Init();
             _uiBridge = _uiManager.Bridge;
             if (_uiBridge != null)
@@ -311,18 +297,5 @@ public partial class Plugin : IDalamudPlugin
     #endregion
 
     #region 工具
-
-    private static void CopyDirectory(string source, string target)
-    {
-        Directory.CreateDirectory(target);
-        foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
-        {
-            var relative = file.Substring(source.Length).TrimStart(Path.DirectorySeparatorChar);
-            var dest = Path.Combine(target, relative);
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            File.Copy(file, dest, true);
-        }
-    }
-
     #endregion
 }

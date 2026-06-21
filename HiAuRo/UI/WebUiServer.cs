@@ -19,7 +19,7 @@ public sealed class WebUiServer
     /// <summary>Initializes a new instance of the <see cref="WebUiServer"/> class</summary>
     public WebUiServer(string webRoot, WebUiBridge bridge)
     {
-        _webRoot = webRoot;
+        _webRoot = Path.GetFullPath(Path.Combine(webRoot, "UI", "web"));
         _bridge = bridge;
     }
 

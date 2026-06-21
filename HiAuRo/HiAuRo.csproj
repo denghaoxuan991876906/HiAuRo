@@ -37,7 +37,12 @@
 
   <ItemGroup>
     <None Include="HiAuRo.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="UI/web/**\*.*" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
+    <Content Include="UI/web/main.html" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
+    <Content Include="UI/web/qt.html" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
+    <Content Include="UI/web/hotkey.html" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
+    <Content Include="UI/web/jobview.html" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
+    <Content Include="UI/web/app.js" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
+    <Content Include="UI/web/style.css" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
     <EmbeddedResource Include="Resources\Fonts\*.ttf" />
     <EmbeddedResource Include="Resources\blm_alpha.png" />
     <Compile Remove="Jobs\**" />
