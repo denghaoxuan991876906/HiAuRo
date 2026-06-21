@@ -362,17 +362,7 @@ public static class ExecutionJsonLoader
     {
         if (_builtInRegistered) return;
         _builtInRegistered = true;
-
-        var asm = typeof(ExecutionJsonLoader).Assembly;
-        foreach (var type in asm.GetTypes())
-        {
-            if (type.IsAbstract) continue;
-            if (typeof(ITriggerCond).IsAssignableFrom(type))
-                RegisterType(type, _condTypes);
-            else if (typeof(ITriggerAction).IsAssignableFrom(type))
-                RegisterType(type, _actionTypes);
-        }
-        DService.Instance().Log.Information($"[ExecAxis] 内置类型注册: {_condTypes.Count} 条件, {_actionTypes.Count} 动作");
+        RebuildFromAssemblies([typeof(ExecutionJsonLoader).Assembly]);
     }
 
     private static void RegisterType(Type type, Dictionary<string, Type> dict)
@@ -395,6 +385,7 @@ public static class ExecutionJsonLoader
     {
         _condTypes.Clear();
         _actionTypes.Clear();
+        _builtInRegistered = false;
     }
 
     /// <summary>注册自定义动作类型</summary>
@@ -427,6 +418,40 @@ public static class ExecutionJsonLoader
                 _actionTypes[attr.TypeDiscriminator] = t;
         }
         DService.Instance().Log.Information($"[ExecAxis] ACR 注册: {_condTypes.Count} 条件, {_actionTypes.Count} 动作");
+    }
+
+    /// <summary>按程序集全量重建触发器类型注册表，保证运行时与 catalog 使用同一来源。</summary>
+    public static void RebuildFromAssemblies(IEnumerable<Assembly> assemblies)
+    {
+        _condTypes.Clear();
+        _actionTypes.Clear();
+
+        foreach (var assembly in assemblies.Distinct())
+        {
+            Type[] types;
+            try
+            {
+                types = assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                types = ex.Types.Where(t => t != null).Cast<Type>().ToArray();
+                DService.Instance().Log.Warning(
+                    $"[ExecAxis] 程序集 {assembly.GetName().Name} 部分类型加载失败: {ex.LoaderExceptions?.Length ?? 0} 错误");
+            }
+
+            foreach (var type in types)
+            {
+                if (type.IsAbstract) continue;
+                if (typeof(ITriggerCond).IsAssignableFrom(type))
+                    RegisterType(type, _condTypes);
+                else if (typeof(ITriggerAction).IsAssignableFrom(type))
+                    RegisterType(type, _actionTypes);
+            }
+        }
+
+        _builtInRegistered = true;
+        DService.Instance().Log.Information($"[ExecAxis] 类型表重建: {_condTypes.Count} 条件, {_actionTypes.Count} 动作");
     }
 
     internal static bool TryDeserializeCond(string fullTypeName, JsonElement raw, out ITriggerCond? result)

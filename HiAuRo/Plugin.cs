@@ -168,21 +168,8 @@ public partial class Plugin : IDalamudPlugin
 
             try
             {
-                var merged = new TriggerCatalog();
-                TriggerCatalogBuilder.MergeInto(merged,
-                    TriggerCatalogBuilder.BuildFromAssembly(typeof(Execution.Triggers.Cond.TriggerCond_敌人读条).Assembly, "builtin"));
-
-                foreach (var acrAsm in ACRLoader.LoadedAcrAssemblies)
-                {
-                    var acrCatalog = TriggerCatalogBuilder.BuildFromAssembly(acrAsm, "acr");
-                    TriggerCatalogBuilder.MergeInto(merged, acrCatalog);
-                }
-
-                var catalogPath = Path.Combine(_pluginInterface.ConfigDirectory.FullName, "trigger-catalog.json");
-                var catalogJson = System.Text.Json.JsonSerializer.Serialize(merged,
-                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
-                File.WriteAllText(catalogPath, catalogJson);
-                DService.Instance().Log.Information($"[TriggerCatalog] 已生成 ({merged.Conditions.Count}C {merged.Actions.Count}A {merged.Scripts.Count}S)");
+                TriggerCatalogExporter.RebuildRuntimeTypeRegistry();
+                TriggerCatalogExporter.ExportToConfigDirectory(_pluginInterface.ConfigDirectory.FullName);
             }
             catch (Exception ex)
             {

@@ -263,6 +263,8 @@ public static class ACRLifecycle
         // 重新扫描
         ACRLoader.UnloadAll();
         ACRLoader.LoadAll(Plugin.Instance.PluginInterface.ConfigDirectory.FullName);
+        Execution.TriggerCatalogExporter.RebuildRuntimeTypeRegistry();
+        Execution.TriggerCatalogExporter.ExportToConfigDirectory(Plugin.Instance.PluginInterface.ConfigDirectory.FullName);
 
         _lastJob = 0;
         CheckJobSwitch();

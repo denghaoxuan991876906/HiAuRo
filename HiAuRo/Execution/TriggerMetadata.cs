@@ -1,7 +1,7 @@
 using System.Reflection;
 using HiAuRo.ACR;
-using HiAuRo.UI;
 using System.Text.Json.Serialization;
+using System.Collections;
 
 namespace HiAuRo.Execution;
 
@@ -95,7 +95,7 @@ public sealed class TriggerInfo
     [JsonPropertyName("description")]
     public string? Description { get; init; }
 
-    /// <summary>类别 ("builtin"|"acr"|"local")</summary>
+    /// <summary>类别 ("builtin"|"acr"|"plugin"|"local")</summary>
     [JsonPropertyName("category")]
     public string Category { get; init; } = string.Empty;
 
@@ -250,35 +250,18 @@ public static class TriggerCatalogBuilder
 
         // 通过 Draw() 收集 UI 控件声明
         List<object>? controls = null;
-        try
+        if (DService.IsInitialized)
         {
-            var instance = Activator.CreateInstance(type);
-            if (instance is ITriggerCond condInstance)
+            try
             {
-                var builder = new UiBuilderImpl();
-                condInstance.Draw(builder);
-                controls = builder.GetControls().Select(c => (object)new
-                {
-                    c.Id, c.Type, c.ParentId, c.Label,
-                    defaultValue = c.Value,
-                    c.Options, c.Meta
-                }).ToList();
+                var instance = Activator.CreateInstance(type);
+                if (instance != null)
+                    controls = TryExtractControls(instance);
             }
-            else if (instance is ITriggerAction actionInstance)
+            catch (Exception ex)
             {
-                var builder = new UiBuilderImpl();
-                actionInstance.Draw(builder);
-                controls = builder.GetControls().Select(c => (object)new
-                {
-                    c.Id, c.Type, c.ParentId, c.Label,
-                    defaultValue = c.Value,
-                    c.Options, c.Meta
-                }).ToList();
+                DService.Instance().Log.Warning($"[TriggerMetadata] Draw() 调用失败 ({type.Name}): {ex.Message}");
             }
-        }
-        catch (Exception ex)
-        {
-            DService.Instance().Log.Warning($"[TriggerMetadata] Draw() 调用失败 ({type.Name}): {ex.Message}");
         }
 
         return new TriggerInfo
@@ -397,5 +380,48 @@ public static class TriggerCatalogBuilder
 
         // 默认返回text
         return "text";
+    }
+
+    private static List<object>? TryExtractControls(object instance)
+    {
+        // ponytail: controls 只是编辑器增强信息，离开宿主依赖环境时拿不到就跳过，不影响 catalog 主体。
+        var builderType = typeof(TriggerCatalogBuilder).Assembly.GetType("HiAuRo.UI.UiBuilderImpl");
+        if (builderType == null) return null;
+
+        var builderObj = Activator.CreateInstance(builderType);
+        if (builderObj is not HiAuRo.ACR.IUiBuilder builder) return null;
+
+        switch (instance)
+        {
+            case ITriggerCond condInstance:
+                condInstance.Draw(builder);
+                break;
+            case ITriggerAction actionInstance:
+                actionInstance.Draw(builder);
+                break;
+            default:
+                return null;
+        }
+
+        if (builderType.GetMethod("GetControls")?.Invoke(builderObj, null) is not IEnumerable controls)
+            return null;
+
+        var result = new List<object>();
+        foreach (var control in controls)
+        {
+            var controlType = control.GetType();
+            result.Add(new
+            {
+                Id = controlType.GetProperty("Id")?.GetValue(control),
+                Type = controlType.GetProperty("Type")?.GetValue(control),
+                ParentId = controlType.GetProperty("ParentId")?.GetValue(control),
+                Label = controlType.GetProperty("Label")?.GetValue(control),
+                defaultValue = controlType.GetProperty("Value")?.GetValue(control),
+                Options = controlType.GetProperty("Options")?.GetValue(control),
+                Meta = controlType.GetProperty("Meta")?.GetValue(control)
+            });
+        }
+
+        return result;
     }
 }

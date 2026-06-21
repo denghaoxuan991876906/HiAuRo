@@ -74,6 +74,8 @@ public static class PluginLifecycle
         try
         {
             Execution.ScriptCompiler.RegisterPluginReferences();
+            Execution.TriggerCatalogExporter.RebuildRuntimeTypeRegistry();
+            Execution.TriggerCatalogExporter.ExportToConfigDirectory(_configDir);
         }
         catch (Exception ex)
         {
