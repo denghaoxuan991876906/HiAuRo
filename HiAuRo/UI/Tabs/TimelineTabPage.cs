@@ -393,9 +393,6 @@ public sealed class TimelineTabPage : TabPageBase
 
     private static void OpenEditor(string fileName, string? query = null)
     {
-        var port = Plugin.Instance?._uiManager?.WebServerPort ?? 5678;
-        var url = $"http://localhost:{port}/{fileName}";
-        if (query != null) url += "?" + query;
-        try { System.Diagnostics.Process.Start(EditorLaunchHelper.Build(url)); } catch { }
+        MainWindow.OpenEditor(fileName, query);
     }
 }

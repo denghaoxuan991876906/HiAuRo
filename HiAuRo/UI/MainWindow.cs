@@ -610,9 +610,7 @@ public sealed class MainWindow : Window
 
     public static void OpenEditor(string fileName, string? query = null)
     {
-        var port = Plugin.Instance?._uiManager?.WebServerPort ?? 5678;
-        var url = $"http://localhost:{port}/{fileName}";
-        if (query != null) url += "?" + query;
+        var url = EditorLaunchHelper.BuildWebToolsUrl(fileName, query);
         try { System.Diagnostics.Process.Start(EditorLaunchHelper.Build(url)); } catch { }
     }
 }
