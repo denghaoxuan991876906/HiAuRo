@@ -1,6 +1,7 @@
 using System.Numerics;
 using HiAuRo.FactAxis;
 using HiAuRo.Infrastructure;
+using HiAuRo.Runtime.Movement;
 using OmenTools;
 using OmenTools.Interop.Game.Models;
 using OmenTools.Interop.Game.Models.Packets.Downstream;
@@ -40,6 +41,7 @@ public sealed class MovementExecutor
         _executedDemandIds.Clear();
         _startedMoveDemands.Clear();
         _holdUntilMs = 0;
+        IntelligenceEngine.Instance.ActiveDemands.Clear();
     }
 
     /// <summary>每帧更新移动执行</summary>
@@ -48,36 +50,16 @@ public sealed class MovementExecutor
         var flags = PluginConfig.Instance.FactAxis;
         if (!flags.MoveTo && !flags.TP && !flags.Hold) return;
         if (!state.IsRunning) return;
-        if (Environment.TickCount64 < _holdUntilMs) return;
 
         var demands = IntelligenceEngine.Instance.ActiveDemands;
         for (int i = demands.Count - 1; i >= 0; i--)
         {
             var demand = demands[i];
             if (_executedDemandIds.Contains(demand.Id)) continue;
-
-            switch (demand.Type)
-            {
-                case DemandType.MoveTo when flags.MoveTo:
-                    if (demand.Policy == MovementPolicy.Gather)
-                        处理Gather_MoveTo(demand, flags);
-                    else
-                        处理MoveTo(demand, state, flags);
-                    break;
-                case DemandType.TP when flags.TP:
-                    if (demand.Policy == MovementPolicy.Gather)
-                        处理Gather_TP(demand);
-                    else
-                        处理TP(demand);
-                    break;
-                case DemandType.Hold when flags.Hold:
-                    if (demand.Policy == MovementPolicy.Gather)
-                        处理Gather_Hold(demand);
-                    else
-                        处理Hold(demand);
-                    break;
-            }
+            MovementService.Instance.EnqueueDemand(demand, flags, state);
+            _executedDemandIds.Add(demand.Id);
         }
+        demands.Clear();
     }
 
     private void 处理MoveTo(MovementDemand demand, FactState state, FactAxisFlags flags)
@@ -92,6 +74,12 @@ public sealed class MovementExecutor
         var playerPos = Data.Me.Object?.Position;
         if (playerPos == null) return;
 
+        if (已到达目标(playerPos.Value, demand.TargetPos.Value))
+        {
+            标记执行完成(demand.Id);
+            return;
+        }
+
         var isTP = flags.MovementMode == MovementMode.TP;
         var travelTime = isTP ? 0f : 计算移动耗时(playerPos.Value, demand.TargetPos!.Value);
 
@@ -102,8 +90,7 @@ public sealed class MovementExecutor
             if (deadline.Value - state.TotalTime < travelTime)
             {
                 瞬移(demand.TargetPos.Value, demand.TargetHeading);
-                _executedDemandIds.Add(demand.Id);
-                _startedMoveDemands.Remove(demand.Id);
+                标记执行完成(demand.Id);
                 return;
             }
         }
@@ -114,10 +101,7 @@ public sealed class MovementExecutor
         if (!IsSlidecastJob(Data.Me.ClassJob))
         {
             if (timeToDeadline <= travelTime)
-            {
-                执行移动(demand, flags);
-                _startedMoveDemands[demand.Id] = now;
-            }
+                执行移动(demand, flags, now);
             return;
         }
 
@@ -135,32 +119,32 @@ public sealed class MovementExecutor
             var slidecastThresholdSec = 滑步阈值ms / 1000f;
             if (castRemainSec <= slidecastThresholdSec)
             {
-                执行移动(demand, flags);
-                _startedMoveDemands[demand.Id] = now;
+                执行移动(demand, flags, now);
                 return;
             }
             var slideDepart = now + castRemainSec - slidecastThresholdSec + travelTime;
             if (slideDepart <= deadline.Value)
                 return;
-            执行移动(demand, flags);
-            _startedMoveDemands[demand.Id] = now;
+            执行移动(demand, flags, now);
         }
         else
         {
-            执行移动(demand, flags);
-            _startedMoveDemands[demand.Id] = now;
+            执行移动(demand, flags, now);
         }
     }
 
-    private void 执行移动(MovementDemand demand, FactAxisFlags flags)
+    private void 执行移动(MovementDemand demand, FactAxisFlags flags, double now)
     {
         if (flags.MovementMode == MovementMode.TP)
         {
             瞬移(demand.TargetPos!.Value, demand.TargetHeading);
-            _executedDemandIds.Add(demand.Id);
+            标记执行完成(demand.Id);
         }
         else
         {
+            if (!TryMarkNavMoveStarted(_startedMoveDemands, demand.Id, now))
+                return;
+
             try
             {
                 var ipc = DService.Instance().PI.GetIpcSubscriber<Vector3, bool, bool>(
@@ -169,6 +153,7 @@ public sealed class MovementExecutor
             }
             catch (Exception ex)
             {
+                _startedMoveDemands.Remove(demand.Id);
                 DService.Instance().Log.Debug($"[Movement] VNavmesh IPC 不可用: {ex.Message}");
             }
         }
@@ -178,7 +163,7 @@ public sealed class MovementExecutor
     {
         if (demand.TargetPos == null) return;
         瞬移(demand.TargetPos.Value, demand.TargetHeading);
-        _executedDemandIds.Add(demand.Id);
+        标记执行完成(demand.Id);
     }
 
     private void 处理Hold(MovementDemand demand)
@@ -191,7 +176,7 @@ public sealed class MovementExecutor
 
         if (demand.Duration.HasValue && demand.Duration.Value > 0)
             _holdUntilMs = Environment.TickCount64 + (long)(demand.Duration.Value * 1000);
-        _executedDemandIds.Add(demand.Id);
+        标记执行完成(demand.Id);
     }
 
     private static bool IsSlidecastJob(uint jobId)
@@ -213,22 +198,27 @@ public sealed class MovementExecutor
         }
     }
 
-    private void 处理Gather_MoveTo(MovementDemand demand, FactAxisFlags flags)
+    private void 处理Gather_MoveTo(MovementDemand demand, FactState state, FactAxisFlags flags)
     {
         if (demand.TargetPos == null) return;
 
+        var playerPos = Data.Me.Object?.Position;
+        if (playerPos != null && 已到达目标(playerPos.Value, demand.TargetPos.Value))
+        {
+            标记执行完成(demand.Id);
+            return;
+        }
+
         if (!IsSlidecastJob(Data.Me.ClassJob) || !IsCasting)
         {
-            执行移动(demand, flags);
-            _executedDemandIds.Add(demand.Id);
+            执行移动(demand, flags, state.TotalTime);
             return;
         }
 
         var castRemainSec = GetCastRemainingMs() / 1000f;
         if (castRemainSec <= 滑步阈值ms / 1000f)
         {
-            执行移动(demand, flags);
-            _executedDemandIds.Add(demand.Id);
+            执行移动(demand, flags, state.TotalTime);
         }
     }
 
@@ -239,7 +229,7 @@ public sealed class MovementExecutor
         if (!IsSlidecastJob(Data.Me.ClassJob) || !IsCasting)
         {
             瞬移(demand.TargetPos.Value, demand.TargetHeading);
-            _executedDemandIds.Add(demand.Id);
+            标记执行完成(demand.Id);
             return;
         }
 
@@ -247,7 +237,7 @@ public sealed class MovementExecutor
         if (castRemainSec <= 滑步阈值ms / 1000f)
         {
             瞬移(demand.TargetPos.Value, demand.TargetHeading);
-            _executedDemandIds.Add(demand.Id);
+            标记执行完成(demand.Id);
         }
     }
 
@@ -306,4 +296,26 @@ public sealed class MovementExecutor
             DService.Instance().Log.Warning($"[Movement] TP 执行失败: {ex.Message}");
         }
     }
+
+    private void 标记执行完成(string demandId)
+    {
+        _executedDemandIds.Add(demandId);
+        _startedMoveDemands.Remove(demandId);
+        IntelligenceEngine.Instance.ActiveDemands.RemoveAll(d => d.Id == demandId);
+    }
+
+    internal static bool TryMarkNavMoveStarted(Dictionary<string, double> startedMoveDemands, string demandId, double now)
+    {
+        if (startedMoveDemands.ContainsKey(demandId))
+            return false;
+
+        startedMoveDemands[demandId] = now;
+        return true;
+    }
+
+    internal static bool ShouldMarkArrived(Vector3 currentPos, Vector3 targetPos, float tolerance = 0.5f)
+        => 已到达目标(currentPos, targetPos, tolerance);
+
+    private static bool 已到达目标(Vector3 currentPos, Vector3 targetPos, float tolerance = 0.5f)
+        => Vector3.Distance(currentPos, targetPos) <= tolerance;
 }

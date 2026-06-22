@@ -15,6 +15,7 @@ using HiAuRo.Rendering;
 using HiAuRo.Vfx;
 using OmenTools;
 using HiAuRo.ImGuiLib;
+using HiAuRo.Runtime.Movement;
 using HiAuRo.Runtime.Intelligence;
 
 namespace HiAuRo;
@@ -34,6 +35,7 @@ public partial class Plugin : IDalamudPlugin
     private readonly WindowSystem _windowSystem;
     private readonly VfxRenderer? _vfxRenderer;
     private readonly Action _windowDrawAction;
+    private readonly RemoteMoveIpcProvider _remoteMoveIpc = new();
 
     /// <summary>插件实例单例</summary>
     public static Plugin Instance { get; private set; } = null!;
@@ -86,6 +88,7 @@ public partial class Plugin : IDalamudPlugin
                         DService.Instance().Log.Debug($"[IPC] AddMovementDemand 反序列化失败: {ex.Message}");
                     }
                 });
+            _remoteMoveIpc.Register();
 
             RuntimeCore.Start();
             DecisionEngine.Instance.Init();
@@ -238,6 +241,7 @@ public partial class Plugin : IDalamudPlugin
 
         // 注销 IPC
         try { DService.Instance().PI.GetIpcProvider<string, object>("HiAuRo.AddMovementDemand").UnregisterAction(); } catch { }
+        _remoteMoveIpc.Dispose();
 
         if (_windowSystem != null)
         {

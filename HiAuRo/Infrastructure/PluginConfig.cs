@@ -171,6 +171,9 @@ public sealed class PluginConfig : SettingsBase
     /// <summary>自动切换模式</summary>
     public AutoSwitchMode AutoSwitch { get; set; } = AutoSwitchMode.Execution优先;
 
+    /// <summary>RemoteRelay 远程移动模式</summary>
+    public Runtime.Movement.RemoteMovementMode RemoteMoveMode { get; set; } = Runtime.Movement.RemoteMovementMode.NavMesh_TP兜底;
+
     /// <summary>执行轴 — 进副本自动加载时间轴</summary>
     public bool ExecutionAxisAutoLoad { get; set; } = true;
     /// <summary>辅助轴 — 进副本自动加载时间轴</summary>

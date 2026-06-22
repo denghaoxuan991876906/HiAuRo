@@ -10,3 +10,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("GCDHelperTests")]
 [assembly: InternalsVisibleTo("CombatCommandTests")]
 [assembly: InternalsVisibleTo("OverlayVisibilityTests")]
+[assembly: InternalsVisibleTo("MovementLogicTests")]

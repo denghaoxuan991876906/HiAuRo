@@ -2,6 +2,7 @@ using HiAuRo.Execution;
 using HiAuRo.FactAxis;
 using static HiAuRo.Data;
 using HiAuRo.Runtime.Intelligence;
+using HiAuRo.Runtime.Movement;
 
 namespace HiAuRo.Runtime;
 
@@ -119,5 +120,6 @@ public sealed partial class AIRunner
         EventHandler?.OnResetBattle();
         IntelligenceEngine.Instance.Reset();
         MovementExecutor.Instance.Reset();
+        MovementService.Instance.Reset();
     }
 }

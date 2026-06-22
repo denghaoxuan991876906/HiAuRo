@@ -42,7 +42,7 @@ public sealed class IntelligenceEngine
 
     private void ReleaseByCombatTime(FactAxis.FactState state)
     {
-        foreach (var d in DemandBuffer.DrainByCombatTime())
+        foreach (var d in DemandBuffer.DrainCombatTimeReady(state.TotalTime))
         {
             DService.Instance().Log.Information(
                 $"[Intelligence] 释放战斗时间需求: {d.Id} " +
@@ -50,6 +50,9 @@ public sealed class IntelligenceEngine
             ActiveDemands.Add(d);
         }
     }
+
+    internal static bool ShouldReleaseCombatTimeDemand(MovementDemand demand, double totalTimeSec)
+        => demand.Source == "战斗时间" && demand.AddedOrder <= totalTimeSec;
 
     private void ReleaseByFactNode(FactAxis.FactState state)
     {
@@ -84,5 +87,6 @@ public sealed class IntelligenceEngine
     {
         ActiveDemands.Clear();
         _releasedFactNodeIds.Clear();
+        DemandBuffer.Clear();
     }
 }

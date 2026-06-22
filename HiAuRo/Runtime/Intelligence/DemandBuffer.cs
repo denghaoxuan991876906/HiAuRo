@@ -41,21 +41,24 @@ public static class DemandBuffer
         }
     }
 
-    /// <summary>取出所有 Source="战斗时间" 的需求</summary>
-    public static List<MovementDemand> DrainByCombatTime()
+    /// <summary>取出所有已到目标战斗时间的需求</summary>
+    public static List<MovementDemand> DrainCombatTimeReady(double totalTimeSec)
     {
         if (_pending.IsEmpty) return [];
         lock (_rebuildLock)
         {
             var snapshot = _pending.ToArray();
-            var combatTimeDemands = snapshot.Where(d => d.Source == "战斗时间").ToList();
-            if (combatTimeDemands.Count == 0) return [];
-            var ids = new HashSet<string>(combatTimeDemands.Select(d => d.Id));
+            var readyDemands = snapshot
+                .Where(d => d.Source == "战斗时间" && d.AddedOrder <= totalTimeSec)
+                .ToList();
+            if (readyDemands.Count == 0) return [];
+
+            var ids = new HashSet<string>(readyDemands.Select(d => d.Id));
             while (_pending.TryDequeue(out _)) { }
             foreach (var d in snapshot)
                 if (!ids.Contains(d.Id))
                     _pending.Enqueue(d);
-            return combatTimeDemands;
+            return readyDemands;
         }
     }
 

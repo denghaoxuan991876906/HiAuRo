@@ -6,6 +6,7 @@ using HiAuRo.Execution;
 using HiAuRo.Execution.Events;
 using HiAuRo.FactAxis;
 using HiAuRo.Infrastructure;
+using HiAuRo.Runtime.Movement;
 using HiAuRo.Runtime.Intelligence;
 
 namespace HiAuRo.Runtime;
@@ -144,6 +145,7 @@ public sealed partial class AIRunner
 
         IntelligenceEngine.Instance.Update(FactTimeline.Instance);
         MovementExecutor.Instance.Update(FactTimeline.Instance.State);
+        MovementService.Instance.Update(FactTimeline.Instance.State);
     }
 
     private void UpdateDecisions(FactAxisFlags flags)

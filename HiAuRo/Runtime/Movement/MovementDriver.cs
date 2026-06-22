@@ -1,0 +1,57 @@
+using System.Numerics;
+using OmenTools.Interop.Game.Models;
+using OmenTools.Interop.Game.Models.Packets.Downstream;
+
+namespace HiAuRo.Runtime.Movement;
+
+public static class MovementDriver
+{
+    private static unsafe ActorSetPosPacket.Delegate? _tpFunc;
+    private static readonly object TpLock = new();
+
+    public static bool TryStartNavMeshMove(Vector3 pos)
+    {
+        try
+        {
+            DService.Instance().PI
+                .GetIpcSubscriber<Vector3, bool, bool>("vnavmesh.SimpleMove.PathfindAndMoveTo")
+                .InvokeFunc(pos, false);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static void Stop()
+    {
+        try
+        {
+            DService.Instance().PI.GetIpcSubscriber<object>("vnavmesh.Path.Stop").InvokeAction();
+        }
+        catch
+        {
+        }
+    }
+
+    public static unsafe bool TryTeleport(Vector3 pos)
+    {
+        var localPlayer = DService.Instance().ObjectTable.LocalPlayer;
+        if (localPlayer == null) return false;
+
+        if (_tpFunc == null)
+        {
+            lock (TpLock)
+            {
+                _tpFunc ??= ActorSetPosPacket.Signature.GetDelegate<ActorSetPosPacket.Delegate>();
+            }
+        }
+
+        if (_tpFunc == null) return false;
+
+        var packet = new ActorSetPosPacket(pos);
+        _tpFunc(localPlayer.EntityID, &packet);
+        return true;
+    }
+}
