@@ -41,6 +41,7 @@ public sealed class MovementRequest
     public long DeadlineValue { get; set; }
     public MovementPolicy Policy { get; set; } = MovementPolicy.Mechanic;
     public string RequestId { get; set; } = "";
+    public int? EstimatedTravelTimeMs { get; set; }
 }
 
 public static class MovementRequestFactory

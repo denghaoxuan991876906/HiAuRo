@@ -25,6 +25,9 @@ public sealed class MovementService
         if (string.IsNullOrWhiteSpace(request.RequestId))
             request.RequestId = Guid.NewGuid().ToString("N");
 
+        if (request.Source == MovementSource.RemoteRelay)
+            ReplaceRemoteRelayRequests(request);
+
         _requests[request.RequestId] = request;
         CaptureEnqueueEstimate(request);
         AppendDebugEvent($"Enqueue {request.Source}/{request.Intent} id={request.RequestId} deadline={request.DeadlineValue}");
@@ -56,7 +59,7 @@ public sealed class MovementService
         {
             var travelTimeMs = request.Intent == MovementIntent.TP
                 ? 0
-                : EstimateTravelTimeMs(currentPos.Value, request.TargetPos);
+                : request.EstimatedTravelTimeMs ?? EstimateTravelTimeMs(currentPos.Value, request.TargetPos);
 
             var plan = MovementPlanner.Plan(new MovementPlannerInput
             {
@@ -255,6 +258,7 @@ public sealed class MovementService
             ? 0
             : EstimateTravelTimeMs(currentPos.Value, request.TargetPos);
         var distance = Vector3.Distance(currentPos.Value, request.TargetPos);
+        request.EstimatedTravelTimeMs = estimateMs;
 
         _debugSnapshot ??= new MovementDebugSnapshot();
         _debugSnapshot.RequestId = request.RequestId;
@@ -315,6 +319,21 @@ public sealed class MovementService
         catch
         {
             return false;
+        }
+    }
+
+    private void ReplaceRemoteRelayRequests(MovementRequest incoming)
+    {
+        foreach (var requestId in _requests
+                     .Where(kv => kv.Value.Source == MovementSource.RemoteRelay && kv.Key != incoming.RequestId)
+                     .Select(kv => kv.Key)
+                     .ToArray())
+        {
+            _requests.Remove(requestId);
+            _startedRequests.Remove(requestId);
+            _actualStartMs.Remove(requestId);
+            _actualStartPos.Remove(requestId);
+            AppendDebugEvent($"Drop stale remote request id={requestId}");
         }
     }
 }
