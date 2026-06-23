@@ -30,7 +30,7 @@ public sealed class MovementService
 
         _requests[request.RequestId] = request;
         CaptureEnqueueEstimate(request);
-        AppendDebugEvent($"Enqueue {request.Source}/{request.Intent} id={request.RequestId} deadline={request.DeadlineValue}");
+        AppendDebugEvent($"Enqueue {request.Source}/{request.Intent} id={request.RequestId} deadline={request.DeadlineValue} travelTimeMs={request.EstimatedTravelTimeMs ?? -1}");
     }
 
     public void EnqueueDemand(MovementDemand demand, FactAxisFlags flags, FactAxis.FactState state)
@@ -101,7 +101,7 @@ public sealed class MovementService
                 if (_debugSnapshot?.RequestId == request.RequestId && _debugSnapshot.Status != "Waiting")
                 {
                     _debugSnapshot.Status = "Waiting";
-                    AppendDebugEvent($"Waiting id={request.RequestId} dist={_debugSnapshot.CurrentDistanceToTarget:F3} est={travelTimeMs}ms");
+                    AppendDebugEvent($"Waiting id={request.RequestId} dist={_debugSnapshot.CurrentDistanceToTarget:F3} travelTimeMs={travelTimeMs} timeToDeadlineMs={plan.TimeToDeadlineMs} plannedStartMs={plan.PlannedStartMs}");
                 }
                 continue;
             }
@@ -133,7 +133,7 @@ public sealed class MovementService
                 _debugSnapshot.StartPos = currentPos.Value;
                 _debugSnapshot.Status = "Moving";
             }
-            AppendDebugEvent($"Invoke NavMesh id={request.RequestId} from=({currentPos.Value.X:F3},{currentPos.Value.Y:F3},{currentPos.Value.Z:F3}) to=({request.TargetPos.X:F3},{request.TargetPos.Y:F3},{request.TargetPos.Z:F3})");
+            AppendDebugEvent($"Invoke NavMesh id={request.RequestId} from=({currentPos.Value.X:F3},{currentPos.Value.Y:F3},{currentPos.Value.Z:F3}) to=({request.TargetPos.X:F3},{request.TargetPos.Y:F3},{request.TargetPos.Z:F3}) travelTimeMs={travelTimeMs} timeToDeadlineMs={plan.TimeToDeadlineMs}");
 
             if (!MovementDriver.TryStartNavMeshMove(request.TargetPos))
             {
