@@ -81,7 +81,17 @@ public sealed class MovementService
 
             if (plan.ShouldMarkArrived)
             {
-                AppendDebugEvent($"Arrived id={request.RequestId} dist={Vector3.Distance(currentPos.Value, request.TargetPos):F3}");
+                var actualTravelTimeMs = _actualStartMs.TryGetValue(request.RequestId, out var actualStartMs)
+                    ? (int?)(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - actualStartMs)
+                    : null;
+                var actualDistance = _actualStartPos.TryGetValue(request.RequestId, out var actualStartPos)
+                    ? (float?)Vector3.Distance(actualStartPos, request.TargetPos)
+                    : null;
+                float? actualSpeed = actualTravelTimeMs is > 0 && actualDistance.HasValue
+                    ? actualDistance.Value / (actualTravelTimeMs.Value / 1000f)
+                    : null;
+                AppendDebugEvent(
+                    $"Arrived id={request.RequestId} dist={Vector3.Distance(currentPos.Value, request.TargetPos):F3} actualTravelTimeMs={actualTravelTimeMs?.ToString() ?? "-"} actualDistance={actualDistance?.ToString("F3") ?? "-"} actualSpeed={actualSpeed?.ToString("F3") ?? "-"}");
                 Complete(request.RequestId);
                 continue;
             }
