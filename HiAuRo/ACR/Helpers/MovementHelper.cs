@@ -1,7 +1,7 @@
 using System.Numerics;
 using OmenTools;
 using OmenTools.Interop.Game.Models;
-using OmenTools.Interop.Game.Models.Packets.Downstream;
+using OmenTools.Info.Game.Packets.Downstream;
 
 namespace HiAuRo.ACR;
 

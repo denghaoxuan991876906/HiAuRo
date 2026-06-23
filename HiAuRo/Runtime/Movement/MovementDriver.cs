@@ -1,6 +1,6 @@
 using System.Numerics;
 using OmenTools.Interop.Game.Models;
-using OmenTools.Interop.Game.Models.Packets.Downstream;
+using OmenTools.Info.Game.Packets.Downstream;
 
 namespace HiAuRo.Runtime.Movement;
 
