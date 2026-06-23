@@ -10,11 +10,15 @@ public sealed class MovementService
 
     private readonly Dictionary<string, MovementRequest> _requests = [];
     private readonly HashSet<string> _startedRequests = [];
+    private readonly Dictionary<string, long> _actualStartMs = [];
+    private readonly Dictionary<string, Vector3> _actualStartPos = [];
     private long _holdUntilTick;
+    private MovementDebugSnapshot? _debugSnapshot;
 
     private MovementService() { }
 
     public int PendingCount => _requests.Count;
+    public MovementDebugSnapshot? DebugSnapshot => _debugSnapshot;
 
     public void Enqueue(MovementRequest request)
     {
@@ -22,6 +26,8 @@ public sealed class MovementService
             request.RequestId = Guid.NewGuid().ToString("N");
 
         _requests[request.RequestId] = request;
+        CaptureEnqueueEstimate(request);
+        AppendDebugEvent($"Enqueue {request.Source}/{request.Intent} id={request.RequestId} deadline={request.DeadlineValue}");
     }
 
     public void EnqueueDemand(MovementDemand demand, FactAxisFlags flags, FactAxis.FactState state)
@@ -68,14 +74,18 @@ public sealed class MovementService
                 CurrentJobId = Data.Me.ClassJob
             });
 
+            CaptureDebug(request, plan, currentPos.Value, travelTimeMs);
+
             if (plan.ShouldMarkArrived)
             {
+                AppendDebugEvent($"Arrived id={request.RequestId} dist={Vector3.Distance(currentPos.Value, request.TargetPos):F3}");
                 Complete(request.RequestId);
                 continue;
             }
 
             if (plan.ShouldStopForHold)
             {
+                AppendDebugEvent($"Hold start id={request.RequestId} duration={request.DurationSec}");
                 MovementDriver.Stop();
                 if (request.DurationSec.HasValue && request.DurationSec.Value > 0)
                     _holdUntilTick = Environment.TickCount64 + (long)(request.DurationSec.Value * 1000);
@@ -83,10 +93,19 @@ public sealed class MovementService
                 continue;
             }
 
-            if (!plan.ShouldStartNow) continue;
+            if (!plan.ShouldStartNow)
+            {
+                if (_debugSnapshot?.RequestId == request.RequestId && _debugSnapshot.Status != "Waiting")
+                {
+                    _debugSnapshot.Status = "Waiting";
+                    AppendDebugEvent($"Waiting id={request.RequestId} dist={_debugSnapshot.CurrentDistanceToTarget:F3} est={travelTimeMs}ms");
+                }
+                continue;
+            }
 
             if (plan.ShouldFallbackToTp)
             {
+                AppendDebugEvent($"Fallback TP id={request.RequestId}");
                 if (MovementDriver.TryTeleport(request.TargetPos))
                     Complete(request.RequestId);
                 continue;
@@ -94,6 +113,7 @@ public sealed class MovementService
 
             if (request.Intent == MovementIntent.TP)
             {
+                AppendDebugEvent($"Direct TP id={request.RequestId}");
                 if (MovementDriver.TryTeleport(request.TargetPos))
                     Complete(request.RequestId);
                 continue;
@@ -102,8 +122,35 @@ public sealed class MovementService
             if (!_startedRequests.Add(request.RequestId))
                 continue;
 
+            _actualStartMs[request.RequestId] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            _actualStartPos[request.RequestId] = currentPos.Value;
+            if (_debugSnapshot?.RequestId == request.RequestId)
+            {
+                _debugSnapshot.ActualStartMs = _actualStartMs[request.RequestId];
+                _debugSnapshot.StartPos = currentPos.Value;
+                _debugSnapshot.Status = "Moving";
+            }
+            AppendDebugEvent($"Invoke NavMesh id={request.RequestId} from=({currentPos.Value.X:F3},{currentPos.Value.Y:F3},{currentPos.Value.Z:F3}) to=({request.TargetPos.X:F3},{request.TargetPos.Y:F3},{request.TargetPos.Z:F3})");
+
             if (!MovementDriver.TryStartNavMeshMove(request.TargetPos))
+            {
                 _startedRequests.Remove(request.RequestId);
+                _actualStartMs.Remove(request.RequestId);
+                _actualStartPos.Remove(request.RequestId);
+                if (_debugSnapshot?.RequestId == request.RequestId)
+                {
+                    _debugSnapshot.Status = "NavMeshFailed";
+                    _debugSnapshot.NavMoveInvokeResult = false;
+                    _debugSnapshot.NavMoveError = MovementDriver.LastNavMoveError;
+                }
+                AppendDebugEvent($"NavMesh failed id={request.RequestId} error={MovementDriver.LastNavMoveError}");
+            }
+            else if (_debugSnapshot?.RequestId == request.RequestId)
+            {
+                _debugSnapshot.NavMoveInvokeResult = true;
+                _debugSnapshot.NavMoveError = "";
+                AppendDebugEvent($"NavMesh invoke ok id={request.RequestId}");
+            }
         }
     }
 
@@ -111,13 +158,44 @@ public sealed class MovementService
     {
         _requests.Clear();
         _startedRequests.Clear();
+        _actualStartMs.Clear();
+        _actualStartPos.Clear();
         _holdUntilTick = 0;
+        _debugSnapshot = null;
     }
 
     internal void Complete(string requestId)
     {
+        if (_debugSnapshot?.RequestId == requestId && _actualStartMs.TryGetValue(requestId, out var actualStartMs))
+        {
+            var arriveMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            _debugSnapshot.ActualArriveMs = arriveMs;
+            _debugSnapshot.ActualTravelTimeMs = (int)(arriveMs - actualStartMs);
+            if (_actualStartPos.TryGetValue(requestId, out var startPos))
+            {
+                _debugSnapshot.ActualDistance = Vector3.Distance(startPos, _debugSnapshot.TargetPos);
+                if (_debugSnapshot.ActualTravelTimeMs > 0)
+                    _debugSnapshot.ActualSpeed = _debugSnapshot.ActualDistance / (_debugSnapshot.ActualTravelTimeMs.Value / 1000f);
+            }
+            _debugSnapshot.Status = "Arrived";
+        }
+
         _requests.Remove(requestId);
         _startedRequests.Remove(requestId);
+        _actualStartMs.Remove(requestId);
+        _actualStartPos.Remove(requestId);
+    }
+
+    public void EnqueueLocalTestMove(Vector3 targetPos, int delayMs)
+    {
+        var requestId = $"local-test-{Guid.NewGuid():N}";
+        _debugSnapshot = new MovementDebugSnapshot();
+        Enqueue(MovementRequestFactory.FromRemoteRelay(
+            requestId,
+            targetPos,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + delayMs,
+            MovementPolicy.Mechanic));
+        AppendDebugEvent($"Local test target=({targetPos.X:F3}, {targetPos.Y:F3}, {targetPos.Z:F3}) delayMs={delayMs}");
     }
 
     private static RemoteMovementMode ConvertFactAxisMode(MovementMode mode)
@@ -146,23 +224,97 @@ public sealed class MovementService
 
     private static int EstimateTravelTimeMs(Vector3 from, Vector3 to)
     {
+        var speed = Math.Max(0.1f, PluginConfig.Instance.MovementSpeedMps);
         try
         {
             var ipc = DService.Instance().PI.GetIpcSubscriber<Vector3, Vector3, bool, List<Vector3>>(
                 "vnavmesh.Nav.Pathfind");
             var waypoints = ipc.InvokeFunc(from, to, false);
             if (waypoints == null || waypoints.Count < 2)
-                return (int)Math.Round(Vector3.Distance(from, to) / 6.0f * 1000);
+                return (int)Math.Round(Vector3.Distance(from, to) / speed * 1000);
 
             float pathLength = 0;
             for (var i = 1; i < waypoints.Count; i++)
                 pathLength += Vector3.Distance(waypoints[i - 1], waypoints[i]);
 
-            return (int)Math.Round((pathLength / 6.0f + 0.5f) * 1000);
+            return (int)Math.Round((pathLength / speed + 0.5f) * 1000);
         }
         catch
         {
-            return (int)Math.Round((Vector3.Distance(from, to) / 6.0f + 0.5f) * 1000);
+            return (int)Math.Round((Vector3.Distance(from, to) / speed + 0.5f) * 1000);
+        }
+    }
+
+    private void CaptureEnqueueEstimate(MovementRequest request)
+    {
+        var currentPos = Data.Me.Object?.Position;
+        if (currentPos == null)
+            return;
+
+        var estimateMs = request.Intent == MovementIntent.TP
+            ? 0
+            : EstimateTravelTimeMs(currentPos.Value, request.TargetPos);
+        var distance = Vector3.Distance(currentPos.Value, request.TargetPos);
+
+        _debugSnapshot ??= new MovementDebugSnapshot();
+        _debugSnapshot.RequestId = request.RequestId;
+        _debugSnapshot.EstimatedTravelTimeOnEnqueueMs = estimateMs;
+        _debugSnapshot.EstimatedDistanceOnEnqueue = distance;
+        _debugSnapshot.EstimatedSpeedOnEnqueue = estimateMs > 0
+            ? distance / (estimateMs / 1000f)
+            : 0f;
+    }
+
+    private void CaptureDebug(
+        MovementRequest request,
+        MovementPlannerResult plan,
+        Vector3 currentPos,
+        int travelTimeMs)
+    {
+        _debugSnapshot ??= new MovementDebugSnapshot();
+        _debugSnapshot.RequestId = request.RequestId;
+        _debugSnapshot.Source = request.Source;
+        _debugSnapshot.Intent = request.Intent;
+        _debugSnapshot.TargetPos = request.TargetPos;
+        _debugSnapshot.CurrentPos = currentPos;
+        _debugSnapshot.LogicalNowMs = plan.LogicalNowMs;
+        _debugSnapshot.LastUpdateUtcMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        _debugSnapshot.DeadlineMs = request.DeadlineValue;
+        _debugSnapshot.TimeToDeadlineMs = plan.TimeToDeadlineMs;
+        _debugSnapshot.PlannedStartMs = plan.PlannedStartMs;
+        _debugSnapshot.CurrentRemainingTravelTimeMs = travelTimeMs;
+        _debugSnapshot.CurrentRemainingDistance = Vector3.Distance(currentPos, request.TargetPos);
+        _debugSnapshot.CurrentRemainingSpeed = travelTimeMs > 0
+            ? _debugSnapshot.CurrentRemainingDistance / (travelTimeMs / 1000f)
+            : 0f;
+        _debugSnapshot.CurrentDistanceToTarget = Vector3.Distance(currentPos, request.TargetPos);
+        _debugSnapshot.ShouldStartNow = plan.ShouldStartNow;
+        _debugSnapshot.ShouldFallbackToTp = plan.ShouldFallbackToTp;
+        _debugSnapshot.AlreadyAtTarget = plan.ShouldMarkArrived;
+        _debugSnapshot.NavReady = ReadBoolIpc("vnavmesh.Nav.IsReady");
+        _debugSnapshot.PathRunning = ReadBoolIpc("vnavmesh.Path.IsRunning");
+        _debugSnapshot.Status = _startedRequests.Contains(request.RequestId) ? "Moving" : "Pending";
+    }
+
+    private void AppendDebugEvent(string message)
+    {
+        _debugSnapshot ??= new MovementDebugSnapshot();
+        var line = $"{DateTime.Now:HH:mm:ss.fff} {message}";
+        _debugSnapshot.Events.Add(line);
+        if (_debugSnapshot.Events.Count > 30)
+            _debugSnapshot.Events.RemoveAt(0);
+        DService.Instance().Log.Debug($"[MoveTest] {message}");
+    }
+
+    private static bool ReadBoolIpc(string ipcName)
+    {
+        try
+        {
+            return DService.Instance().PI.GetIpcSubscriber<bool>(ipcName).InvokeFunc();
+        }
+        catch
+        {
+            return false;
         }
     }
 }

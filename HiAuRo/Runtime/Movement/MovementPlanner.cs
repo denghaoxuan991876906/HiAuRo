@@ -19,6 +19,9 @@ public sealed class MovementPlannerInput
 
 public sealed class MovementPlannerResult
 {
+    public long LogicalNowMs { get; init; }
+    public long TimeToDeadlineMs { get; init; }
+    public long PlannedStartMs { get; init; }
     public bool ShouldStartNow { get; init; }
     public bool ShouldFallbackToTp { get; init; }
     public bool ShouldStopForHold { get; init; }
@@ -33,24 +36,33 @@ public static class MovementPlanner
     {
         if (ShouldMarkArrived(input.CurrentPos, input.Request.TargetPos))
         {
+            var immediateNowMs = ResolveNowMs(input.Request, input.FactState);
             return new MovementPlannerResult
             {
+                LogicalNowMs = immediateNowMs,
+                PlannedStartMs = immediateNowMs,
                 ShouldMarkArrived = true
             };
         }
 
         if (input.Request.Intent == MovementIntent.Hold)
         {
+            var holdNowMs = ResolveNowMs(input.Request, input.FactState);
             return new MovementPlannerResult
             {
+                LogicalNowMs = holdNowMs,
+                PlannedStartMs = holdNowMs,
                 ShouldStopForHold = true
             };
         }
 
         if (input.Request.Intent == MovementIntent.TP || input.RemoteMode == RemoteMovementMode.TP)
         {
+            var tpNowMs = ResolveNowMs(input.Request, input.FactState);
             return new MovementPlannerResult
             {
+                LogicalNowMs = tpNowMs,
+                PlannedStartMs = tpNowMs,
                 ShouldStartNow = true,
                 ShouldFallbackToTp = true
             };
@@ -62,6 +74,9 @@ public static class MovementPlanner
         {
             return new MovementPlannerResult
             {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = nowMs,
                 ShouldStartNow = true,
                 ShouldFallbackToTp = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
             };
@@ -73,9 +88,15 @@ public static class MovementPlanner
             var gatherCanStart = !IsSlidecastJob(input.CurrentJobId)
                 || !input.IsCasting
                 || input.CastRemainingMs <= SlidecastThresholdMs;
+            var plannedStartMs = gatherCanStart
+                ? nowMs
+                : nowMs + Math.Max(0, input.CastRemainingMs - SlidecastThresholdMs);
 
             return new MovementPlannerResult
             {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = plannedStartMs,
                 ShouldStartNow = gatherCanStart,
                 ShouldFallbackToTp = false
             };
@@ -84,8 +105,12 @@ public static class MovementPlanner
         if (!IsSlidecastJob(input.CurrentJobId))
         {
             var shouldStart = timeToDeadlineMs <= travelTimeMs;
+            var plannedStartMs = nowMs + Math.Max(0, timeToDeadlineMs - travelTimeMs);
             return new MovementPlannerResult
             {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = plannedStartMs,
                 ShouldStartNow = shouldStart,
                 ShouldFallbackToTp = shouldStart
                     && input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
@@ -98,6 +123,9 @@ public static class MovementPlanner
         {
             return new MovementPlannerResult
             {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = nowMs + (timeToDeadlineMs - oneMoreGcdMs),
                 ShouldStartNow = false
             };
         }
@@ -108,6 +136,9 @@ public static class MovementPlanner
                 && timeToDeadlineMs < travelTimeMs;
             return new MovementPlannerResult
             {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = nowMs + Math.Max(0, timeToDeadlineMs - travelTimeMs),
                 ShouldStartNow = true,
                 ShouldFallbackToTp = shouldFallback
             };
@@ -119,6 +150,9 @@ public static class MovementPlanner
                 && timeToDeadlineMs < travelTimeMs;
             return new MovementPlannerResult
             {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = nowMs,
                 ShouldStartNow = true,
                 ShouldFallbackToTp = shouldFallback
             };
@@ -129,12 +163,18 @@ public static class MovementPlanner
         {
             return new MovementPlannerResult
             {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = nowMs + (input.CastRemainingMs - SlidecastThresholdMs),
                 ShouldStartNow = false
             };
         }
 
         return new MovementPlannerResult
         {
+            LogicalNowMs = nowMs,
+            TimeToDeadlineMs = timeToDeadlineMs,
+            PlannedStartMs = nowMs,
             ShouldStartNow = true,
             ShouldFallbackToTp = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
         };

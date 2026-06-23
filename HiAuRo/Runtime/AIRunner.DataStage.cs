@@ -77,6 +77,8 @@ public sealed partial class AIRunner
             }
         }
 
+        MovementService.Instance.Update(FactTimeline.Instance.State);
+
         if (state != CombatContext.State.InCombat) return;
 
         if (Data.Target.Current == null)

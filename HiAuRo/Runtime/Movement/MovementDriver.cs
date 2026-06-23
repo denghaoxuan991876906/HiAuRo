@@ -8,18 +8,21 @@ public static class MovementDriver
 {
     private static unsafe ActorSetPosPacket.Delegate? _tpFunc;
     private static readonly object TpLock = new();
+    public static string LastNavMoveError { get; private set; } = "";
 
     public static bool TryStartNavMeshMove(Vector3 pos)
     {
         try
         {
+            LastNavMoveError = "";
             DService.Instance().PI
                 .GetIpcSubscriber<Vector3, bool, bool>("vnavmesh.SimpleMove.PathfindAndMoveTo")
                 .InvokeFunc(pos, false);
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            LastNavMoveError = ex.Message;
             return false;
         }
     }

@@ -145,7 +145,6 @@ public sealed partial class AIRunner
 
         IntelligenceEngine.Instance.Update(FactTimeline.Instance);
         MovementExecutor.Instance.Update(FactTimeline.Instance.State);
-        MovementService.Instance.Update(FactTimeline.Instance.State);
     }
 
     private void UpdateDecisions(FactAxisFlags flags)

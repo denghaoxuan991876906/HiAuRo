@@ -3,11 +3,16 @@ using HiAuRo.ACR;
 using HiAuRo.ImGuiLib;
 using HiAuRo.Infrastructure;
 using HiAuRo.Runtime;
+using HiAuRo.Runtime.Movement;
 
 namespace HiAuRo.UI.Tabs;
 
 public sealed class DebugTabPage : TabPageBase
 {
+    private readonly string[] _remoteMoveModeNames = Enum.GetNames<RemoteMovementMode>();
+    private Vector3 _moveTestTarget = new(100, 0, 100);
+    private int _moveTestDelayMs = 8000;
+
     public DebugTabPage() : base("调试", "debug", IconHelper.Icons.Bug) { }
 
     public override void DrawContent()
@@ -22,6 +27,8 @@ public sealed class DebugTabPage : TabPageBase
         ImGui.Text($"ACR: {ACRLifecycle.CurrentAcrName}");
         ImGui.Text($"SpellQueue: {ACRLifecycle.Runner?.SpellQueue.QueueSize ?? 0}");
         ImGui.Text($"BattleData: HP_GCD={AIRunner.BattleData.HighPrioritySlots_GCD.Count} HP_OGCD={AIRunner.BattleData.HighPrioritySlots_OffGCD.Count}");
+
+        ComponentLibrary.Collapsible("MoveTo 调试", DrawMoveToDebug);
 
         // --- AuraHelper ---
         ComponentLibrary.Collapsible("AuraHelper", () =>
@@ -356,4 +363,148 @@ public sealed class DebugTabPage : TabPageBase
     private string _dbgTargetMostCanTarget_Result = "";
 
     private static IGameObject? DbgTgt(int sel) => sel == 0 ? Data.Me.Object : Data.Target.Current;
+
+    private void DrawMoveToDebug()
+    {
+        var config = PluginConfig.Instance;
+        var debug = MovementService.Instance.DebugSnapshot;
+        var currentPos = Data.Me.Object?.Position ?? default;
+
+        var remoteMode = (int)config.RemoteMoveMode;
+        if (ComponentLibrary.Select("dbg_remote_move_mode", "远程移动模式", ref remoteMode, _remoteMoveModeNames))
+        {
+            config.RemoteMoveMode = (RemoteMovementMode)remoteMode;
+            Plugin.SaveConfig();
+        }
+
+        var movementSpeed = config.MovementSpeedMps;
+        ImGui.Text("全局移动速度 (m/s)");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(100);
+        if (ImGui.InputFloat("##dbg_move_speed", ref movementSpeed, 0.1f, 0.5f, "%.2f"))
+        {
+            config.MovementSpeedMps = Math.Max(0.1f, movementSpeed);
+            Plugin.SaveConfig();
+        }
+
+        ImGui.Text("当前坐标");
+        ImGui.SameLine();
+        ImGui.TextColored(Theme.Colors.TextSecondary, $"X={currentPos.X:F3} Y={currentPos.Y:F3} Z={currentPos.Z:F3}");
+
+        if (ComponentLibrary.DefaultButton("带入当前玩家坐标"))
+            _moveTestTarget = currentPos;
+        ImGui.SameLine();
+        if (ComponentLibrary.DefaultButton("前方 5m"))
+            _moveTestTarget = currentPos + new Vector3(0, 0, 5);
+        ImGui.SameLine();
+        if (ComponentLibrary.DefaultButton("后方 5m"))
+            _moveTestTarget = currentPos + new Vector3(0, 0, -5);
+        ImGui.SameLine();
+        if (ComponentLibrary.DefaultButton("左侧 5m"))
+            _moveTestTarget = currentPos + new Vector3(-5, 0, 0);
+        ImGui.SameLine();
+        if (ComponentLibrary.DefaultButton("右侧 5m"))
+            _moveTestTarget = currentPos + new Vector3(5, 0, 0);
+
+        ImGui.Text("目标坐标");
+        ImGui.SetNextItemWidth(100);
+        ImGui.InputFloat("##dbg_move_test_x", ref _moveTestTarget.X);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(100);
+        ImGui.InputFloat("##dbg_move_test_y", ref _moveTestTarget.Y);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(100);
+        ImGui.InputFloat("##dbg_move_test_z", ref _moveTestTarget.Z);
+
+        ImGui.Text("延迟 (ms)");
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(100);
+        ImGui.InputInt("##dbg_move_test_delay", ref _moveTestDelayMs, 100, 1000);
+        if (_moveTestDelayMs < 0)
+            _moveTestDelayMs = 0;
+
+        var navReady = ReadBoolIpc("vnavmesh.Nav.IsReady");
+        var pathRunning = ReadBoolIpc("vnavmesh.Path.IsRunning");
+        ImGui.Text($"VNav 状态: Ready={navReady}  PathRunning={pathRunning}");
+
+        if (ComponentLibrary.PrimaryButton("本地测试 MoveTo"))
+        {
+            MovementService.Instance.EnqueueLocalTestMove(_moveTestTarget, _moveTestDelayMs);
+            DService.Instance().Log.Debug($"[MoveTest] 本地测试 MoveTo -> {_moveTestTarget} delayMs={_moveTestDelayMs}");
+        }
+        ImGui.SameLine();
+        if (ComponentLibrary.DefaultButton("立即开始 MoveTo"))
+        {
+            MovementService.Instance.EnqueueLocalTestMove(_moveTestTarget, 0);
+            DService.Instance().Log.Debug($"[MoveTest] 立即开始 MoveTo -> {_moveTestTarget}");
+        }
+
+        if (debug == null)
+        {
+            ImGui.TextDisabled("暂无 MoveTo 调试数据");
+            return;
+        }
+
+        ImGui.Spacing();
+        ImGui.Text($"状态: {debug.Status}");
+        ImGui.Text($"来源/意图: {debug.Source} / {debug.Intent}");
+        ImGui.Text($"ShouldStartNow: {debug.ShouldStartNow}  FallbackToTp: {debug.ShouldFallbackToTp}");
+        ImGui.Text($"已到目标: {debug.AlreadyAtTarget}  当前距目标: {debug.CurrentDistanceToTarget:F3} m");
+        ImGui.Text($"当前坐标: X={debug.CurrentPos.X:F3} Y={debug.CurrentPos.Y:F3} Z={debug.CurrentPos.Z:F3}");
+        ImGui.Text($"目标坐标: X={debug.TargetPos.X:F3} Y={debug.TargetPos.Y:F3} Z={debug.TargetPos.Z:F3}");
+        if (debug.EstimatedTravelTimeOnEnqueueMs.HasValue)
+        {
+            ImGui.Text($"请求时估算距离: {debug.EstimatedDistanceOnEnqueue.GetValueOrDefault():F2} m");
+            ImGui.Text($"请求时估算耗时: {debug.EstimatedTravelTimeOnEnqueueMs.Value} ms");
+            ImGui.Text($"请求时估算速度: {debug.EstimatedSpeedOnEnqueue.GetValueOrDefault():F2} m/s");
+        }
+        else
+        {
+            ImGui.Text("请求时估算耗时: 尚未记录");
+        }
+        ImGui.Text($"当前剩余距离: {debug.CurrentRemainingDistance:F2} m");
+        ImGui.Text($"当前剩余耗时: {debug.CurrentRemainingTravelTimeMs} ms");
+        ImGui.Text($"当前剩余速度: {debug.CurrentRemainingSpeed:F2} m/s");
+        ImGui.Text($"距Deadline: {debug.TimeToDeadlineMs} ms");
+        ImGui.Text($"预计起步: {debug.PlannedStartMs}");
+        ImGui.Text($"Debug.VNav: Ready={debug.NavReady} PathRunning={debug.PathRunning} InvokeOk={debug.NavMoveInvokeResult}");
+        if (!string.IsNullOrWhiteSpace(debug.NavMoveError))
+            ImGui.TextWrapped($"Nav 错误: {debug.NavMoveError}");
+        ImGui.Text($"最后更新: {debug.LastUpdateUtcMs}");
+        ImGui.Text($"逻辑当前时间: {debug.LogicalNowMs}");
+        ImGui.Text($"Deadline: {debug.DeadlineMs}");
+        ImGui.Text($"GCD剩余/总时长: {debug.GcdRemainingMs} / {debug.GcdDurationMs} ms");
+        ImGui.Text($"读条剩余: {debug.CastRemainingMs} ms");
+        if (debug.ActualTravelTimeMs.HasValue)
+        {
+            ImGui.Text($"实际距离: {debug.ActualDistance.GetValueOrDefault():F2} m");
+            ImGui.Text($"实际耗时: {debug.ActualTravelTimeMs.Value} ms");
+            ImGui.Text($"实际速度: {debug.ActualSpeed.GetValueOrDefault():F2} m/s");
+        }
+        else if (debug.ActualStartMs.HasValue)
+        {
+            ImGui.Text($"已启动于: {debug.ActualStartMs.Value}");
+        }
+
+        ImGui.Spacing();
+        ImGui.Text("调试事件");
+        using var childBorder = new ImRaii.StyleDisposable();
+        childBorder.Push(ImGuiStyleVar.ChildBorderSize, 1);
+        ImGui.BeginChild("##move_test_events", new Vector2(-1, 120), true);
+        foreach (var line in debug.Events)
+            ImGui.TextUnformatted(line);
+        ImGui.EndChild();
+    }
+
+    private static bool ReadBoolIpc(string ipcName)
+    {
+        try
+        {
+            return DService.Instance().PI.GetIpcSubscriber<bool>(ipcName).InvokeFunc();
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

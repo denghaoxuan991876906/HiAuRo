@@ -173,6 +173,8 @@ public sealed class PluginConfig : SettingsBase
 
     /// <summary>RemoteRelay 远程移动模式</summary>
     public Runtime.Movement.RemoteMovementMode RemoteMoveMode { get; set; } = Runtime.Movement.RemoteMovementMode.NavMesh_TP兜底;
+    /// <summary>全局移动速度（m/s），供 MoveTo 耗时估算使用</summary>
+    public float MovementSpeedMps { get; set; } = 6.0f;
 
     /// <summary>执行轴 — 进副本自动加载时间轴</summary>
     public bool ExecutionAxisAutoLoad { get; set; } = true;
