@@ -29,6 +29,13 @@ public static class Hi
     public static void Debug(string msg) =>
         DService.Instance().Log.Debug($"[HiAuRo] {msg}");
 
+    /// <summary>输出 ACR 运行时细粒度日志（默认关闭，受宿主 PluginConfig 控制）</summary>
+    public static void AcrRuntimeDebug(string msg)
+    {
+        if (PluginConfig.Instance is { AcrRuntimeDebugEnabled: true })
+            DService.Instance().Log.Debug($"[HiAuRo] {msg}");
+    }
+
     /// <summary>输出详细日志（Verbose）</summary>
     public static void Verbose(string msg) =>
         DService.Instance().Log.Verbose($"[HiAuRo] {msg}");

@@ -31,7 +31,7 @@ public static class SpellCast
         }
 
         tracker.BeginTrack(slot, spell);
-        DService.Instance().Log.Debug($"[SpellCast] 开始: {spell.Name}({spellId}) IsAbility={spell.IsAbility()} CastTime={spell.CastTime.TotalMilliseconds:F0}ms");
+        Hi.AcrRuntimeDebug($"[SpellCast] 开始: {spell.Name}({spellId}) IsAbility={spell.IsAbility()} CastTime={spell.CastTime.TotalMilliseconds:F0}ms");
 
         if (!spell.IsAbility())
         {
@@ -68,7 +68,7 @@ public static class SpellCast
             accepted = useOk || CheckQueued(spellId);
             if (accepted)
             {
-                DService.Instance().Log.Debug($"[SpellCast] 队列确认: {spell.Name}({spellId}) useOk={useOk} tryMs={Environment.TickCount64 - sendStart}");
+                Hi.AcrRuntimeDebug($"[SpellCast] 队列确认: {spell.Name}({spellId}) useOk={useOk} tryMs={Environment.TickCount64 - sendStart}");
                 break;
             }
             await Coroutine.Instance.WaitAsync(1);
@@ -76,7 +76,7 @@ public static class SpellCast
 
         if (!accepted)
         {
-            DService.Instance().Log.Debug($"[SpellCast] 发送超时: {spell.Name}({spellId})");
+            Hi.AcrRuntimeDebug($"[SpellCast] 发送超时: {spell.Name}({spellId})");
             return false;
         }
 
@@ -85,7 +85,7 @@ public static class SpellCast
 
         var isAbility = spell.IsAbility();
         long castTime = (long)spell.CastTime.TotalMilliseconds;
-        DService.Instance().Log.Debug($"[SpellCast] 已入列: {spell.Name}({spellId}) castTime={castTime}ms");
+        Hi.AcrRuntimeDebug($"[SpellCast] 已入列: {spell.Name}({spellId}) castTime={castTime}ms");
 
         // 步骤 8：咏唱等待 + 条件检查
         // Effect 由 GameEventHook ActionEffect 钩子设置（真·服务端确认）
@@ -150,7 +150,7 @@ public static class SpellCast
 
         if (ShouldRaiseSpellCastSuccessCallback(isAbility, castTime))
             runner.EventHandler?.OnSpellCastSuccess(slot, spell);
-        DService.Instance().Log.Debug($"[SpellCast] 完成: {spell.Name}({spellId})");
+        Hi.AcrRuntimeDebug($"[SpellCast] 完成: {spell.Name}({spellId})");
 
         return true;
     }

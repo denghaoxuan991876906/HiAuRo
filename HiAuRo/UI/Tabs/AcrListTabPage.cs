@@ -25,6 +25,7 @@ public sealed class AcrListTabPage : TabPageBase
         {
             ComponentLibrary.SectionHeader("当前职业");
             ImGui.TextColored(Theme.Colors.TextTertiary, "等待角色加载...");
+            DrawRuntimeDebugToggle();
             return;
         }
 
@@ -33,6 +34,7 @@ public sealed class AcrListTabPage : TabPageBase
         {
             ComponentLibrary.SectionHeader("当前职业");
             ImGui.TextColored(Theme.Colors.TextTertiary, "非战斗职业，ACR 不可用");
+            DrawRuntimeDebugToggle();
             return;
         }
 
@@ -41,6 +43,7 @@ public sealed class AcrListTabPage : TabPageBase
         {
             ComponentLibrary.SectionHeader("当前职业");
             ImGui.TextColored(Theme.Colors.TextTertiary, "当前职业无可用 ACR");
+            DrawRuntimeDebugToggle();
             return;
         }
 
@@ -85,6 +88,23 @@ public sealed class AcrListTabPage : TabPageBase
             ImGui.TextColored(Theme.Colors.TextTertiary, "ACR 未加载");
         }
 
+        DrawRuntimeDebugToggle();
+    }
+
+    private void DrawRuntimeDebugToggle()
+    {
+        ImGui.Spacing();
+        ComponentLibrary.Divider();
+        ImGui.Spacing();
+
+        var acrRuntimeDebug = _config.AcrRuntimeDebugEnabled;
+        if (ComponentLibrary.Switch("acr_runtime_debug", "输出 ACR 运行时调试日志", ref acrRuntimeDebug))
+        {
+            _config.AcrRuntimeDebugEnabled = acrRuntimeDebug;
+            _saveConfig();
+        }
+        ImGui.TextColored(Theme.Colors.TextTertiary,
+            "控制 [SpellCast] / [Action] / [SlotExec] / [EventSystem] 这组细粒度日志，默认关闭。");
     }
 
     private static string DisplayAcrType(AcrType type) => type switch

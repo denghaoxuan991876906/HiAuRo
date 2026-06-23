@@ -66,6 +66,8 @@ public sealed class PluginConfig : SettingsBase
     public int Version { get; set; } = 1;
     /// <summary>是否启用 Debug 日志</summary>
     public bool DebugEnabled { get; set; }
+    /// <summary>是否输出 ACR 运行时细粒度调试日志（SpellCast/Action/SlotExec/EventSystem）</summary>
+    public bool AcrRuntimeDebugEnabled { get; set; }
     /// <summary>上次使用的插件版本</summary>
     public string? LastSeenPluginVersion { get; set; }
     /// <summary>插件加载次数</summary>

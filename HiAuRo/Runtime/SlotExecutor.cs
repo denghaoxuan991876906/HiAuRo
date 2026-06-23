@@ -56,13 +56,13 @@ public sealed class SlotExecutor
         var rot = _runner.CurrentRotation;
         if (bd.CurrSequence == null)
         {
-            if (bd.PopSequenceStack()) { DService.Instance().Log.Debug("[SlotExec] 恢复嵌套序列"); return true; }
+            if (bd.PopSequenceStack()) { Hi.AcrRuntimeDebug("[SlotExec] 恢复嵌套序列"); return true; }
 
             // 只在倒计时后才自动使用起手
             if (bd.CurrSequence == null && CountDownHandler.Instance.CanDoAction
                 && await OpenerMgr.Instance.UseOpener(bd, rot))
             {
-                DService.Instance().Log.Debug($"[SlotExec] 起手已推送: {bd.CurrSequence?.Sequence.GetType().Name}");
+                Hi.AcrRuntimeDebug($"[SlotExec] 起手已推送: {bd.CurrSequence?.Sequence.GetType().Name}");
                 return true;
             }
 
@@ -71,14 +71,14 @@ public sealed class SlotExecutor
                 foreach (var seq in rot.SlotSequences)
                 {
                     var sc = seq.StartCheck();
-                    DService.Instance().Log.Debug($"[SlotExec] 检查序列: {seq.GetType().Name} StartCheck={sc}");
+                    Hi.AcrRuntimeDebug($"[SlotExec] 检查序列: {seq.GetType().Name} StartCheck={sc}");
                     if (sc >= 0)
                     {
                         bd.PushSequence(new SequenceWrapper
                         {
                             Sequence = (ISlotSequence)Activator.CreateInstance(seq.GetType())!
                         });
-                        DService.Instance().Log.Debug($"[SlotExec] 序列已启动: {seq.GetType().Name}");
+                        Hi.AcrRuntimeDebug($"[SlotExec] 序列已启动: {seq.GetType().Name}");
                         return true;
                     }
                 }
@@ -91,7 +91,7 @@ public sealed class SlotExecutor
         if (bd.CurrSequenceIndex >= slist.Count
             || cseq.Sequence.StopCheck(bd.CurrSequenceIndex) >= 0)
         {
-            DService.Instance().Log.Debug($"[SlotExec] 序列完成: {cseq.Sequence.GetType().Name} idx={bd.CurrSequenceIndex}/{slist.Count}");
+            Hi.AcrRuntimeDebug($"[SlotExec] 序列完成: {cseq.Sequence.GetType().Name} idx={bd.CurrSequenceIndex}/{slist.Count}");
             cseq.CompeltedAction?.Invoke();
             bd.ClearSequence();
             bd.CurrSequenceIndex = 0;
@@ -104,7 +104,7 @@ public sealed class SlotExecutor
             var stepName = slist[bd.CurrSequenceIndex]?.Method.Name ?? "?";
             bd.CurrSequenceIndex++;
             bd.SetCurrSlot(slot);
-            DService.Instance().Log.Debug($"[SlotExec] 序列步进: {cseq.Sequence.GetType().Name}[{bd.CurrSequenceIndex - 1}] → {string.Join(",", slot.Actions.Select(a => a.Spell.Name))}");
+            Hi.AcrRuntimeDebug($"[SlotExec] 序列步进: {cseq.Sequence.GetType().Name}[{bd.CurrSequenceIndex - 1}] → {string.Join(",", slot.Actions.Select(a => a.Spell.Name))}");
         }
         return true;
     }
@@ -208,7 +208,7 @@ public sealed class SlotExecutor
 
         _runner.Debug.SlotSource = slot.Source;
         _runner.Debug.InSeq = slot.InSequence;
-        DService.Instance().Log.Debug($"[SlotExec] 开始 [{slot.Source}] InSeq={slot.InSequence} Actions={string.Join(",", slot.Actions.Select(a => $"{a.Spell.Name}({a.Spell.Id})"))}");
+        Hi.AcrRuntimeDebug($"[SlotExec] 开始 [{slot.Source}] InSeq={slot.InSequence} Actions={string.Join(",", slot.Actions.Select(a => $"{a.Spell.Name}({a.Spell.Id})"))}");
 
         while (slot.Actions.Count > 0)
         {
@@ -218,7 +218,7 @@ public sealed class SlotExecutor
 
             var action = slot.Actions[0];
             _runner.Debug.LastActionName = action.Spell.Name;
-            DService.Instance().Log.Debug($"[SlotExec] [{slot.Source}] 执行: {action.Spell.Name}({action.Spell.Id}) Wait={action.Wait}");
+            Hi.AcrRuntimeDebug($"[SlotExec] [{slot.Source}] 执行: {action.Spell.Name}({action.Spell.Id}) Wait={action.Wait}");
             _runner.EventHandler?.OnBeforeSpellCast(slot, action.Spell);
 
             if (slot.Actions.Count == 0) return true;
@@ -238,14 +238,14 @@ public sealed class SlotExecutor
             slot.Actions.RemoveAt(0);
             var remaining = slot.Actions.Count;
             slot.breakTime = Environment.TickCount64 + slot.MaxDuration;
-            DService.Instance().Log.Debug($"[SlotExec] [{slot.Source}] 消耗, 剩余动作={remaining}");
+            Hi.AcrRuntimeDebug($"[SlotExec] [{slot.Source}] 消耗, 剩余动作={remaining}");
             if (slot.Actions.Count == 0)
             {
-                DService.Instance().Log.Debug($"[SlotExec] [{slot.Source}] 完成");
+                Hi.AcrRuntimeDebug($"[SlotExec] [{slot.Source}] 完成");
                 // BHMRV7nsmf 后处理
                 if (slot.Wait2NextGcd)
                 {
-                    DService.Instance().Log.Debug($"[SlotExec] [{slot.Source}] 延后到下个GCD");
+                    Hi.AcrRuntimeDebug($"[SlotExec] [{slot.Source}] 延后到下个GCD");
                     bd.WaitGcdSlot = slot;
                 }
                 else if (slot.AppendedSequence != null)
@@ -255,7 +255,7 @@ public sealed class SlotExecutor
                         Sequence = slot.AppendedSequence,
                         CompeltedAction = slot.CompletedAction
                     };
-                    DService.Instance().Log.Debug($"[SlotExec] [{slot.Source}] 追加序列");
+                    Hi.AcrRuntimeDebug($"[SlotExec] [{slot.Source}] 追加序列");
                     bd.PushSequence(wrapper);
                 }
                 else
@@ -278,7 +278,7 @@ public sealed class SlotExecutor
             return true;
         }
 
-        DService.Instance().Log.Debug($"[Action] 施法: {spell.Name}({spell.Id}) 类型={spell.Type} IsAbility={spell.IsAbility()}");
+        Hi.AcrRuntimeDebug($"[Action] 施法: {spell.Name}({spell.Id}) 类型={spell.Type} IsAbility={spell.IsAbility()}");
 
         if (!spell.IsAbility())
         {
@@ -302,7 +302,7 @@ public sealed class SlotExecutor
 
         if (result)
         {
-            DService.Instance().Log.Debug($"[Action] 成功: {spell.Name}({spell.Id}) Ability={spell.IsAbility()} bdAbil={bd.AbilityCount}");
+            Hi.AcrRuntimeDebug($"[Action] 成功: {spell.Name}({spell.Id}) Ability={spell.IsAbility()} bdAbil={bd.AbilityCount}");
             if (spell.IsAbility())
             {
                 bd.AbilityCount++;
@@ -311,7 +311,7 @@ public sealed class SlotExecutor
                 if (spell.GcdGuardMs > 0)
                 {
                     bd.GcdGuardUntil = Math.Max(bd.GcdGuardUntil, Environment.TickCount64 + spell.GcdGuardMs);
-                    DService.Instance().Log.Debug($"[Action] GCD保护窗: {spell.Name}({spell.Id}) {spell.GcdGuardMs}ms");
+                    Hi.AcrRuntimeDebug($"[Action] GCD保护窗: {spell.Name}({spell.Id}) {spell.GcdGuardMs}ms");
                 }
             }
             else
@@ -326,7 +326,7 @@ public sealed class SlotExecutor
         }
         else
         {
-            DService.Instance().Log.Debug($"[Action] 失败: {spell.Name}({spell.Id})");
+            Hi.AcrRuntimeDebug($"[Action] 失败: {spell.Name}({spell.Id})");
         }
         return result;
     }

@@ -55,7 +55,7 @@ public static class EventSystem
         {
             HiAuRo.ACR.SpellHistoryHelper.RecordGcd();
         }
-        DService.Instance().Log.Debug($"[EventSystem] 自行记录: id={actionId} LastCompleted={LastCompletedActionId}");
+        Hi.AcrRuntimeDebug($"[EventSystem] 自行记录: id={actionId} LastCompleted={LastCompletedActionId}");
     }
 
     /// <summary>初始化事件系统</summary>
@@ -147,14 +147,14 @@ public static class EventSystem
         bool result, ActionType actionType, uint actionId, ulong targetId,
         uint extraParam, ActionManager.UseActionMode queueState, uint comboRouteId)
     {
-        DService.Instance().Log.Debug($"[EventSystem] OnPostUseAction: result={result} actionId={actionId} targetId={targetId:X} comboRouteId={comboRouteId}");
+        Hi.AcrRuntimeDebug($"[EventSystem] OnPostUseAction: result={result} actionId={actionId} targetId={targetId:X} comboRouteId={comboRouteId}");
 
         if (result)
         {
             // 去重：已通过 OnUseActionSuccess 自行记录过的 ID 不再更新 Combo/History
             if (_selfRecordedIds.Remove(actionId))
             {
-                DService.Instance().Log.Debug($"[EventSystem] OnPostUseAction: id={actionId} 已自行记录, 跳过状态更新");
+                Hi.AcrRuntimeDebug($"[EventSystem] OnPostUseAction: id={actionId} 已自行记录, 跳过状态更新");
             }
             else
             {
@@ -163,7 +163,7 @@ public static class EventSystem
                 HiAuRo.ACR.SpellHistoryHelper.RecordSpell(actionId);
             }
 
-            DService.Instance().Log.Debug($"[EventSystem] 技能成功: id={actionId} type={actionType} target={targetId:X} LastCombo={LastComboSpellId} LastCompleted={LastCompletedActionId}");
+            Hi.AcrRuntimeDebug($"[EventSystem] 技能成功: id={actionId} type={actionType} target={targetId:X} LastCombo={LastComboSpellId} LastCompleted={LastCompletedActionId}");
             Action<uint>[] completedSnapshot;
             lock (_lock) { completedSnapshot = _onActionCompletedHandlers.ToArray(); }
             foreach (var handler in completedSnapshot)
