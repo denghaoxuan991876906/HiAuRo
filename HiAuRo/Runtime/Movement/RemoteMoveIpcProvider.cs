@@ -12,11 +12,21 @@ public sealed class RemoteMoveIpcProvider : IDisposable
         var pi = DService.Instance().PI;
         pi.GetIpcProvider<bool>($"{Prefix}.IsReady").RegisterFunc(() => true);
         pi.GetIpcProvider<Vector3, long, object>($"{Prefix}.MoveTo")
-            .RegisterAction((pos, targetUtcMs) => MovementService.Instance.Enqueue(
-                MovementRequestFactory.FromRemoteRelay($"relay-moveto-{Guid.NewGuid():N}", pos, targetUtcMs, MovementPolicy.Mechanic)));
+            .RegisterAction((pos, targetUtcMs) =>
+            {
+                var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                DService.Instance().Log.Debug($"[MoveTrace][HiAuRoIpc] MoveTo recv now={now} targetUtc={targetUtcMs} remaining={targetUtcMs - now} pos=({pos.X:F2},{pos.Y:F2},{pos.Z:F2})");
+                MovementService.Instance.Enqueue(
+                    MovementRequestFactory.FromRemoteRelay($"relay-moveto-{Guid.NewGuid():N}", pos, targetUtcMs, MovementPolicy.Mechanic));
+            });
         pi.GetIpcProvider<Vector3, long, object>($"{Prefix}.GatherTo")
-            .RegisterAction((pos, targetUtcMs) => MovementService.Instance.Enqueue(
-                MovementRequestFactory.FromRemoteRelay($"relay-gatherto-{Guid.NewGuid():N}", pos, targetUtcMs, MovementPolicy.Gather)));
+            .RegisterAction((pos, targetUtcMs) =>
+            {
+                var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                DService.Instance().Log.Debug($"[MoveTrace][HiAuRoIpc] GatherTo recv now={now} targetUtc={targetUtcMs} remaining={targetUtcMs - now} pos=({pos.X:F2},{pos.Y:F2},{pos.Z:F2})");
+                MovementService.Instance.Enqueue(
+                    MovementRequestFactory.FromRemoteRelay($"relay-gatherto-{Guid.NewGuid():N}", pos, targetUtcMs, MovementPolicy.Gather));
+            });
     }
 
     public void Dispose()
