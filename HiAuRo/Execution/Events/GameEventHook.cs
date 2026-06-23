@@ -4,6 +4,8 @@ using static HiAuRo.Data;
 using HiAuRo.Infrastructure;
 using Dalamud.Game.Text;
 using Dalamud.Hooking;
+using FFXIVClientStructs.FFXIV.Client.Game.Network;
+using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using OmenTools.Dalamud.Services.ObjectTable.Abstractions.ObjectKinds;
 using OmenTools.OmenService;
 using IFramework = Dalamud.Plugin.Services.IFramework;
@@ -31,10 +33,10 @@ public sealed class GameEventHook
         nint effectHeader, nint effectArray, nint effectTail);
     private Hook<ActionEffectDelegate>? _actionEffectHook;
 
-    private delegate long ObjectEffectDelegate(nint gameObject, ushort data1, ushort data2, long a4);
+    private unsafe delegate void ObjectEffectDelegate(EventObject* eventObject, uint data1, uint data2, ulong a4);
     private Hook<ObjectEffectDelegate>? _objectEffectHook;
 
-    private delegate nint ActorCastDetourDelegate(uint sourceId, nint packetPtr);
+    private unsafe delegate void ActorCastDetourDelegate(uint sourceId, ActorCastPacket* packetPtr);
     private Hook<ActorCastDetourDelegate>? _actorCastHook;
 
     private delegate void ActorControlDelegate(
@@ -103,8 +105,11 @@ public sealed class GameEventHook
             var objectEffectAddr = sigScanner.ScanText("4C 8B DC 53 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 49 89 6B F0 48 8B D9 49 89 7B E0");
             if (objectEffectAddr != nint.Zero)
             {
-                _objectEffectHook = DService.Instance().Hook.HookFromAddress<ObjectEffectDelegate>(
-                    objectEffectAddr, OnObjectEffect);
+                unsafe
+                {
+                    _objectEffectHook = DService.Instance().Hook.HookFromAddress<ObjectEffectDelegate>(
+                        objectEffectAddr, OnObjectEffect);
+                }
                 _objectEffectHook.Enable();
             }
             else
@@ -123,8 +128,11 @@ public sealed class GameEventHook
             var actorCastAddr = sigScanner.ScanText("40 53 57 48 81 EC ?? ?? ?? ?? 48 8B FA 8B D1");
             if (actorCastAddr != nint.Zero)
             {
-                _actorCastHook = DService.Instance().Hook.HookFromAddress<ActorCastDetourDelegate>(
-                    actorCastAddr, OnActorCastDetour);
+                unsafe
+                {
+                    _actorCastHook = DService.Instance().Hook.HookFromAddress<ActorCastDetourDelegate>(
+                        actorCastAddr, OnActorCastDetour);
+                }
                 _actorCastHook.Enable();
             }
             else
@@ -676,67 +684,62 @@ public sealed class GameEventHook
 
     #region ActorCast 签名 Hook（Splatoon 验证，替代不可靠的 packet opcode 0x039A）
 
-    private nint OnActorCastDetour(uint sourceId, nint packetPtr)
+    private unsafe void OnActorCastDetour(uint sourceId, ActorCastPacket* packetPtr)
     {
-        var result = _actorCastHook!.Original(sourceId, packetPtr);
+        _actorCastHook!.Original(sourceId, packetPtr);
 
         try
         {
-            if (packetPtr == nint.Zero) return result;
+            if (packetPtr == null) return;
 
-            unsafe
+            var packet = (PacketActorCast*)packetPtr;
+            var actionId = packet->ActionId;
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            var key = (sourceId, actionId);
+            lock (_actorCastDedup)
             {
-                var packet = (PacketActorCast*)packetPtr;
-                var actionId = packet->ActionId;
-                var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                if (_actorCastDedup.TryGetValue(key, out var lastMs) && (nowMs - lastMs) < 500)
+                    return;
+                _actorCastDedup[key] = nowMs;
 
-                var key = (sourceId, actionId);
-                lock (_actorCastDedup)
-                {
-                    if (_actorCastDedup.TryGetValue(key, out var lastMs) && (nowMs - lastMs) < 500)
-                        return result;
-                    _actorCastDedup[key] = nowMs;
+                var cutoff = nowMs - 5000;
+                var stale = _actorCastDedup.Where(kv => kv.Value < cutoff).Select(kv => kv.Key).ToList();
+                foreach (var k in stale) _actorCastDedup.Remove(k);
+            }
 
-                    var cutoff = nowMs - 5000;
-                    var stale = _actorCastDedup.Where(kv => kv.Value < cutoff).Select(kv => kv.Key).ToList();
-                    foreach (var k in stale) _actorCastDedup.Remove(k);
-                }
-
-                var castObj = DService.Instance().ObjectTable.SearchByID(sourceId);
-                if (ShouldPublishSelfCastStart(castObj is IPlayerCharacter, actionId))
+            var castObj = DService.Instance().ObjectTable.SearchByID(sourceId);
+            if (ShouldPublishSelfCastStart(castObj is IPlayerCharacter, actionId))
+            {
+                Fire(new SelfCastStartCondParams
                 {
-                    Fire(new SelfCastStartCondParams
-                    {
-                        SourceID = sourceId,
-                        SpellId = actionId,
-                        TotalCastTimeInSec = packet->CastTime,
-                        StartCastTime = nowMs
-                    });
-                }
-                else
+                    SourceID = sourceId,
+                    SpellId = actionId,
+                    TotalCastTimeInSec = packet->CastTime,
+                    StartCastTime = nowMs
+                });
+            }
+            else
+            {
+                Fire(new EnemyCastSpellCondParams
                 {
-                    Fire(new EnemyCastSpellCondParams
-                    {
-                        SourceID = sourceId,
-                        DataId = (castObj as IBattleNPC)?.DataID ?? 0,
-                        CastPos = new Vector3(
-                            ConvertCastCoord(packet->PosX),
-                            ConvertCastCoord(packet->PosY),
-                            ConvertCastCoord(packet->PosZ)),
-                        TotalCastTimeInSec = packet->CastTime,
-                        CastRot = packet->RawRotation * 0.0095875263f * 0.0099999998f - MathF.PI,
-                        SpellId = actionId,
-                        StartCastTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                    });
-                }
+                    SourceID = sourceId,
+                    DataId = (castObj as IBattleNPC)?.DataID ?? 0,
+                    CastPos = new Vector3(
+                        ConvertCastCoord(packet->PosX),
+                        ConvertCastCoord(packet->PosY),
+                        ConvertCastCoord(packet->PosZ)),
+                    TotalCastTimeInSec = packet->CastTime,
+                    CastRot = packet->RawRotation * 0.0095875263f * 0.0099999998f - MathF.PI,
+                    SpellId = actionId,
+                    StartCastTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                });
             }
         }
         catch (Exception ex)
         {
             DService.Instance().Log.Warning($"[GameEventHook] ActorCast 签名处理异常: {ex.Message}");
         }
-
-        return result;
     }
 
     private static float ConvertCastCoord(ushort raw) => raw * 3.0518043f * 0.0099999998f - 1000.0f;
@@ -881,20 +884,17 @@ public sealed class GameEventHook
 
     /// <summary>
     /// 从 XSZYYS 签名: 4C 8B DC 53 48 81 EC ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 33 C4 48 89 84 24 ?? ?? ?? ?? 49 89 6B F0 48 8B D9 49 89 7B E0
-    /// 函数签名: long ProcessObjectEffect(GameObject* a1, ushort a2, ushort a3, long a4)
+    /// 函数签名: void EventObject.PlayAnimation(EventObject* a1, uint a2, uint a3, ulong a4)
     /// </summary>
-    private long OnObjectEffect(nint gameObjectPtr, ushort data1, ushort data2, long a4)
+    private unsafe void OnObjectEffect(EventObject* eventObjectPtr, uint data1, uint data2, ulong a4)
     {
-        var result = _objectEffectHook!.Original(gameObjectPtr, data1, data2, a4);
+        _objectEffectHook!.Original(eventObjectPtr, data1, data2, a4);
 
         try
         {
             uint objectId = 0;
-            unsafe
-            {
-                if (gameObjectPtr != nint.Zero)
-                    objectId = *(uint*)(gameObjectPtr + 0x78);
-            }
+            if (eventObjectPtr != null)
+                objectId = eventObjectPtr->EntityId;
 
             Fire(new ObjectEffectParams
             {
@@ -907,8 +907,6 @@ public sealed class GameEventHook
         {
             DService.Instance().Log.Warning($"[GameEventHook] ObjectEffect 处理异常: {ex.Message}");
         }
-
-        return result;
     }
 
     #endregion

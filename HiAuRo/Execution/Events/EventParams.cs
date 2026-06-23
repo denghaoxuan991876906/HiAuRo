@@ -282,8 +282,8 @@ public sealed class ObjectChangeParams : ITriggerCondParams
 public sealed class ObjectEffectParams : ITriggerCondParams
 {
     public uint ObjectID;
-    public ushort Data1;
-    public ushort Data2;
+    public uint Data1;
+    public uint Data2;
 
     public override string ToString() =>
         $"Obj={LogHelper.Entity(ObjectID)} Data1={Data1} Data2={Data2}";
