@@ -111,7 +111,8 @@ public sealed class MovementService
                 if (_debugSnapshot?.RequestId == request.RequestId && _debugSnapshot.Status != "Waiting")
                 {
                     _debugSnapshot.Status = "Waiting";
-                    AppendDebugEvent($"Waiting id={request.RequestId} dist={_debugSnapshot.CurrentDistanceToTarget:F3} travelTimeMs={travelTimeMs} timeToDeadlineMs={plan.TimeToDeadlineMs} plannedStartMs={plan.PlannedStartMs}");
+                    var waitMs = Math.Max(0, plan.PlannedStartMs - plan.LogicalNowMs);
+                    AppendDebugEvent($"Waiting id={request.RequestId} waitMs={waitMs} dist={_debugSnapshot.CurrentDistanceToTarget:F3} travelTimeMs={travelTimeMs} timeToDeadlineMs={plan.TimeToDeadlineMs} plannedStartMs={plan.PlannedStartMs}");
                 }
                 continue;
             }
@@ -285,6 +286,9 @@ public sealed class MovementService
         Vector3 currentPos,
         int travelTimeMs)
     {
+        var preserveWaiting = _debugSnapshot?.RequestId == request.RequestId
+            && _debugSnapshot.Status == "Waiting";
+
         _debugSnapshot ??= new MovementDebugSnapshot();
         _debugSnapshot.RequestId = request.RequestId;
         _debugSnapshot.Source = request.Source;
@@ -307,7 +311,9 @@ public sealed class MovementService
         _debugSnapshot.AlreadyAtTarget = plan.ShouldMarkArrived;
         _debugSnapshot.NavReady = ReadBoolIpc("vnavmesh.Nav.IsReady");
         _debugSnapshot.PathRunning = ReadBoolIpc("vnavmesh.Path.IsRunning");
-        _debugSnapshot.Status = _startedRequests.Contains(request.RequestId) ? "Moving" : "Pending";
+        _debugSnapshot.Status = _startedRequests.Contains(request.RequestId)
+            ? "Moving"
+            : preserveWaiting ? "Waiting" : "Pending";
     }
 
     private void AppendDebugEvent(string message)
