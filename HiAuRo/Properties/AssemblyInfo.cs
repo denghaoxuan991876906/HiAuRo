@@ -11,3 +11,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("CombatCommandTests")]
 [assembly: InternalsVisibleTo("OverlayVisibilityTests")]
 [assembly: InternalsVisibleTo("MovementLogicTests")]
+[assembly: InternalsVisibleTo("PauseGateTests")]

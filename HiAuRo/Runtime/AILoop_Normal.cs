@@ -35,8 +35,6 @@ public sealed class AILoop_Normal : IAILoop
             Clear(runner);
         }
 
-        if (ACR.MainControlHelper.IsPaused) return;
-
         Plugin.SafeFire(runner.CalSlotAsync(), "AILoop");
     }
 

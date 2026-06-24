@@ -9,6 +9,20 @@ public sealed class SlotExecutor
 
     public SlotExecutor(AIRunner runner) { _runner = runner; }
 
+    internal static SlotActionGateOutcome EvaluatePreActionGateForTests(bool isDead, bool isPaused)
+    {
+        if (isDead) return SlotActionGateOutcome.StopAndDropSlot;
+        if (isPaused) return SlotActionGateOutcome.BlockKeepSlot;
+        return SlotActionGateOutcome.Allow;
+    }
+
+    internal static SlotActionGateOutcome EvaluatePostActionGateForTests(bool isDead, bool isPaused, bool actionSucceeded)
+    {
+        if (isDead) return SlotActionGateOutcome.StopAndDropSlot;
+        if (isPaused) return actionSucceeded ? SlotActionGateOutcome.BlockAfterConsume : SlotActionGateOutcome.BlockKeepSlot;
+        return SlotActionGateOutcome.Allow;
+    }
+
     public bool CheckNextSlot(BattleData bd)
     {
         if (bd.NextSlot == null) return false;
@@ -212,7 +226,9 @@ public sealed class SlotExecutor
 
         while (slot.Actions.Count > 0)
         {
-            if (!CanUseAction()) return true;
+            var gate = CanUseActionBeforeAction();
+            if (gate == SlotActionGateOutcome.StopAndDropSlot) return true;
+            if (gate == SlotActionGateOutcome.BlockKeepSlot) return false;
 
             if (!isNextSlot && CheckNextSlot(bd)) return false;
 
@@ -226,7 +242,9 @@ public sealed class SlotExecutor
             action = slot.Actions[0];
             bool success = await ExecuteActionAsync(bd, action, slot);
 
-            if (!CanUseAction()) return true;
+            gate = CanUseActionAfterAction(success);
+            if (gate == SlotActionGateOutcome.StopAndDropSlot) return true;
+            if (gate == SlotActionGateOutcome.BlockKeepSlot) return false;
 
             if (slot.InSequence && !success
                 && Environment.TickCount64 < slot.breakTime)
@@ -236,6 +254,8 @@ public sealed class SlotExecutor
             }
 
             slot.Actions.RemoveAt(0);
+            if (gate == SlotActionGateOutcome.BlockAfterConsume) return false;
+
             var remaining = slot.Actions.Count;
             slot.breakTime = Environment.TickCount64 + slot.MaxDuration;
             Hi.AcrRuntimeDebug($"[SlotExec] [{slot.Source}] 消耗, 剩余动作={remaining}");
@@ -331,11 +351,19 @@ public sealed class SlotExecutor
         return result;
     }
 
-    private static bool CanUseAction()
+    private static SlotActionGateOutcome CanUseActionBeforeAction()
     {
-        if (Data.Me.Object is { IsDead: true }) return false;
-        if (MainControlHelper.IsPaused) return false;
-        return true;
+        return EvaluatePreActionGateForTests(
+            isDead: Data.Me.Object is { IsDead: true },
+            isPaused: MainControlHelper.IsPaused);
+    }
+
+    private static SlotActionGateOutcome CanUseActionAfterAction(bool actionSucceeded)
+    {
+        return EvaluatePostActionGateForTests(
+            isDead: Data.Me.Object is { IsDead: true },
+            isPaused: MainControlHelper.IsPaused,
+            actionSucceeded: actionSucceeded);
     }
 
     private static bool TryReserveAbilityWindow(Slot slot)
@@ -351,4 +379,12 @@ public sealed class SlotExecutor
         slot.AbilityThrottleReserved = true;
         return true;
     }
+}
+
+internal enum SlotActionGateOutcome
+{
+    Allow,
+    BlockKeepSlot,
+    BlockAfterConsume,
+    StopAndDropSlot
 }
