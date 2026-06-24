@@ -76,7 +76,15 @@ public sealed class MovementService
                 CurrentJobId = Data.Me.ClassJob
             });
 
-            CaptureDebug(request, plan, currentPos.Value, travelTimeMs);
+            CaptureDebug(
+                request,
+                plan,
+                currentPos.Value,
+                travelTimeMs,
+                gcdRemainingMs,
+                gcdDurationMs,
+                isCasting,
+                castRemainingMs);
 
             if (plan.ShouldMarkArrived)
             {
@@ -283,7 +291,11 @@ public sealed class MovementService
         MovementRequest request,
         MovementPlannerResult plan,
         Vector3 currentPos,
-        int travelTimeMs)
+        int travelTimeMs,
+        int gcdRemainingMs,
+        int gcdDurationMs,
+        bool isCasting,
+        int castRemainingMs)
     {
         var preserveWaiting = _debugSnapshot?.RequestId == request.RequestId
             && _debugSnapshot.Status == "Waiting";
@@ -308,6 +320,10 @@ public sealed class MovementService
         _debugSnapshot.ShouldStartNow = plan.ShouldStartNow;
         _debugSnapshot.ShouldFallbackToTp = plan.ShouldFallbackToTp;
         _debugSnapshot.AlreadyAtTarget = plan.ShouldMarkArrived;
+        _debugSnapshot.IsCasting = isCasting;
+        _debugSnapshot.GcdRemainingMs = gcdRemainingMs;
+        _debugSnapshot.GcdDurationMs = gcdDurationMs;
+        _debugSnapshot.CastRemainingMs = castRemainingMs;
         _debugSnapshot.NavReady = ReadBoolIpc("vnavmesh.Nav.IsReady");
         _debugSnapshot.PathRunning = ReadBoolIpc("vnavmesh.Path.IsRunning");
         _debugSnapshot.Status = _startedRequests.Contains(request.RequestId)
