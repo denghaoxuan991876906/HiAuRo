@@ -14,6 +14,7 @@ public sealed class MovementPlannerInput
     public int GcdDurationMs { get; init; }
     public bool IsCasting { get; init; }
     public int CastRemainingMs { get; init; }
+    public int CastTotalMs { get; init; }
     public uint CurrentJobId { get; init; }
 }
 
@@ -70,18 +71,15 @@ public static class MovementPlanner
 
         var nowMs = ResolveNowMs(input.Request, input.FactState);
         var timeToDeadlineMs = (int)(input.Request.DeadlineValue - nowMs);
-        var waitForSlidecastMs = GetSlidecastWaitMs(input);
         if (timeToDeadlineMs <= 0)
         {
-            var shouldStartNow = waitForSlidecastMs <= 0;
             return new MovementPlannerResult
             {
                 LogicalNowMs = nowMs,
                 TimeToDeadlineMs = timeToDeadlineMs,
-                PlannedStartMs = nowMs + waitForSlidecastMs,
-                ShouldStartNow = shouldStartNow,
-                ShouldFallbackToTp = shouldStartNow
-                    && input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
+                PlannedStartMs = nowMs,
+                ShouldStartNow = true,
+                ShouldFallbackToTp = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
             };
         }
 
@@ -107,98 +105,15 @@ public static class MovementPlanner
 
         if (input.Request.DeadlineKind == MovementDeadlineKind.TargetUtcMs)
         {
-            var plannedStartMs = nowMs + Math.Max(0, timeToDeadlineMs - travelTimeMs);
-            if (IsSlidecastJob(input.CurrentJobId) && input.IsCasting && input.CastRemainingMs > SlidecastThresholdMs)
-                plannedStartMs = Math.Max(plannedStartMs, nowMs + input.CastRemainingMs - SlidecastThresholdMs);
-
-            var shouldStart = plannedStartMs <= nowMs;
-            return new MovementPlannerResult
-            {
-                LogicalNowMs = nowMs,
-                TimeToDeadlineMs = timeToDeadlineMs,
-                PlannedStartMs = plannedStartMs,
-                ShouldStartNow = shouldStart,
-                ShouldFallbackToTp = shouldStart
-                    && input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
-                    && timeToDeadlineMs < travelTimeMs
-            };
+            return PlanByLatestMoveWindow(input, nowMs, timeToDeadlineMs, travelTimeMs);
         }
 
         if (!IsSlidecastJob(input.CurrentJobId))
         {
-            var shouldStart = timeToDeadlineMs <= travelTimeMs;
-            var plannedStartMs = nowMs + Math.Max(0, timeToDeadlineMs - travelTimeMs);
-            return new MovementPlannerResult
-            {
-                LogicalNowMs = nowMs,
-                TimeToDeadlineMs = timeToDeadlineMs,
-                PlannedStartMs = plannedStartMs,
-                ShouldStartNow = shouldStart,
-                ShouldFallbackToTp = shouldStart
-                    && input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
-                    && timeToDeadlineMs < travelTimeMs
-            };
+            return PlanByLatestMoveWindow(input, nowMs, timeToDeadlineMs, travelTimeMs);
         }
 
-        var oneMoreGcdMs = input.GcdRemainingMs + input.GcdDurationMs + travelTimeMs;
-        if (oneMoreGcdMs <= timeToDeadlineMs)
-        {
-            return new MovementPlannerResult
-            {
-                LogicalNowMs = nowMs,
-                TimeToDeadlineMs = timeToDeadlineMs,
-                PlannedStartMs = nowMs + (timeToDeadlineMs - oneMoreGcdMs),
-                ShouldStartNow = false
-            };
-        }
-
-        if (!input.IsCasting)
-        {
-            var shouldFallback = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
-                && timeToDeadlineMs < travelTimeMs;
-            return new MovementPlannerResult
-            {
-                LogicalNowMs = nowMs,
-                TimeToDeadlineMs = timeToDeadlineMs,
-                PlannedStartMs = nowMs + Math.Max(0, timeToDeadlineMs - travelTimeMs),
-                ShouldStartNow = true,
-                ShouldFallbackToTp = shouldFallback
-            };
-        }
-
-        if (input.CastRemainingMs <= SlidecastThresholdMs)
-        {
-            var shouldFallback = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
-                && timeToDeadlineMs < travelTimeMs;
-            return new MovementPlannerResult
-            {
-                LogicalNowMs = nowMs,
-                TimeToDeadlineMs = timeToDeadlineMs,
-                PlannedStartMs = nowMs,
-                ShouldStartNow = true,
-                ShouldFallbackToTp = shouldFallback
-            };
-        }
-
-        var slideDepartMs = waitForSlidecastMs + travelTimeMs;
-        if (slideDepartMs <= timeToDeadlineMs)
-        {
-            return new MovementPlannerResult
-            {
-                LogicalNowMs = nowMs,
-                TimeToDeadlineMs = timeToDeadlineMs,
-                PlannedStartMs = nowMs + waitForSlidecastMs,
-                ShouldStartNow = false
-            };
-        }
-
-        return new MovementPlannerResult
-        {
-            LogicalNowMs = nowMs,
-            TimeToDeadlineMs = timeToDeadlineMs,
-            PlannedStartMs = nowMs + waitForSlidecastMs,
-            ShouldStartNow = false
-        };
+        return PlanByLatestMoveWindow(input, nowMs, timeToDeadlineMs, travelTimeMs);
     }
 
     public static bool ShouldMarkArrived(Vector3 currentPos, Vector3 targetPos, float tolerance = 0.5f)
@@ -209,10 +124,82 @@ public static class MovementPlanner
             ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             : (long)Math.Round(state.TotalTime * 1000);
 
-    private static int GetSlidecastWaitMs(MovementPlannerInput input)
-        => IsSlidecastJob(input.CurrentJobId) && input.IsCasting && input.CastRemainingMs > SlidecastThresholdMs
-            ? input.CastRemainingMs - SlidecastThresholdMs
-            : 0;
+    private static MovementPlannerResult PlanByLatestMoveWindow(
+        MovementPlannerInput input,
+        long nowMs,
+        int timeToDeadlineMs,
+        int travelTimeMs)
+    {
+        var latestMoveTimeMs = timeToDeadlineMs - travelTimeMs;
+        if (latestMoveTimeMs <= 0)
+        {
+            return new MovementPlannerResult
+            {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = nowMs,
+                ShouldStartNow = true,
+                ShouldFallbackToTp = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
+            };
+        }
+
+        if (!IsSlidecastJob(input.CurrentJobId))
+        {
+            return new MovementPlannerResult
+            {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = nowMs + latestMoveTimeMs,
+                ShouldStartNow = false
+            };
+        }
+
+        var nextGcdSlidecastWindowMs = input.GcdRemainingMs + input.CastTotalMs - SlidecastThresholdMs;
+        if (nextGcdSlidecastWindowMs <= latestMoveTimeMs)
+        {
+            return new MovementPlannerResult
+            {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = nowMs + Math.Max(0, nextGcdSlidecastWindowMs),
+                ShouldStartNow = false
+            };
+        }
+
+        if (!input.IsCasting)
+        {
+            return new MovementPlannerResult
+            {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = nowMs,
+                ShouldStartNow = true,
+                ShouldFallbackToTp = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
+            };
+        }
+
+        var currentSlidecastWindowMs = input.CastRemainingMs - SlidecastThresholdMs;
+        if (currentSlidecastWindowMs <= latestMoveTimeMs)
+        {
+            var waitMs = Math.Max(0, currentSlidecastWindowMs);
+            return new MovementPlannerResult
+            {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = nowMs + waitMs,
+                ShouldStartNow = false
+            };
+        }
+
+        return new MovementPlannerResult
+        {
+            LogicalNowMs = nowMs,
+            TimeToDeadlineMs = timeToDeadlineMs,
+            PlannedStartMs = nowMs,
+            ShouldStartNow = true,
+            ShouldFallbackToTp = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
+        };
+    }
 
     private static bool IsSlidecastJob(uint jobId)
         => jobId is 25 or 27 or 35 or 42 or 24 or 28 or 33 or 40;

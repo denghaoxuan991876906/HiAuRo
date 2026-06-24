@@ -53,6 +53,7 @@ public sealed class MovementService
         var gcdDurationMs = (int)Math.Round(GCDHelper.GetGCDDuration());
         var isCasting = DService.Instance().Condition.IsCasting;
         var castRemainingMs = isCasting ? (int)Math.Round(GetCastRemainingMs()) : 0;
+        var castTotalMs = isCasting ? (int)Math.Round(GetCastTotalMs()) : 0;
 
         foreach (var request in _requests.Values.ToList())
         {
@@ -73,6 +74,7 @@ public sealed class MovementService
                 GcdDurationMs = gcdDurationMs,
                 IsCasting = isCasting,
                 CastRemainingMs = castRemainingMs,
+                CastTotalMs = castTotalMs,
                 CurrentJobId = Data.Me.ClassJob
             });
 
@@ -240,7 +242,14 @@ public sealed class MovementService
     {
         var player = DService.Instance().ObjectTable.LocalPlayer;
         if (player == null || !player.IsCasting) return 0;
-        return player.CurrentCastTime * 1000f;
+        return Math.Max(0, (player.TotalCastTime - player.CurrentCastTime) * 1000f);
+    }
+
+    private static unsafe float GetCastTotalMs()
+    {
+        var player = DService.Instance().ObjectTable.LocalPlayer;
+        if (player == null || !player.IsCasting) return 0;
+        return Math.Max(0, player.TotalCastTime * 1000f);
     }
 
     private static int EstimateTravelTimeMs(Vector3 from, Vector3 to)
