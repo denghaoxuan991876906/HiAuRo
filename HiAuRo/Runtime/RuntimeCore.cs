@@ -1,3 +1,5 @@
+using HiAuRo.FactAxis;
+using HiAuRo.Runtime.Movement;
 using HiAuRo.Script;
 
 namespace HiAuRo.Runtime;
@@ -63,6 +65,10 @@ public static class RuntimeCore
             HiAuRo.Data.Party.Refresh();
             ScriptManager.Update();
             CombatContext.Check();
+            if (CombatContext.CurrentState == CombatContext.State.InCombat)
+                ACRLifecycle.Runner.BattleTimeMs += (int)(HiAuRo.Data.Combat.DeltaTime * 1000);
+            MovementService.Instance.Update(FactTimeline.Instance.State);
+            ScriptEngine.Instance.PollChecks();
             Recording.CombatRecorder.Instance.UpdateFrameCache();
         }
 
@@ -76,7 +82,6 @@ public static class RuntimeCore
             }
 
             Coroutine.Instance.Update();
-            ScriptEngine.Instance.PollChecks();
             EventSystem.CheckTargetChanged();
 #if DEBUG
             PerfMonitor.Record("EventSystem", _pt0); _pt0 = System.Diagnostics.Stopwatch.GetTimestamp();

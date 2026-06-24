@@ -125,7 +125,6 @@ public sealed class ScriptEngine
     public void PollChecks()
     {
         if (_checks.Count == 0) return;
-        if (ACR.MainControlHelper.IsPaused) return;
         var now = Environment.TickCount64;
 
         for (int i = _checks.Count - 1; i >= 0; i--)
@@ -155,7 +154,6 @@ public sealed class ScriptEngine
     private void OnGameEvent(ACR.ITriggerCondParams eventParams)
     {
         if (!ScriptGlobal.Enabled) return;
-        if (!Runtime.RuntimeCore.IsRunning || ACR.MainControlHelper.IsPaused) return;
         var type = eventParams.GetType();
         if (!_handlers.TryGetValue(type, out var list)) return;
 

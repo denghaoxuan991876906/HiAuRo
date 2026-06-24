@@ -66,7 +66,20 @@ public static class Hi
     public static void Delay(double ms, Action action)
     {
         if (ms <= 0) { action(); return; }
-        Runtime.Coroutine.Instance.WaitAsync((long)ms).ContinueWith(_ => action());
+        _ = DelayOnFrameworkAsync((int)Math.Max(1, Math.Round(ms)), action);
+    }
+
+    private static async Task DelayOnFrameworkAsync(int ms, Action action)
+    {
+        try
+        {
+            await Task.Delay(ms);
+            await DService.Instance().Framework.RunOnFrameworkThread(action);
+        }
+        catch (Exception ex)
+        {
+            DService.Instance().Log.Warning($"[Hi] Delay 异常: {ex.Message}");
+        }
     }
 
     /// <summary>当前战斗已持续毫秒数（进战清零）</summary>
