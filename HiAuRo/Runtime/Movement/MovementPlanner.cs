@@ -102,6 +102,25 @@ public static class MovementPlanner
             };
         }
 
+        if (input.Request.DeadlineKind == MovementDeadlineKind.TargetUtcMs)
+        {
+            var plannedStartMs = nowMs + Math.Max(0, timeToDeadlineMs - travelTimeMs);
+            if (IsSlidecastJob(input.CurrentJobId) && input.IsCasting && input.CastRemainingMs > SlidecastThresholdMs)
+                plannedStartMs = Math.Max(plannedStartMs, nowMs + input.CastRemainingMs - SlidecastThresholdMs);
+
+            var shouldStart = plannedStartMs <= nowMs;
+            return new MovementPlannerResult
+            {
+                LogicalNowMs = nowMs,
+                TimeToDeadlineMs = timeToDeadlineMs,
+                PlannedStartMs = plannedStartMs,
+                ShouldStartNow = shouldStart,
+                ShouldFallbackToTp = shouldStart
+                    && input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
+                    && timeToDeadlineMs < travelTimeMs
+            };
+        }
+
         if (!IsSlidecastJob(input.CurrentJobId))
         {
             var shouldStart = timeToDeadlineMs <= travelTimeMs;
