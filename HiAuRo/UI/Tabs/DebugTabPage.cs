@@ -9,7 +9,6 @@ namespace HiAuRo.UI.Tabs;
 
 public sealed class DebugTabPage : TabPageBase
 {
-    private readonly string[] _remoteMoveModeNames = Enum.GetNames<RemoteMovementMode>();
     private Vector3 _moveTestTarget = new(100, 0, 100);
     private int _moveTestDelayMs = 8000;
 
@@ -369,13 +368,6 @@ public sealed class DebugTabPage : TabPageBase
         var config = PluginConfig.Instance;
         var debug = MovementService.Instance.DebugSnapshot;
         var currentPos = Data.Me.Object?.Position ?? default;
-
-        var remoteMode = (int)config.RemoteMoveMode;
-        if (ComponentLibrary.Select("dbg_remote_move_mode", "远程移动模式", ref remoteMode, _remoteMoveModeNames))
-        {
-            config.RemoteMoveMode = (RemoteMovementMode)remoteMode;
-            Plugin.SaveConfig();
-        }
 
         var movementSpeed = config.MovementSpeedMps;
         ImGui.Text("全局移动速度 (m/s)");

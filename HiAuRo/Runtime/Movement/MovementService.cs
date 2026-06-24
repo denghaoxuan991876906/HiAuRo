@@ -49,7 +49,6 @@ public sealed class MovementService
         var currentPos = Data.Me.Object?.Position;
         if (currentPos == null) return;
 
-        var remoteMode = PluginConfig.Instance.RemoteMoveMode;
         var gcdRemainingMs = (int)Math.Round(GCDHelper.GetGCDCooldown());
         var gcdDurationMs = (int)Math.Round(GCDHelper.GetGCDDuration());
         var isCasting = DService.Instance().Condition.IsCasting;
@@ -67,7 +66,7 @@ public sealed class MovementService
                 CurrentPos = currentPos.Value,
                 FactState = state,
                 RemoteMode = request.Source == MovementSource.RemoteRelay
-                    ? remoteMode
+                    ? RemoteMovementMode.NavMesh
                     : ConvertFactAxisMode(PluginConfig.Instance.FactAxis.MovementMode),
                 TravelTimeMs = travelTimeMs,
                 GcdRemainingMs = gcdRemainingMs,
