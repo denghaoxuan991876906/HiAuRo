@@ -265,6 +265,14 @@ public sealed class CombatStateParams : ITriggerCondParams
     public override string ToString() => $"CombatState IsEntering={IsEntering}";
 }
 
+public sealed class CountdownStartParams : ITriggerCondParams
+{
+    public int TimeLeftSec;
+    public float TimeLeftRaw;
+
+    public override string ToString() => $"TimeLeft={TimeLeftSec}s Raw={TimeLeftRaw:F1}";
+}
+
 public sealed class ObjectChangeParams : ITriggerCondParams
 {
     public uint SourceID;

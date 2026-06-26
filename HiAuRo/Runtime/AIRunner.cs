@@ -112,13 +112,22 @@ public sealed partial class AIRunner
         var remaining = CountDownHandler.ReadCountdown();
 
         // 检测倒计时开始：从 0 → >0 的瞬间，执行一次 Init + 注册动作
-        if (remaining > 0 && _lastCountRemaining <= 0)
+        if (ShouldPublishCountdownStart(_lastCountRemaining, remaining))
         {
+            _lastCountRemaining = remaining;
             _ = CountDownHandler.Instance.Init();
             if (CurrentRotation?.Opener != null)
                 CurrentRotation.Opener.InitCountDown(CountDownHandler.Instance);
+            GameEventHook.Instance.Fire(new CountdownStartParams
+            {
+                TimeLeftSec = (int)Math.Ceiling(remaining),
+                TimeLeftRaw = remaining,
+            });
         }
-        _lastCountRemaining = remaining;
+        else
+        {
+            _lastCountRemaining = remaining;
+        }
 
         // Start 被设为 false 后不再执行任何操作
         if (!CountDownHandler.Instance.Start) return;
@@ -130,6 +139,12 @@ public sealed partial class AIRunner
     {
         return CountDownHandler.ReadCountdown();
     }
+
+    internal static bool ShouldPublishCountdownStartForTests(float previousRemaining, float currentRemaining)
+        => ShouldPublishCountdownStart(previousRemaining, currentRemaining);
+
+    private static bool ShouldPublishCountdownStart(float previousRemaining, float currentRemaining)
+        => currentRemaining > 0 && previousRemaining <= 0;
 
     private void UpdateFactAxis()
     {

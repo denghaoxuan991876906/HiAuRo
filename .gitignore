@@ -26,3 +26,6 @@ skills-lock.json
 /.worktrees
 /Recordings
 /tests
+/.superpowers
+tools/moveto-scenario-review.html
+tools/segmented-slidecast-visualizer.html
