@@ -440,6 +440,8 @@ public sealed class DebugTabPage : TabPageBase
         ImGui.Spacing();
         ImGui.Text($"状态: {debug.Status}");
         ImGui.Text($"来源/意图: {debug.Source} / {debug.Intent}");
+        ImGui.Text($"ActiveQueued: {debug.ActiveQueuedRequestId}");
+        ImGui.Text($"PendingQueued: {string.Join(", ", debug.PendingQueuedRequestIds)}");
         ImGui.Text($"ShouldStartNow: {debug.ShouldStartNow}  FallbackToTp: {debug.ShouldFallbackToTp}");
         ImGui.Text($"已到目标: {debug.AlreadyAtTarget}  当前距目标: {debug.CurrentDistanceToTarget:F3} m");
         ImGui.Text($"当前坐标: X={debug.CurrentPos.X:F3} Y={debug.CurrentPos.Y:F3} Z={debug.CurrentPos.Z:F3}");

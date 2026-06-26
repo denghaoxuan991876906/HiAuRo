@@ -10,12 +10,8 @@ using HiAuRo.ACR;
 namespace HiAuRo.Runtime.Intelligence;
 
 /// <summary>
-/// 移动执行器 — 消费 ActiveDemands，通过 VNavmesh IPC 驱动角色移动。
-/// MoveTo: 寻路 + deadline 调度 + TP 兜底
-/// TP: 坐标瞬移（内部实现，通过 ActorSetPos 封包）
-/// Hold: 停止 + 阻塞 duration 秒
-/// Mechanic 策略: 惰性移动，读条职业有前向计算
-/// Gather 策略: 尽快移动，读条职业等滑步窗口
+/// FactAxis 移动执行预留点。
+/// 当前仅保留未来接回入口，不再通过 MovementService 实际排队/执行 FactAxis 移动。
 /// </summary>
 public sealed class MovementExecutor
 {
@@ -47,18 +43,11 @@ public sealed class MovementExecutor
     /// <summary>每帧更新移动执行</summary>
     public void Update(FactState state)
     {
-        var flags = PluginConfig.Instance.FactAxis;
-        if (!flags.MoveTo && !flags.TP && !flags.Hold) return;
-        if (!state.IsRunning) return;
-
         var demands = IntelligenceEngine.Instance.ActiveDemands;
-        for (int i = demands.Count - 1; i >= 0; i--)
-        {
-            var demand = demands[i];
-            if (_executedDemandIds.Contains(demand.Id)) continue;
-            MovementService.Instance.EnqueueDemand(demand, flags, state);
-            _executedDemandIds.Add(demand.Id);
-        }
+        if (demands.Count == 0) return;
+
+        // FactAxis 战斗时间目前仍围绕 UTC 概念重新厘清，且移动执行/测试面尚未稳定。
+        // 先只保留这里作为未来接回 FactAxis movement 的单一入口，当前不经过 MovementService 执行。
         demands.Clear();
     }
 

@@ -65,7 +65,7 @@ public static class MovementPlanner
                 LogicalNowMs = tpNowMs,
                 PlannedStartMs = tpNowMs,
                 ShouldStartNow = true,
-                ShouldFallbackToTp = true
+                ShouldFallbackToTp = ShouldUseTpFallback(input)
             };
         }
 
@@ -79,7 +79,7 @@ public static class MovementPlanner
                 TimeToDeadlineMs = timeToDeadlineMs,
                 PlannedStartMs = nowMs,
                 ShouldStartNow = true,
-                ShouldFallbackToTp = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
+                ShouldFallbackToTp = ShouldUseTpFallback(input)
             };
         }
 
@@ -139,7 +139,7 @@ public static class MovementPlanner
                 TimeToDeadlineMs = timeToDeadlineMs,
                 PlannedStartMs = nowMs,
                 ShouldStartNow = true,
-                ShouldFallbackToTp = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
+                ShouldFallbackToTp = ShouldUseTpFallback(input)
             };
         }
 
@@ -174,7 +174,7 @@ public static class MovementPlanner
                 TimeToDeadlineMs = timeToDeadlineMs,
                 PlannedStartMs = nowMs,
                 ShouldStartNow = true,
-                ShouldFallbackToTp = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
+                ShouldFallbackToTp = ShouldUseTpFallback(input)
             };
         }
 
@@ -197,9 +197,15 @@ public static class MovementPlanner
             TimeToDeadlineMs = timeToDeadlineMs,
             PlannedStartMs = nowMs,
             ShouldStartNow = true,
-            ShouldFallbackToTp = input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底
+            ShouldFallbackToTp = ShouldUseTpFallback(input)
         };
     }
+
+    private static bool ShouldUseTpFallback(MovementPlannerInput input)
+        => input.Request.Intent == MovementIntent.TP
+            || input.RemoteMode == RemoteMovementMode.TP
+            || (input.Request.Intent != MovementIntent.MoveTo
+                && input.RemoteMode == RemoteMovementMode.NavMesh_TP兜底);
 
     private static bool IsSlidecastJob(uint jobId)
         => jobId is 25 or 27 or 35 or 42 or 24 or 28 or 33 or 40;

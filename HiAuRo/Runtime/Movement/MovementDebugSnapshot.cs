@@ -5,6 +5,8 @@ namespace HiAuRo.Runtime.Movement;
 public sealed class MovementDebugSnapshot
 {
     public List<string> Events { get; } = [];
+    public string ActiveQueuedRequestId { get; set; } = "";
+    public List<string> PendingQueuedRequestIds { get; } = [];
     public string RequestId { get; set; } = "";
     public MovementSource Source { get; set; }
     public MovementIntent Intent { get; set; }
