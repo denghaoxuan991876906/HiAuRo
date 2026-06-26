@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Numerics;
 using OmenTools.Interop.Game.Helpers;
+using OmenTools.OmenService;
 
 namespace HiAuRo.Rendering;
 
@@ -15,8 +16,12 @@ public enum DebugPointColor
 
 public static class DebugPoint
 {
+    private const float CircleRadius = 10f;
+    private const float LabelFontScale = 1.6f;
+
     private static readonly ConcurrentDictionary<int, Entry> _points = new();
     private static int _nextId;
+    private static readonly Vector2 LabelOffset = new(CircleRadius + 4f, -8f);
 
     private static readonly Dictionary<DebugPointColor, Vector4> Colors = new()
     {
@@ -60,6 +65,7 @@ public static class DebugPoint
         try
         {
             var dl = ImGui.GetForegroundDrawList();
+            using var font = FontManager.Instance().GetUIFont(LabelFontScale).Push();
 
             foreach (var (id, entry) in _points)
             {
@@ -68,11 +74,11 @@ public static class DebugPoint
                 var col = Colors.GetValueOrDefault(entry.Color, Colors[DebugPointColor.Red]);
                 var colU32 = ImGui.ColorConvertFloat4ToU32(col);
 
-                dl.AddCircleFilled(screen, 5f, colU32, 16);
-                dl.AddCircle(screen, 5f, ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.6f)), 16, 1f);
+                dl.AddCircleFilled(screen, CircleRadius, colU32, 16);
+                dl.AddCircle(screen, CircleRadius, ImGui.ColorConvertFloat4ToU32(new Vector4(0, 0, 0, 0.6f)), 16, 1f);
 
                 var text = entry.Label ?? $"#{id}";
-                dl.AddText(screen + new Vector2(8, -4), colU32, text);
+                dl.AddText(screen + LabelOffset, colU32, text);
             }
         }
         catch
