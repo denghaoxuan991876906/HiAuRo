@@ -125,6 +125,12 @@ public static class AcrCatalogBuilder
 
     public static string BuildInstallKey(string publisherId, string acrId) => $"{publisherId}.{acrId}";
 
+    public static bool ShouldDisableUninstall(string installKey, string currentInstallKey)
+    {
+        return !string.IsNullOrWhiteSpace(installKey)
+            && string.Equals(installKey, currentInstallKey, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static IOrderedEnumerable<AcrCatalogCard> SortCards(IEnumerable<AcrCatalogCard> cards)
     {
         return cards

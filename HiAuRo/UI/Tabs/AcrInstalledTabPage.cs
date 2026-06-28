@@ -11,6 +11,7 @@ public sealed class AcrInstalledTabPage : TabPageBase
 {
     private string? _statusMessage;
     private Jobs _jobFilter = Jobs.None;
+    private string? _pendingUninstallInstallKey;
 
     public AcrInstalledTabPage() : base("ACR 列表", "acr_installed", IconHelper.Icons.Settings) { }
 
@@ -328,12 +329,18 @@ public sealed class AcrInstalledTabPage : TabPageBase
             EndDisabledScope(card.UpdateStatus != AcrUpdateStatus.UpdateAvailable || !canInstall);
 
             ImGui.SameLine();
+            var uninstallDisabled = AcrCatalogBuilder.ShouldDisableUninstall(card.InstallKey, ACRLifecycle.CurrentInstallKey);
+            DrawDisabledScope(uninstallDisabled);
             if (ComponentLibrary.DangerButton($"卸载##{card.InstallKey}", new Vector2(78f, 0)))
             {
-                TryDeleteInstall(card.InstallDir);
-                ACRLifecycle.Reload();
-                _statusMessage = $"已卸载 {card.DisplayName}";
-                return;
+                _pendingUninstallInstallKey = card.InstallKey;
+            }
+            EndDisabledScope(uninstallDisabled);
+
+            if (uninstallDisabled)
+            {
+                ImGui.SameLine();
+                ImGui.TextColored(Theme.Colors.TextTertiary, "使用中");
             }
         }
 
@@ -345,6 +352,29 @@ public sealed class AcrInstalledTabPage : TabPageBase
                 TryActivateCurrentJob(card, (uint)groupJob);
             EndDisabledScope(!card.Installed);
         }
+
+        DrawUninstallConfirmation(card);
+    }
+
+    private void DrawUninstallConfirmation(AcrCatalogCard card)
+    {
+        if (!string.Equals(_pendingUninstallInstallKey, card.InstallKey, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        ImGui.Spacing();
+        ImGui.TextColored(Theme.Colors.AccentOrange, $"确认卸载 {card.DisplayName}？");
+        if (ComponentLibrary.DangerButton($"确认卸载##confirm_{card.InstallKey}", new Vector2(104f, 0)))
+        {
+            TryDeleteInstall(card.InstallDir);
+            ACRLifecycle.Reload();
+            _statusMessage = $"已卸载 {card.DisplayName}";
+            _pendingUninstallInstallKey = null;
+            return;
+        }
+
+        ImGui.SameLine();
+        if (ComponentLibrary.DefaultButton($"取消##cancel_{card.InstallKey}", new Vector2(78f, 0)))
+            _pendingUninstallInstallKey = null;
     }
 
     private void TryActivateCurrentJob(AcrCatalogCard card, uint currentJob)
