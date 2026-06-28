@@ -14,6 +14,15 @@ public static class AcrCatalogBuilder
         Jobs.None
     ];
 
+    private static readonly AcrCatalogJobRoleGroup[] JobRoleGroups =
+    [
+        new("防护", [Jobs.PLD, Jobs.WAR, Jobs.DRK, Jobs.GNB]),
+        new("治疗", [Jobs.WHM, Jobs.SCH, Jobs.AST, Jobs.SGE]),
+        new("近战", [Jobs.MNK, Jobs.DRG, Jobs.NIN, Jobs.SAM, Jobs.RPR, Jobs.VPR]),
+        new("远敏", [Jobs.BRD, Jobs.MCH, Jobs.DNC]),
+        new("法系", [Jobs.BLM, Jobs.SMN, Jobs.RDM, Jobs.PCT])
+    ];
+
     public static IReadOnlyList<AcrCatalogCard> BuildCards(
         IEnumerable<AcrSourceRecord> sources,
         IEnumerable<InstalledAcrRecord> installed)
@@ -98,6 +107,19 @@ public static class AcrCatalogBuilder
             .SelectMany(x => x.SupportedJobs)
             .Distinct()
             .OrderBy(GetJobOrder)
+            .ToList();
+    }
+
+    public static IReadOnlyList<AcrCatalogJobRoleGroup> BuildAvailableJobRoleGroups(IEnumerable<AcrCatalogCard> cards)
+    {
+        ArgumentNullException.ThrowIfNull(cards);
+
+        var available = GetAvailableJobs(cards).Where(x => x != Jobs.None).ToHashSet();
+        return JobRoleGroups
+            .Select(group => new AcrCatalogJobRoleGroup(
+                group.Label,
+                group.Jobs.Where(available.Contains).ToList()))
+            .Where(group => group.Jobs.Count > 0)
             .ToList();
     }
 
@@ -187,3 +209,5 @@ public sealed record AcrCatalogCard(
     AcrSourceRecord? Source);
 
 public sealed record AcrCatalogJobGroup(Jobs Job, IReadOnlyList<AcrCatalogCard> Cards);
+
+public sealed record AcrCatalogJobRoleGroup(string Label, IReadOnlyList<Jobs> Jobs);

@@ -84,11 +84,22 @@ public sealed class AcrInstalledTabPage : TabPageBase
     {
         DrawJobFilterButton(Jobs.None, "全部", cards.Count, selected: _jobFilter == Jobs.None);
 
-        foreach (var job in AcrCatalogBuilder.GetAvailableJobs(cards).Where(x => x != Jobs.None))
+        foreach (var roleGroup in AcrCatalogBuilder.BuildAvailableJobRoleGroups(cards))
         {
-            var count = cards.Count(x => x.SupportedJobs.Contains(job));
-            DrawJobFilterButton(job, job.ToString(), count, selected: _jobFilter == job);
+            DrawJobRoleHeader(roleGroup.Label);
+            foreach (var job in roleGroup.Jobs)
+            {
+                var count = cards.Count(x => x.SupportedJobs.Contains(job));
+                DrawJobFilterButton(job, job.ToString(), count, selected: _jobFilter == job);
+            }
         }
+    }
+
+    private static void DrawJobRoleHeader(string label)
+    {
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.TextColored(Theme.Colors.TextTertiary, label);
     }
 
     private void DrawJobFilterButton(Jobs job, string label, int count, bool selected)
@@ -182,11 +193,15 @@ public sealed class AcrInstalledTabPage : TabPageBase
 
     private void DrawAcrCard(AcrCatalogCard card, Jobs groupJob)
     {
-        ComponentLibrary.Card(() =>
+        ImGui.Separator();
+        ImGui.PushID($"acr_card_{card.InstallKey}");
+        ImGui.BeginGroup();
+        try
         {
             DrawCardHeader(card);
-            DrawSupportedJobs(card);
+            ImGui.Spacing();
 
+            DrawSupportedJobs(card);
             if (!string.IsNullOrWhiteSpace(card.Description))
             {
                 ImGui.TextWrapped(card.Description);
@@ -198,7 +213,14 @@ public sealed class AcrInstalledTabPage : TabPageBase
 
             DrawCardMeta(card);
             DrawCardActions(card, groupJob);
-        });
+        }
+        finally
+        {
+            ImGui.EndGroup();
+            ImGui.PopID();
+        }
+
+        ImGui.Spacing();
     }
 
     private void DrawCardHeader(AcrCatalogCard card)
