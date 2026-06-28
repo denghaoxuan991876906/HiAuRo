@@ -46,7 +46,8 @@ public static class ACRLifecycle
         string Version,
         string InstallDir,
         string SettingDir,
-        IRotationEntry Entry);
+        IRotationEntry Entry,
+        bool UseLegacySettings = false);
 
     /// <summary>外部 ACR: JobId → 多条注册项</summary>
     private static readonly Dictionary<uint, List<AcrRegistryEntry>> _acrRegistry = [];
@@ -324,7 +325,12 @@ public static class ACRLifecycle
                 var loadMethod = loadByInstallKey.MakeGenericMethod(tType);
                 try
                 {
-                    var acrSettings = loadMethod.Invoke(null, [registryEntry.InstallKey, CurrentJobId]);
+                    object? acrSettings = registryEntry.UseLegacySettings
+                        ? typeof(HiAuRo.Setting.SettingMgr)
+                            .GetMethod(nameof(HiAuRo.Setting.SettingMgr.GetAcrJobSetting))?
+                            .MakeGenericMethod(tType)
+                            .Invoke(null, [entry.AuthorName, CurrentJobId])
+                        : loadMethod.Invoke(null, [registryEntry.InstallKey, CurrentJobId]);
                     providerInterface.GetProperty("Settings")?.SetValue(entry, acrSettings);
                     if (acrSettings is AcrSettings acr)
                     {
@@ -356,7 +362,9 @@ public static class ACRLifecycle
         // 确保 UI 设置始终有 AcrSettings 实例
         if (loadedSettings == null)
         {
-            loadedSettings = HiAuRo.Setting.SettingMgr.GetAcrJobSettingByInstallKey<DefaultAcrSettings>(registryEntry.InstallKey, CurrentJobId);
+            loadedSettings = registryEntry.UseLegacySettings
+                ? HiAuRo.Setting.SettingMgr.GetAcrJobSetting<DefaultAcrSettings>(entry.AuthorName, CurrentJobId)
+                : HiAuRo.Setting.SettingMgr.GetAcrJobSettingByInstallKey<DefaultAcrSettings>(registryEntry.InstallKey, CurrentJobId);
             _defaultSettings = loadedSettings;
         }
         var currentSettings = loadedSettings ?? throw new InvalidOperationException("ACR settings should be available after load.");

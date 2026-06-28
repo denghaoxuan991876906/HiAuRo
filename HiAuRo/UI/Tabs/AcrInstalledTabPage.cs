@@ -122,17 +122,14 @@ public sealed class AcrInstalledTabPage : TabPageBase
             if (source == null)
                 return $"{item.InstallKey} 找不到对应作者源，无法检查更新。";
 
+            var acrRef = source.Acrs
+                .FirstOrDefault(x => string.Equals(x.AcrId, item.AcrId, StringComparison.OrdinalIgnoreCase));
+            if (acrRef == null)
+                return $"{item.InstallKey} 源列表里没有匹配的 AcrId。";
+
             using var httpClient = new HttpClient();
             var client = new AcrRepositoryClient(httpClient);
-            var publisher = client.GetPublisherIndexAsync(source.Url).GetAwaiter().GetResult();
-            if (publisher == null)
-                return $"{item.InstallKey} 拉取 publisher.json 失败。";
-
-            var acr = publisher.Acrs.FirstOrDefault(x => string.Equals(x.AcrId, item.AcrId, StringComparison.OrdinalIgnoreCase));
-            if (acr == null)
-                return $"{item.InstallKey} 不在作者源列表中。";
-
-            var manifest = client.GetManifestAsync(acr.ManifestUrl).GetAwaiter().GetResult();
+            var manifest = client.GetManifestAsync(acrRef.ManifestUrl).GetAwaiter().GetResult();
             if (manifest == null)
                 return $"{item.InstallKey} 拉取 manifest 失败。";
 

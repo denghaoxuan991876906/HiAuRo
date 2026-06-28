@@ -23,6 +23,12 @@ public static class ACRLoader
         var acrDir = Path.Combine(configDir, "ACR");
         if (!Directory.Exists(acrDir)) return;
 
+        LoadInstalledAcrs(acrDir);
+        LoadLegacyAuthorAcrs(acrDir);
+    }
+
+    private static void LoadInstalledAcrs(string acrDir)
+    {
         var installationStore = new AcrInstallationStore(acrDir);
         foreach (var installed in installationStore.LoadInstalled())
         {
@@ -67,7 +73,8 @@ public static class ACRLoader
                                     installed.Version,
                                     installDir,
                                     installed.SettingDir,
-                                    entry));
+                                    entry,
+                                    false));
                             }
 
                             DService.Instance().Log.Information($"[ACRLoader] {installKey}/{Path.GetFileName(dllPath)} → {type.Name} [{string.Join(",", entry.TargetJobs)}]");
@@ -84,6 +91,85 @@ public static class ACRLoader
             if (found)
             {
                 _authorContexts[installKey] = alc;
+                ACRLifecycle.RegisterContext(alc);
+            }
+            else
+            {
+                alc.Unload();
+            }
+        }
+    }
+
+    private static void LoadLegacyAuthorAcrs(string acrDir)
+    {
+        foreach (var authorDir in Directory.GetDirectories(acrDir))
+        {
+            var authorName = Path.GetFileName(authorDir);
+            if (string.IsNullOrWhiteSpace(authorName))
+                continue;
+
+            // 新安装模型目录：有同名 metadata json；这里跳过，避免重复加载
+            var installedMetadataPath = Path.Combine(authorDir, authorName + ".json");
+            if (File.Exists(installedMetadataPath))
+                continue;
+
+            var dllCandidates = Directory.GetFiles(authorDir, "*.dll")
+                .Where(path => !path.EndsWith(".deps.dll", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (dllCandidates.Length == 0)
+                continue;
+
+            var alc = new AssemblyLoadContext($"ACR_{authorName}", isCollectible: true);
+            alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name, authorDir);
+
+            var found = false;
+            foreach (var dllPath in dllCandidates)
+            {
+                try
+                {
+                    var dllBytes = File.ReadAllBytes(dllPath);
+                    using var ms = new MemoryStream(dllBytes, writable: false);
+                    var asm = alc.LoadFromStream(ms);
+                    _loadedAcrAssemblies.Add(asm);
+
+                    PreResolveReferences(alc, asm, authorDir);
+                    foreach (var type in asm.GetExportedTypes())
+                    {
+                        if (type is { IsAbstract: false, IsInterface: false } &&
+                            typeof(IRotationEntry).IsAssignableFrom(type) &&
+                            Activator.CreateInstance(type) is IRotationEntry entry)
+                        {
+                            var installKey = authorName;
+                            var settingDir = Setting.SettingMgr.GetAcrDir(authorName);
+
+                            foreach (var job in entry.TargetJobs)
+                            {
+                                ACRLifecycle.RegisterExternal((uint)job, new ACRLifecycle.AcrRegistryEntry(
+                                    installKey,
+                                    entry.AuthorName,
+                                    "",
+                                    "",
+                                    "",
+                                    authorDir,
+                                    settingDir,
+                                    entry,
+                                    true));
+                            }
+
+                            DService.Instance().Log.Information($"[ACRLoader] legacy {authorName}/{Path.GetFileName(dllPath)} → {type.Name} [{string.Join(",", entry.TargetJobs)}]");
+                            found = true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DService.Instance().Log.Error($"[ACRLoader] legacy 加载失败 {dllPath}: {ex.Message}");
+                }
+            }
+
+            if (found)
+            {
+                _authorContexts[$"legacy:{authorName}"] = alc;
                 ACRLifecycle.RegisterContext(alc);
             }
             else

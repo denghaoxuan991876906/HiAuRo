@@ -10,6 +10,7 @@ public sealed class AcrSourceRecord
     public string? ETag { get; set; }
     public string? LastModified { get; set; }
     public string? LastError { get; set; }
+    public List<PublisherAcrRefDto> Acrs { get; set; } = [];
 }
 
 public sealed class InstalledAcrRecord

@@ -149,6 +149,7 @@ public sealed class AcrSourcesTabPage : TabPageBase
             {
                 source.PublisherId = publisher.PublisherId;
                 source.PublisherName = publisher.PublisherName;
+                source.Acrs = publisher.Acrs;
                 source.LastSyncAt = DateTimeOffset.UtcNow;
                 source.LastError = null;
                 _publisherIndexes[source.Url] = publisher;
