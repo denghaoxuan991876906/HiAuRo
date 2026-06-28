@@ -37,6 +37,12 @@ public class MyAcr : IRotationEntry
 
 `<目录名>.json` 和 `<目录名>.dll` 需要与目录名一致。HiAuRo 也仍兼容旧的手动作者目录模式（例如 `ACR/<作者名>/<作者名>.dll`），但新的下载安装与示例工程默认都使用同名 `.json + .dll` 模式。
 
+作者源地址示例（可直接添加到 HiAuRo 源管理页）：
+
+```text
+https://raw.githubusercontent.com/denghaoxuan991876906/HiAuRo-SampleACR/master/publisher.json
+```
+
 ## 编译
 
 ```bash

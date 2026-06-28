@@ -35,6 +35,12 @@ ACR/<目录名>/
 
 框架会按同名规则自动发现并加载它。旧的手动作者目录模式仍兼容，但新的下载安装和示例工程都默认使用同名 `.json + .dll` 模式。
 
+如果作者使用 `HiAuRo-SampleACR` 模板仓库，默认可直接提供的作者源地址示例为：
+
+```text
+https://raw.githubusercontent.com/denghaoxuan991876906/HiAuRo-SampleACR/master/publisher.json
+```
+
 一个最小 ACR 只需做三件事：
 
 1. **实现 `IRotationEntry`** — 告诉框架"我是谁、我支持什么职业"
