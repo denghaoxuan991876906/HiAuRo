@@ -11,7 +11,7 @@ public sealed class AcrListTabPage : TabPageBase
     private readonly Action _saveConfig;
 
     public AcrListTabPage(PluginConfig config, Action saveConfig)
-        : base("ACR 列表", "acr_list", IconHelper.Icons.Settings)
+        : base("当前 ACR", "acr_list", IconHelper.Icons.Settings)
     {
         _config = config;
         _saveConfig = saveConfig;
