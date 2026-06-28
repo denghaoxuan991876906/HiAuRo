@@ -7,7 +7,7 @@ namespace HiAuRo.Setting;
 
 /// <summary>
 /// 全局 + 职业 + ACR 设置管理器
-/// 目录结构: {configDir}/setting/ACR/{author}/  → {author}-{jobName}.json, _global.json
+/// 目录结构: {configDir}/setting/ACR/{installKey}/  → {jobName}.json, _global.json
 /// </summary>
 public static class SettingMgr
 {
@@ -95,10 +95,10 @@ public static class SettingMgr
     {
         if (setting is AcrSettings)
         {
-            var author = HiAuRo.Runtime.ACRLifecycle.CurrentAuthor;
+            var installKey = HiAuRo.Runtime.ACRLifecycle.CurrentInstallKey;
             var jobId = HiAuRo.Runtime.ACRLifecycle.CurrentJobId;
-            if (!string.IsNullOrEmpty(author) && jobId != 0)
-                SaveAcrJobSetting(author, jobId, setting);
+            if (!string.IsNullOrEmpty(installKey) && jobId != 0)
+                SaveAcrJobSettingByInstallKey(installKey, jobId, setting);
             return;
         }
         Save(GetMainPath(), setting);
@@ -120,9 +120,13 @@ public static class SettingMgr
     public static string GetAcrRootDir() =>
         Path.Combine(ConfigDirectory, "setting", "ACR");
 
-    /// <summary>获取 ACR 作者配置目录: {configDir}/setting/ACR/{author}/</summary>
+    /// <summary>获取 ACR 作者配置目录: {configDir}/setting/ACR/{installKey}/</summary>
     public static string GetAcrDir(string author) =>
         Path.Combine(GetAcrRootDir(), author);
+
+    /// <summary>获取 ACR 安装键配置目录: {configDir}/setting/ACR/{installKey}/</summary>
+    public static string GetAcrDirByInstallKey(string installKey) =>
+        Path.Combine(GetAcrRootDir(), installKey);
 
     /// <summary>获取 ACR 职业设置路径: {configDir}/setting/ACR/{author}/{author}-{jobName}.json</summary>
     public static string GetAcrJobPath(string author, uint jobId) =>
@@ -131,6 +135,14 @@ public static class SettingMgr
     /// <summary>获取 ACR 全局设置路径: {configDir}/setting/ACR/{author}/_global.json</summary>
     public static string GetAcrGlobalPath(string author) =>
         Path.Combine(GetAcrDir(author), "_global.json");
+
+    /// <summary>获取 ACR 职业设置路径: {configDir}/setting/ACR/{installKey}/{jobName}.json</summary>
+    public static string GetAcrJobPathByInstallKey(string installKey, uint jobId) =>
+        Path.Combine(GetAcrDirByInstallKey(installKey), $"{JobIdToName(jobId)}.json");
+
+    /// <summary>获取 ACR 全局设置路径: {configDir}/setting/ACR/{installKey}/_global.json</summary>
+    public static string GetAcrGlobalPathByInstallKey(string installKey) =>
+        Path.Combine(GetAcrDirByInstallKey(installKey), "_global.json");
 
     /// <summary>读取 ACR 职业设置</summary>
     public static T GetAcrJobSetting<T>(string author, uint jobId) where T : class, new()
@@ -146,6 +158,20 @@ public static class SettingMgr
         Save(path, setting);
     }
 
+    /// <summary>读取 ACR 职业设置（按安装键）</summary>
+    public static T GetAcrJobSettingByInstallKey<T>(string installKey, uint jobId) where T : class, new()
+    {
+        var path = GetAcrJobPathByInstallKey(installKey, jobId);
+        return Load<T>(path) ?? new T();
+    }
+
+    /// <summary>保存 ACR 职业设置（按安装键）</summary>
+    public static void SaveAcrJobSettingByInstallKey<T>(string installKey, uint jobId, T setting) where T : class
+    {
+        var path = GetAcrJobPathByInstallKey(installKey, jobId);
+        Save(path, setting);
+    }
+
     /// <summary>读取 ACR 全局设置（跨职业共享）</summary>
     public static T GetAcrGlobalSetting<T>(string author) where T : class, new()
     {
@@ -157,6 +183,20 @@ public static class SettingMgr
     public static void SaveAcrGlobalSetting<T>(string author, T setting) where T : class
     {
         var path = GetAcrGlobalPath(author);
+        Save(path, setting);
+    }
+
+    /// <summary>读取 ACR 全局设置（按安装键）</summary>
+    public static T GetAcrGlobalSettingByInstallKey<T>(string installKey) where T : class, new()
+    {
+        var path = GetAcrGlobalPathByInstallKey(installKey);
+        return Load<T>(path) ?? new T();
+    }
+
+    /// <summary>保存 ACR 全局设置（按安装键）</summary>
+    public static void SaveAcrGlobalSettingByInstallKey<T>(string installKey, T setting) where T : class
+    {
+        var path = GetAcrGlobalPathByInstallKey(installKey);
         Save(path, setting);
     }
 

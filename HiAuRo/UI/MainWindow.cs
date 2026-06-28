@@ -40,6 +40,8 @@ public sealed class MainWindow : Window
             new CombatSettingsTabPage(_config, _saveConfig),
             new CommandHelpTabPage(),
             new DebugTabPage(),
+            new AcrInstalledTabPage(),
+            new AcrSourcesTabPage(),
             new AcrListTabPage(_config, _saveConfig),
             new AcrDebugTabPage(),
             new TimelineTabPage(_config, _saveConfig),

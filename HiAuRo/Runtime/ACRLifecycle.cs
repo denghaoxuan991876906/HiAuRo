@@ -4,7 +4,6 @@ using HiAuRo.ACR;
 using HiAuRo.ACR.Internal;
 using HiAuRo.Infrastructure;
 using HiAuRo.ImGuiLib;
-
 namespace HiAuRo.Runtime;
 
 /// <summary>
@@ -16,10 +15,16 @@ public static class ACRLifecycle
     public static AIRunner Runner { get; } = new();
     /// <summary>当前 ACR 入口</summary>
     public static IRotationEntry? CurrentEntry { get; private set; }
+    /// <summary>当前 ACR 注册项</summary>
+    public static AcrRegistryEntry? CurrentRegistryEntry { get; private set; }
     /// <summary>当前 ACR 名称</summary>
-    public static string CurrentAcrName => CurrentEntry?.AuthorName ?? "无ACR";
+    public static string CurrentAcrName => CurrentRegistryEntry?.DisplayName
+                                           ?? CurrentEntry?.AuthorName
+                                           ?? "无ACR";
     /// <summary>当前 ACR 作者</summary>
     public static string CurrentAuthor => CurrentEntry?.AuthorName ?? "";
+    /// <summary>当前安装键</summary>
+    public static string CurrentInstallKey => CurrentRegistryEntry?.InstallKey ?? "";
     /// <summary>当前职业 ID</summary>
     public static uint CurrentJobId { get; private set; }
     /// <summary>ISettingsProvider 缓存（供显式 save 遍历）</summary>
@@ -33,7 +38,15 @@ public static class ACRLifecycle
     public static bool IsLoadingRotation { get; private set; }
 
     /// <summary>ACR 注册项</summary>
-    public record AcrRegistryEntry(IRotationEntry Entry, string SettingDir);
+    public record AcrRegistryEntry(
+        string InstallKey,
+        string DisplayName,
+        string PublisherId,
+        string AcrId,
+        string Version,
+        string InstallDir,
+        string SettingDir,
+        IRotationEntry Entry);
 
     /// <summary>外部 ACR: JobId → 多条注册项</summary>
     private static readonly Dictionary<uint, List<AcrRegistryEntry>> _acrRegistry = [];
@@ -47,14 +60,14 @@ public static class ACRLifecycle
     private static uint _lastJob;
 
     /// <summary>注册外部 ACR</summary>
-    public static void RegisterExternal(uint jobId, IRotationEntry entry, string settingDir)
+    public static void RegisterExternal(uint jobId, AcrRegistryEntry registryEntry)
     {
         if (!_acrRegistry.TryGetValue(jobId, out var list))
         {
             list = [];
             _acrRegistry[jobId] = list;
         }
-        list.Add(new AcrRegistryEntry(entry, settingDir));
+        list.Add(registryEntry);
         if (!_activeAcrIndices.ContainsKey(jobId))
             _activeAcrIndices[jobId] = 0;
     }
@@ -87,9 +100,10 @@ public static class ACRLifecycle
 
         if (HiAuRo.Data.IsReady && Data.Me.ClassJob == jobId && jobId != 0)
         {
-            var entry = list[newIndex].Entry;
+            var reg = list[newIndex];
+            var entry = reg.Entry;
             if (entry == null) return;
-            LoadRotation(entry, list[newIndex].SettingDir);
+            LoadRotation(reg);
         }
     }
 
@@ -179,7 +193,7 @@ public static class ACRLifecycle
             if (reg.Entry != null)
             {
                 DService.Instance().Log.Information($"[ACR] 找到匹配ACR: idx={idx} {reg.SettingDir}");
-                LoadRotation(reg.Entry, reg.SettingDir);
+                LoadRotation(reg);
             }
         }
         else
@@ -270,12 +284,15 @@ public static class ACRLifecycle
         CheckJobSwitch();
     }
 
-    private static void LoadRotation(IRotationEntry entry, string settingFolder)
+    private static void LoadRotation(AcrRegistryEntry registryEntry)
     {
         IsLoadingRotation = true;
         try
         {
             UnloadRotation();
+
+            var entry = registryEntry.Entry;
+            var settingFolder = registryEntry.SettingDir;
 
         // 切换 ACR 时重置 GCD 能力技计数和上限
         Data.Combat.AbilityCountInGcd = 0;
@@ -295,18 +312,19 @@ public static class ACRLifecycle
         if (providerInterface != null)
         {
             var tType = providerInterface.GetGenericArguments()[0];
-            var loadMethod = typeof(HiAuRo.Setting.SettingMgr).GetMethod(nameof(HiAuRo.Setting.SettingMgr.GetAcrJobSetting));
-            if (loadMethod == null)
+            var loadByInstallKey = typeof(HiAuRo.Setting.SettingMgr)
+                .GetMethod(nameof(HiAuRo.Setting.SettingMgr.GetAcrJobSettingByInstallKey));
+            if (loadByInstallKey == null)
             {
-                DService.Instance().Log.Error($"[ACR] GetAcrJobSetting 方法未找到");
+                DService.Instance().Log.Error("[ACR] GetAcrJobSettingByInstallKey 方法未找到");
                 // skip injection — fall through
             }
             else
             {
-                loadMethod = loadMethod.MakeGenericMethod(tType);
+                var loadMethod = loadByInstallKey.MakeGenericMethod(tType);
                 try
                 {
-                    var acrSettings = loadMethod.Invoke(null, [entry.AuthorName, CurrentJobId]);
+                    var acrSettings = loadMethod.Invoke(null, [registryEntry.InstallKey, CurrentJobId]);
                     providerInterface.GetProperty("Settings")?.SetValue(entry, acrSettings);
                     if (acrSettings is AcrSettings acr)
                     {
@@ -314,9 +332,9 @@ public static class ACRLifecycle
                     }
                     lock (_settingsLock)
                     {
-                        _settingsProviders[GetProviderKey(entry.AuthorName, CurrentJobId)] = (entry, tType);
+                        _settingsProviders[GetProviderKey(registryEntry.InstallKey, CurrentJobId)] = (entry, tType);
                     }
-                    DService.Instance().Log.Information($"[ACR] ISettingsProvider<{tType.Name}> 已注入: author={entry.AuthorName} jobId={CurrentJobId}");
+                    DService.Instance().Log.Information($"[ACR] ISettingsProvider<{tType.Name}> 已注入: installKey={registryEntry.InstallKey} jobId={CurrentJobId}");
                 }
                 catch (Exception ex)
                 {
@@ -328,6 +346,7 @@ public static class ACRLifecycle
         DService.Instance().Log.Information($"[ACR] LoadRotation 开始: author={entry.AuthorName}, jobId={CurrentJobId}, settingFolder={settingFolder}");
         Runner.Load(entry, settingFolder);
         CurrentEntry = entry;
+        CurrentRegistryEntry = registryEntry;
         DService.Instance().Log.Information($"[ACR] Runner.Load 完成, CurrentRotation={Runner.CurrentRotation != null}");
 
         // 注册 ACR 自定义触发类型
@@ -337,7 +356,7 @@ public static class ACRLifecycle
         // 确保 UI 设置始终有 AcrSettings 实例
         if (loadedSettings == null)
         {
-            loadedSettings = HiAuRo.Setting.SettingMgr.GetAcrJobSetting<DefaultAcrSettings>(entry.AuthorName, CurrentJobId);
+            loadedSettings = HiAuRo.Setting.SettingMgr.GetAcrJobSettingByInstallKey<DefaultAcrSettings>(registryEntry.InstallKey, CurrentJobId);
             _defaultSettings = loadedSettings;
         }
         var currentSettings = loadedSettings ?? throw new InvalidOperationException("ACR settings should be available after load.");
@@ -542,6 +561,7 @@ public static class ACRLifecycle
 
         Runner.Unload();
         CurrentEntry = null;
+        CurrentRegistryEntry = null;
         CurrentJobId = 0;
         ACR.HotkeyHelper.Clear();
         ACR.QTHelper.Clear();
@@ -623,7 +643,7 @@ public static class ACRLifecycle
             settings.Save();
     }
 
-    private static string GetProviderKey(string author, uint jobId) => $"{author}_{jobId}";
+    private static string GetProviderKey(string installKey, uint jobId) => $"{installKey}_{jobId}";
 
     /// <summary>从 UI 控件定义的 Meta 中提取 defaultVisible（未找到则默认 true）</summary>
     private static bool GetControlDefaultVisible(string id, List<HiAuRo.UI.UiControlDef>? controls)

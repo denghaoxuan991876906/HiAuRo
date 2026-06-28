@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using HiAuRo.ACR;
+using HiAuRo.Runtime.AcrDistribution;
 
 namespace HiAuRo.Runtime;
 
@@ -22,54 +23,67 @@ public static class ACRLoader
         var acrDir = Path.Combine(configDir, "ACR");
         if (!Directory.Exists(acrDir)) return;
 
-        foreach (var authorDir in Directory.GetDirectories(acrDir))
+        var installationStore = new AcrInstallationStore(acrDir);
+        foreach (var installed in installationStore.LoadInstalled())
         {
-            var authorName = Path.GetFileName(authorDir);
-            if (authorName == null) continue;
+            var installKey = installed.InstallKey;
+            var installDir = installed.InstallDir;
+            if (string.IsNullOrWhiteSpace(installKey) || string.IsNullOrWhiteSpace(installDir))
+                continue;
 
-            var alc = new AssemblyLoadContext($"ACR_{authorName}", isCollectible: true);
-            alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name, authorDir);
+            var dllPath = Path.Combine(installDir, installed.EntryDll);
+            if (!File.Exists(dllPath))
+            {
+                DService.Instance().Log.Warning($"[ACRLoader] 跳过 {installKey}: 主 DLL 不存在 {dllPath}");
+                continue;
+            }
+
+            var alc = new AssemblyLoadContext($"ACR_{installKey}", isCollectible: true);
+            alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name, installDir);
 
             var found = false;
-            foreach (var dllPath in Directory.GetFiles(authorDir, "*.dll"))
+            try
             {
-                try
+                var dllBytes = File.ReadAllBytes(dllPath);
+                using var ms = new MemoryStream(dllBytes, writable: false);
+                var asm = alc.LoadFromStream(ms);
+                _loadedAcrAssemblies.Add(asm);
+
+                PreResolveReferences(alc, asm, installDir);
+                foreach (var type in asm.GetExportedTypes())
                 {
-                    var dllBytes = File.ReadAllBytes(dllPath);
-                    using var ms = new MemoryStream(dllBytes, writable: false);
-                    var asm = alc.LoadFromStream(ms);
-                    _loadedAcrAssemblies.Add(asm);
-
-                    // 立即预解析所有引用程序集，避免 JIT 惰性解析在战斗中触发
-                    PreResolveReferences(alc, asm, authorDir);
-                    foreach (var type in asm.GetExportedTypes())
+                    if (type is { IsAbstract: false, IsInterface: false } &&
+                        typeof(IRotationEntry).IsAssignableFrom(type))
                     {
-                        if (type is { IsAbstract: false, IsInterface: false } &&
-                            typeof(IRotationEntry).IsAssignableFrom(type))
+                        if (Activator.CreateInstance(type) is IRotationEntry entry)
                         {
-                            if (Activator.CreateInstance(type) is IRotationEntry entry)
+                            foreach (var job in entry.TargetJobs)
                             {
-                                var settingDir = Setting.SettingMgr.GetAcrDir(authorName);
-                                foreach (var job in entry.TargetJobs)
-                                {
-                                    ACRLifecycle.RegisterExternal((uint)job, entry, settingDir);
-                                }
-
-                                DService.Instance().Log.Information($"[ACRLoader] {authorName}/{Path.GetFileName(dllPath)} → {type.Name} [{string.Join(",", entry.TargetJobs)}]");
-                                found = true;
+                                ACRLifecycle.RegisterExternal((uint)job, new ACRLifecycle.AcrRegistryEntry(
+                                    installKey,
+                                    !string.IsNullOrWhiteSpace(installed.DisplayName) ? installed.DisplayName : entry.AuthorName,
+                                    installed.PublisherId,
+                                    installed.AcrId,
+                                    installed.Version,
+                                    installDir,
+                                    installed.SettingDir,
+                                    entry));
                             }
+
+                            DService.Instance().Log.Information($"[ACRLoader] {installKey}/{Path.GetFileName(dllPath)} → {type.Name} [{string.Join(",", entry.TargetJobs)}]");
+                            found = true;
                         }
                     }
                 }
-                catch (Exception ex)
-                {
-                    DService.Instance().Log.Error($"[ACRLoader] 加载失败 {dllPath}: {ex.Message}");
-                }
+            }
+            catch (Exception ex)
+            {
+                DService.Instance().Log.Error($"[ACRLoader] 加载失败 {dllPath}: {ex.Message}");
             }
 
             if (found)
             {
-                _authorContexts[authorName] = alc;
+                _authorContexts[installKey] = alc;
                 ACRLifecycle.RegisterContext(alc);
             }
             else
