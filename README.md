@@ -27,6 +27,16 @@ public class MyAcr : IRotationEntry
 }
 ```
 
+推荐部署结构：
+
+```text
+<HiAuRo配置目录>/ACR/<目录名>/
+  <目录名>.dll
+  <目录名>.json
+```
+
+`<目录名>.json` 和 `<目录名>.dll` 需要与目录名一致。HiAuRo 也仍兼容旧的手动作者目录模式（例如 `ACR/<作者名>/<作者名>.dll`），但新的下载安装与示例工程默认都使用同名 `.json + .dll` 模式。
+
 ## 编译
 
 ```bash

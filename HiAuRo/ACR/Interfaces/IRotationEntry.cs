@@ -15,7 +15,7 @@ public interface IRotationEntry
     /// <summary>false=HiAuRo IUiBuilder / true=ACR 自带 HTML</summary>
     bool UseCustomUi { get; }
 
-    /// <summary>settingFolder = ACR 配置目录 ({configDir}/ACR/{author}/)</summary>
+    /// <summary>settingFolder = ACR 配置目录。新推荐模式为 {configDir}/ACR/{installKey}/，旧作者目录模式仍兼容。</summary>
     Rotation? Build(string settingFolder);
 
     /// <summary>UseCustomUi=true 时返回 null</summary>

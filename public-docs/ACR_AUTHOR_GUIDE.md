@@ -25,7 +25,15 @@
 
 ### 你要写什么
 
-HiAuRo 的 ACR 是一个 **独立的 DLL 文件**，放在 `ACR/<作者名>/` 目录下。框架会自动发现并加载它。
+HiAuRo 的 ACR 是一个放在插件配置目录 `ACR/` 下的独立目录。**新推荐模式**是：
+
+```text
+ACR/<目录名>/
+  <目录名>.dll
+  <目录名>.json
+```
+
+框架会按同名规则自动发现并加载它。旧的手动作者目录模式仍兼容，但新的下载安装和示例工程都默认使用同名 `.json + .dll` 模式。
 
 一个最小 ACR 只需做三件事：
 
@@ -109,7 +117,15 @@ public class Bloodletter : ISlotResolver
 }
 ```
 
-编译成 `MyFirstACR.dll`，放到 `HiAuRo插件目录/ACR/你的名字/MyFirstACR.dll`，切到吟游诗人职业，框架会自动加载它。
+编译完成后，推荐放置为：
+
+```text
+HiAuRo插件配置目录/ACR/MyFirstACR/
+  MyFirstACR.dll
+  MyFirstACR.json
+```
+
+切到吟游诗人职业，框架会自动加载它。
 
 > **关键理解**：`Check()` 返回值本身不影响优先级——优先级由 `SlotResolvers` 列表的**排列顺序**决定。排前面的先 `Check`，先通过就先执行。
 
