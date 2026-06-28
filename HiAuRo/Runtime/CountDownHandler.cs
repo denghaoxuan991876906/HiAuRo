@@ -12,6 +12,7 @@ public sealed class CountDownHandler
     internal bool Start { get; private set; }
     internal bool CanDoAction { get; private set; }
     internal long CountDownStartTime { get; set; }
+    internal long LastPositiveRemaining { get; private set; }
 
     private CountDownHandler() { }
 
@@ -23,6 +24,46 @@ public sealed class CountDownHandler
     public void AddAction(int timeLeft, Func<Spell?> func)
     {
         _actions[timeLeft] = func;
+    }
+
+    internal static CountdownProgressOutcome EvaluateProgressForTests(
+        bool start,
+        bool canDoAction,
+        long remaining,
+        long lastPositiveRemaining,
+        bool inCombat,
+        int registeredActions,
+        int completedActions)
+        => EvaluateProgress(start, canDoAction, remaining, lastPositiveRemaining, inCombat, registeredActions, completedActions);
+
+    private static CountdownProgressOutcome EvaluateProgress(
+        bool start,
+        bool canDoAction,
+        long remaining,
+        long lastPositiveRemaining,
+        bool inCombat,
+        int registeredActions,
+        int completedActions)
+    {
+        if (!start)
+            return new CountdownProgressOutcome(start, canDoAction, CountdownStopReason.None);
+
+        if (remaining <= 0)
+        {
+            // 取消倒计时时不放开正常战斗流；仅当已经进战时才把 0 视为自然结束/抢开结束。
+            if (!inCombat && (lastPositiveRemaining <= 0 || lastPositiveRemaining > 100))
+                return new CountdownProgressOutcome(false, false, CountdownStopReason.Canceled);
+
+            return new CountdownProgressOutcome(false, true, CountdownStopReason.NaturalEnd);
+        }
+
+        if (remaining < 100)
+            return new CountdownProgressOutcome(false, true, CountdownStopReason.NaturalEnd);
+
+        if (registeredActions > 0 && registeredActions == completedActions && inCombat)
+            return new CountdownProgressOutcome(false, true, CountdownStopReason.EarlyPull);
+
+        return new CountdownProgressOutcome(start, canDoAction, CountdownStopReason.None);
     }
 
     internal async Task Update(BattleData battleData)
@@ -42,6 +83,8 @@ public sealed class CountDownHandler
         }
 
         long remaining = (long)(ReadCountdown() * 1000f);
+        if (remaining > 0)
+            LastPositiveRemaining = remaining;
 
         foreach (var kv in _actions)
         {
@@ -62,10 +105,27 @@ public sealed class CountDownHandler
             }
         }
 
-        if (Start && remaining < 100)
+        var outcome = EvaluateProgress(
+            Start,
+            CanDoAction,
+            remaining,
+            LastPositiveRemaining,
+            Data.Combat.InCombat,
+            _actions.Count,
+            _done.Count);
+        Start = outcome.Start;
+        CanDoAction = outcome.CanDoAction;
+
+        switch (outcome.StopReason)
         {
-            CanDoAction = true;
-            Start = false;
+            case CountdownStopReason.NaturalEnd:
+                break;
+            case CountdownStopReason.EarlyPull:
+                DService.Instance().Log.Information("[CountDown] 检测到抢开，倒计时动作已完成，提前放开正常战斗流");
+                break;
+            case CountdownStopReason.Canceled:
+                DService.Instance().Log.Information("[CountDown] 检测到倒计时取消，已停止倒计时流程");
+                break;
         }
     }
 
@@ -76,6 +136,7 @@ public sealed class CountDownHandler
         _done.Clear();
         _actions.Clear();
         CountDownStartTime = 0;
+        LastPositiveRemaining = 0;
         await Task.CompletedTask;
     }
 
@@ -84,6 +145,7 @@ public sealed class CountDownHandler
         Start = false;
         CanDoAction = false;
         _done.Clear();
+        LastPositiveRemaining = 0;
     }
 
     internal void ClearActions()
@@ -102,3 +164,16 @@ public sealed class CountDownHandler
         return countdown->TimeRemaining;
     }
 }
+
+internal enum CountdownStopReason
+{
+    None,
+    NaturalEnd,
+    EarlyPull,
+    Canceled
+}
+
+internal readonly record struct CountdownProgressOutcome(
+    bool Start,
+    bool CanDoAction,
+    CountdownStopReason StopReason);

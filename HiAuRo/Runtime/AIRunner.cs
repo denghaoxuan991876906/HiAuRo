@@ -111,10 +111,15 @@ public sealed partial class AIRunner
     {
         var remaining = CountDownHandler.ReadCountdown();
 
-        // 检测倒计时开始：从 0 → >0 的瞬间，执行一次 Init + 注册动作
+        // 在 countdown 0 -> >0 边沿启动一次 countdown 流程；
+        // 当前仍保留“每帧轮询 UI”这条入口，后续若需改成底层 hook 入口可从这里开始找。
         if (ShouldPublishCountdownStart(_lastCountRemaining, remaining))
         {
             _lastCountRemaining = remaining;
+            SpellQueue.Clear();
+            BattleData.Reset();
+            SpellActionTracker.Instance.Clear();
+            Coroutine.Instance.Clear();
             _ = CountDownHandler.Instance.Init();
             if (CurrentRotation?.Opener != null)
                 CurrentRotation.Opener.InitCountDown(CountDownHandler.Instance);
