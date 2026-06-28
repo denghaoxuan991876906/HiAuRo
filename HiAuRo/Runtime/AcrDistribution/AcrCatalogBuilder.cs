@@ -65,10 +65,9 @@ public static class AcrCatalogBuilder
             }
         }
 
-        return cards
-            .OrderByDescending(x => x.Installed)
-            .ThenByDescending(x => x.PublishedAt ?? DateTimeOffset.MinValue)
-            .ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
+        return SortCards(cards)
+            .GroupBy(x => x.InstallKey, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.First())
             .ToList();
     }
 
@@ -84,11 +83,7 @@ public static class AcrCatalogBuilder
             .GroupBy(x => x.job, x => x.card)
             .Select(group => new AcrCatalogJobGroup(
                 group.Key,
-                group
-                    .OrderByDescending(x => x.Installed)
-                    .ThenByDescending(x => x.PublishedAt ?? DateTimeOffset.MinValue)
-                    .ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
-                    .ToList()))
+                SortCards(group).ToList()))
             .OrderBy(x => GetJobOrder(x.Job))
             .ToList();
 
@@ -107,6 +102,14 @@ public static class AcrCatalogBuilder
     }
 
     public static string BuildInstallKey(string publisherId, string acrId) => $"{publisherId}.{acrId}";
+
+    private static IOrderedEnumerable<AcrCatalogCard> SortCards(IEnumerable<AcrCatalogCard> cards)
+    {
+        return cards
+            .OrderByDescending(x => x.Installed)
+            .ThenByDescending(x => x.PublishedAt ?? DateTimeOffset.MinValue)
+            .ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase);
+    }
 
     private static IReadOnlyList<Jobs> ResolveSupportedJobs(IEnumerable<string> targetTexts)
     {

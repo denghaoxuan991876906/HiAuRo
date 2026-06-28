@@ -11,7 +11,6 @@ public sealed class AcrInstalledTabPage : TabPageBase
 {
     private string? _statusMessage;
     private Jobs _jobFilter = Jobs.None;
-    private bool _hasUserSelectedJobFilter;
 
     public AcrInstalledTabPage() : base("ACR 列表", "acr_installed", IconHelper.Icons.Settings) { }
 
@@ -26,7 +25,6 @@ public sealed class AcrInstalledTabPage : TabPageBase
         var enabledSources = sources.Where(x => x.Enabled).ToList();
         var installed = new AcrInstallationStore(acrRoot).LoadInstalled();
         var cards = AcrCatalogBuilder.BuildCards(enabledSources, installed).ToList();
-        ApplyDefaultJobFilter(cards);
         var groups = AcrCatalogBuilder.BuildJobGroups(cards, _jobFilter).ToList();
 
         DrawToolbar(store, sources, cards);
@@ -109,16 +107,22 @@ public sealed class AcrInstalledTabPage : TabPageBase
         if (ImGui.Button($"##acr_job_{job}", size))
         {
             _jobFilter = job;
-            _hasUserSelectedJobFilter = true;
         }
 
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
         var dl = ImGui.GetWindowDrawList();
 
-        if (selected)
+        var isCurrentJob = job != Jobs.None && HiAuRo.Data.IsReady && Data.Me.ClassJob == (uint)job;
+        if (selected || isCurrentJob)
         {
-            dl.AddRect(min, max, ImGui.ColorConvertFloat4ToU32(Theme.Colors.SidebarActiveBorder), Theme.RadiusMD, 0, 1.2f);
+            dl.AddRect(
+                min,
+                max,
+                ImGui.ColorConvertFloat4ToU32(selected ? Theme.Colors.SidebarActiveBorder : Theme.Colors.AccentGreen),
+                Theme.RadiusMD,
+                0,
+                selected ? 1.2f : 1f);
         }
 
         if (job != Jobs.None)
@@ -134,7 +138,10 @@ public sealed class AcrInstalledTabPage : TabPageBase
         }
 
         dl.AddText(min + new Vector2(46f, 6f), ImGui.ColorConvertFloat4ToU32(Theme.Colors.TextPrimary), label);
-        dl.AddText(min + new Vector2(46f, 23f), ImGui.ColorConvertFloat4ToU32(Theme.Colors.TextTertiary), $"{count} 个");
+        dl.AddText(
+            min + new Vector2(46f, 23f),
+            ImGui.ColorConvertFloat4ToU32(isCurrentJob ? Theme.Colors.AccentGreen : Theme.Colors.TextTertiary),
+            isCurrentJob ? $"当前职业 · {count} 个" : $"{count} 个");
 
         ImGui.SetCursorScreenPos(new Vector2(min.X, max.Y + 4f));
     }
@@ -149,19 +156,6 @@ public sealed class AcrInstalledTabPage : TabPageBase
 
         foreach (var group in groups)
             DrawJobGroup(group);
-    }
-
-    private void ApplyDefaultJobFilter(IReadOnlyList<AcrCatalogCard> cards)
-    {
-        if (_hasUserSelectedJobFilter || !HiAuRo.Data.IsReady)
-            return;
-
-        var currentJob = (Jobs)Data.Me.ClassJob;
-        if (currentJob == Jobs.None)
-            return;
-
-        if (cards.Any(x => x.SupportedJobs.Contains(currentJob)))
-            _jobFilter = currentJob;
     }
 
     private void DrawJobGroup(AcrCatalogJobGroup group)
