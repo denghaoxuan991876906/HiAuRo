@@ -44,6 +44,9 @@ public sealed class PublisherAcrRefDto
     public string AcrId { get; set; } = "";
     public string Name { get; set; } = "";
     public string ManifestUrl { get; set; } = "";
+    public AcrManifestDto? CachedManifest { get; set; }
+    public DateTimeOffset? ManifestSyncedAt { get; set; }
+    public string? ManifestLastError { get; set; }
 }
 
 public sealed class AcrManifestDto

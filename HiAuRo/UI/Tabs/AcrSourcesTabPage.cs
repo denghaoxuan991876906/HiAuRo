@@ -1,5 +1,4 @@
 using HiAuRo.ImGuiLib;
-using HiAuRo.Runtime;
 using HiAuRo.Runtime.AcrDistribution;
 using System.Net.Http;
 
@@ -9,7 +8,6 @@ public sealed class AcrSourcesTabPage : TabPageBase
 {
     private string _newUrl = "";
     private string? _statusMessage;
-    private readonly Dictionary<string, PublisherIndexDto> _publisherIndexes = [];
     private readonly Dictionary<string, AcrManifestDto> _manifests = [];
 
     public AcrSourcesTabPage() : base("ACR 源管理", "acr_sources", IconHelper.Icons.Settings) { }
@@ -22,9 +20,6 @@ public sealed class AcrSourcesTabPage : TabPageBase
         var acrRoot = Path.Combine(Plugin.Instance.PluginInterface.ConfigDirectory.FullName, "ACR");
         var store = new AcrSourceStore(acrRoot);
         var sources = store.Load();
-        var installedByKey = new AcrInstallationStore(acrRoot)
-            .LoadInstalled()
-            .ToDictionary(x => x.InstallKey, StringComparer.OrdinalIgnoreCase);
 
         ImGui.InputText("Publisher URL", ref _newUrl, 512);
         if (ComponentLibrary.PrimaryButton("添加源") && !string.IsNullOrWhiteSpace(_newUrl))
@@ -34,7 +29,7 @@ public sealed class AcrSourcesTabPage : TabPageBase
                 Url = _newUrl.Trim(),
                 Enabled = true
             });
-            store.Save(sources);
+            RefreshSource(store, sources, sources.Count - 1);
             _newUrl = "";
             sources = store.Load();
         }
@@ -65,7 +60,7 @@ public sealed class AcrSourcesTabPage : TabPageBase
             ImGui.TextColored(Theme.Colors.TextTertiary, source.Url);
             ImGui.TextColored(
                 Theme.Colors.TextTertiary,
-                $"Enabled: {source.Enabled}  LastSync: {source.LastSyncAt?.ToString("u") ?? "never"}");
+                $"Enabled: {source.Enabled}  LastSync: {source.LastSyncAt?.ToString("u") ?? "never"}  Acrs: {source.Acrs.Count}");
 
             if (ImGui.SmallButton($"刷新##{i}"))
             {
@@ -90,36 +85,31 @@ public sealed class AcrSourcesTabPage : TabPageBase
             if (!string.IsNullOrWhiteSpace(source.LastError))
                 ImGui.TextWrapped($"LastError: {source.LastError}");
 
-            if (_publisherIndexes.TryGetValue(source.Url, out var publisher))
+            if (source.Acrs.Count > 0)
             {
-                foreach (var acr in publisher.Acrs)
+                foreach (var acr in source.Acrs)
                 {
-                    var installKey = BuildInstallKey(source.PublisherId, acr.AcrId);
-                    var installed = installedByKey.TryGetValue(installKey, out var installedRecord)
-                        ? installedRecord
-                        : null;
-
-                    ImGui.BulletText($"{acr.Name} ({acr.AcrId})");
-                    if (installed != null)
+                    ImGui.BulletText($"{acr.Name}");
+                    if (acr.CachedManifest is { } manifest ||
+                        _manifests.TryGetValue(GetManifestCacheKey(source.Url, acr.ManifestUrl), out manifest))
                     {
-                        ImGui.SameLine();
-                        ImGui.TextColored(Theme.Colors.TextTertiary, $"已安装 {installed.Version}");
-                    }
-                    ImGui.SameLine();
-                    if (ImGui.SmallButton($"读取清单##{source.Url}##{acr.AcrId}"))
-                        LoadManifest(source, acr);
-
-                    if (_manifests.TryGetValue(GetManifestCacheKey(source.Url, acr.ManifestUrl), out var manifest))
-                    {
-                        ImGui.SameLine();
-                        if (ImGui.SmallButton($"{(installed != null ? "重装" : "安装")}##{source.Url}##{acr.AcrId}"))
-                            InstallManifest(source, manifest);
-
                         ImGui.TextColored(
                             Theme.Colors.TextTertiary,
-                            $"Latest: {manifest.LatestVersion}  Entry: {manifest.EntryDll}");
+                            $"Latest: {manifest.LatestVersion}  AcrId: {acr.AcrId}");
+                        if (!string.IsNullOrWhiteSpace(manifest.Description))
+                            ImGui.TextWrapped(manifest.Description);
+                    }
+                    else
+                    {
+                        ImGui.TextColored(Theme.Colors.TextTertiary, $"AcrId: {acr.AcrId}");
+                        if (!string.IsNullOrWhiteSpace(acr.ManifestLastError))
+                            ImGui.TextColored(Theme.Colors.AccentRed, $"清单读取失败: {acr.ManifestLastError}");
                     }
                 }
+            }
+            else
+            {
+                ImGui.TextColored(Theme.Colors.TextTertiary, "该源还没有缓存 ACR 列表，请点击“刷新”。");
             }
 
             ImGui.Separator();
@@ -152,7 +142,7 @@ public sealed class AcrSourcesTabPage : TabPageBase
                 source.Acrs = publisher.Acrs;
                 source.LastSyncAt = DateTimeOffset.UtcNow;
                 source.LastError = null;
-                _publisherIndexes[source.Url] = publisher;
+                CacheManifestsForSource(source);
                 _statusMessage = $"已刷新 {publisher.PublisherName} ({publisher.Acrs.Count} 个 ACR)";
             }
         }
@@ -175,42 +165,28 @@ public sealed class AcrSourcesTabPage : TabPageBase
             if (manifest == null)
             {
                 _statusMessage = $"读取清单失败: {acr.ManifestUrl}";
+                acr.ManifestLastError = "HTTP 请求失败或返回空内容";
                 return;
             }
 
+            acr.CachedManifest = manifest;
+            acr.ManifestSyncedAt = DateTimeOffset.UtcNow;
+            acr.ManifestLastError = null;
             _manifests[GetManifestCacheKey(source.Url, acr.ManifestUrl)] = manifest;
             _statusMessage = $"已读取 {manifest.Name} {manifest.LatestVersion}";
         }
         catch (Exception ex)
         {
+            acr.ManifestLastError = ex.Message;
             _statusMessage = $"读取清单失败: {ex.Message}";
         }
     }
 
-    private void InstallManifest(AcrSourceRecord source, AcrManifestDto manifest)
+    private void CacheManifestsForSource(AcrSourceRecord source)
     {
-        try
-        {
-            var acrRoot = Path.Combine(Plugin.Instance.PluginInterface.ConfigDirectory.FullName, "ACR");
-            var installer = new AcrPackageInstaller(acrRoot);
-            installer.InstallFromManifestAsync(
-                    manifest,
-                    source.PublisherId,
-                    source.PublisherName,
-                    source.Url)
-                .GetAwaiter()
-                .GetResult();
-
-            ACRLifecycle.Reload();
-            _statusMessage = $"已安装 {manifest.Name} {manifest.LatestVersion}";
-        }
-        catch (Exception ex)
-        {
-            _statusMessage = $"安装失败: {ex.Message}";
-        }
+        foreach (var acr in source.Acrs)
+            LoadManifest(source, acr);
     }
 
     private static string GetManifestCacheKey(string sourceUrl, string manifestUrl) => $"{sourceUrl}|{manifestUrl}";
-
-    private static string BuildInstallKey(string publisherId, string acrId) => $"{publisherId}.{acrId}";
 }
