@@ -218,6 +218,19 @@ public sealed class AcrInstalledTabPage : TabPageBase
 
     private void DrawStatusTag(AcrCatalogCard card)
     {
+        ImGui.PushID($"acr_status_{card.InstallKey}");
+        try
+        {
+            DrawStatusTagContent(card);
+        }
+        finally
+        {
+            ImGui.PopID();
+        }
+    }
+
+    private static void DrawStatusTagContent(AcrCatalogCard card)
+    {
         if (!card.HasManifest)
         {
             ComponentLibrary.Tag("清单缺失", active: true, activeColor: Theme.Colors.AccentOrange);
