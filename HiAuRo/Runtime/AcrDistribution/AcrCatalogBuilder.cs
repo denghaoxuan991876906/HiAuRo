@@ -123,6 +123,13 @@ public static class AcrCatalogBuilder
             .ToList();
     }
 
+    public static IReadOnlyList<AcrCatalogJobRoleGroup> BuildAllJobRoleGroups()
+    {
+        return JobRoleGroups
+            .Select(group => new AcrCatalogJobRoleGroup(group.Label, group.Jobs.ToList()))
+            .ToList();
+    }
+
     public static string BuildInstallKey(string publisherId, string acrId) => $"{publisherId}.{acrId}";
 
     public static bool ShouldDisableUninstall(string installKey, string currentInstallKey)

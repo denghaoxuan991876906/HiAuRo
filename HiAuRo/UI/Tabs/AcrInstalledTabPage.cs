@@ -36,12 +36,6 @@ public sealed class AcrInstalledTabPage : TabPageBase
             ImGui.Spacing();
         }
 
-        if (cards.Count == 0)
-        {
-            DrawEmptyState(sources.Count, enabledSources.Count);
-            return;
-        }
-
         var avail = ImGui.GetContentRegionAvail();
         var selectorWidth = Math.Clamp(avail.X * 0.24f, 128f, 172f);
         var panelHeight = Math.Max(260f, avail.Y);
@@ -53,7 +47,10 @@ public sealed class AcrInstalledTabPage : TabPageBase
         ImGui.SameLine(0, 10f);
 
         ImGui.BeginChild("##acr_catalog_cards", new Vector2(-1, panelHeight), false);
-        DrawCatalog(groups);
+        if (cards.Count == 0)
+            DrawEmptyState(sources.Count, enabledSources.Count);
+        else
+            DrawCatalog(groups);
         ImGui.EndChild();
     }
 
@@ -85,7 +82,7 @@ public sealed class AcrInstalledTabPage : TabPageBase
     {
         DrawJobFilterButton(Jobs.None, "全部", cards.Count, selected: _jobFilter == Jobs.None);
 
-        foreach (var roleGroup in AcrCatalogBuilder.BuildAvailableJobRoleGroups(cards))
+        foreach (var roleGroup in AcrCatalogBuilder.BuildAllJobRoleGroups())
         {
             DrawJobRoleHeader(roleGroup.Label);
             foreach (var job in roleGroup.Jobs)
