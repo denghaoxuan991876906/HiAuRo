@@ -270,12 +270,49 @@ public static class TriggerCatalogBuilder
             TypeDiscriminator = typeDiscriminator,
             DisplayName = displayName,
             Description = description,
-            Category = category,
+            Category = ResolveTriggerCategory(type, category, displayName),
             CloudSync = cloudSync,
             Parameters = parameters,
             Controls = controls
         };
     }
+
+    private static string ResolveTriggerCategory(Type type, string category, string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+            return "未分类";
+        if (category.Contains('\\'))
+            return category;
+        if (!string.Equals(category, "builtin", StringComparison.OrdinalIgnoreCase))
+            return category;
+
+        var key = displayName + type.Name;
+        if (typeof(ITriggerCond).IsAssignableFrom(type))
+        {
+            if (ContainsAny(key, "变量")) return @"内置\变量";
+            if (ContainsAny(key, "倒计时", "经过时间", "上次技能", "总是真")) return @"内置\时间";
+            if (ContainsAny(key, "技能冷却", "技能后", "收到技能效果", "无目标技能效果", "敌人读条")) return @"内置\技能";
+            if (ContainsAny(key, "单位", "Actor", "目标", "角色类型", "职能")) return @"内置\单位与目标";
+            if (ContainsAny(key, "连线", "图标", "Omega")) return @"内置\机制";
+            if (ContainsAny(key, "地图", "天气", "日志")) return @"内置\环境";
+            return @"内置\条件";
+        }
+
+        if (typeof(ITriggerAction).IsAssignableFrom(type))
+        {
+            if (ContainsAny(key, "变量")) return @"内置\变量";
+            if (ContainsAny(key, "TP", "移动")) return @"内置\移动";
+            if (ContainsAny(key, "技能", "吃药", "Slot")) return @"内置\技能";
+            if (ContainsAny(key, "切换", "Rotation", "起手", "停手", "目标", "自动攻击")) return @"内置\战斗控制";
+            if (ContainsAny(key, "命令", "按键")) return @"内置\系统";
+            return @"内置\动作";
+        }
+
+        return @"内置\脚本";
+    }
+
+    private static bool ContainsAny(string value, params string[] needles)
+        => needles.Any(value.Contains);
 
     /// <summary>
     /// 从类名派生显示名称
