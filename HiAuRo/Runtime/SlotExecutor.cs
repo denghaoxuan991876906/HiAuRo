@@ -429,7 +429,7 @@ public sealed class SlotExecutor
         if (slot.AbilityThrottleReserved)
             return true;
 
-        if (!AbilityThrottle.TryReserveNow(Environment.TickCount64))
+        if (!AbilityThrottle.TryReserveNow(Environment.TickCount64, slot.Actions[0].Spell.Id))
             return false;
 
         slot.AbilityThrottleReserved = true;

@@ -7,40 +7,67 @@ namespace HiAuRo.Runtime;
 /// </summary>
 internal static class AbilityThrottle
 {
-    private static long _reservedUntil;
+    private sealed record Reservation(uint ActionId, long Until);
+
+    private static Reservation? _reservation;
 
     internal static bool CanStartNow(long now)
     {
-        var lastSuccess = Data.Combat.LastAbilityUseTime;
-        var interval = PluginConfig.Instance.AbilityIntervalMs;
-        return now >= _reservedUntil && (lastSuccess == 0 || now - lastSuccess >= interval);
+        return GetActiveReservation(now) == null;
     }
 
-    internal static bool TryReserveNow(long now)
+    internal static bool TryReserveNow(long now, uint actionId)
     {
-        if (!CanStartNow(now)) return false;
+        var reservation = new Reservation(actionId, now + PluginConfig.Instance.AbilityIntervalMs);
+        while (true)
+        {
+            var current = Volatile.Read(ref _reservation);
+            if (current is { } && now < current.Until) return false;
 
-        _reservedUntil = now + PluginConfig.Instance.AbilityIntervalMs;
-        return true;
+            if (Interlocked.CompareExchange(ref _reservation, reservation, current) == current)
+                return true;
+        }
     }
 
     internal static long GetRemainingMs(long now)
     {
-        var interval = PluginConfig.Instance.AbilityIntervalMs;
-        var lastSuccess = Data.Combat.LastAbilityUseTime;
-        long byReserve = Math.Max(0, _reservedUntil - now);
-        long bySuccess = lastSuccess == 0 ? 0 : Math.Max(0, lastSuccess + interval - now);
-        return Math.Max(byReserve, bySuccess);
+        return GetActiveReservation(now) is { } reservation ? reservation.Until - now : 0;
     }
 
     internal static void MarkSuccess(long now)
     {
         Data.Combat.LastAbilityUseTime = now;
-        _reservedUntil = Math.Max(_reservedUntil, now + PluginConfig.Instance.AbilityIntervalMs);
+    }
+
+    internal static bool CanReleaseForActionEffect(uint reservedActionId, uint effectActionId, int abilityIntervalMs)
+    {
+        return reservedActionId == effectActionId && abilityIntervalMs <= 500;
+    }
+
+    internal static void ConfirmActionEffect(uint actionId)
+    {
+        var reservation = Volatile.Read(ref _reservation);
+        if (reservation == null
+            || !CanReleaseForActionEffect(reservation.ActionId, actionId, PluginConfig.Instance.AbilityIntervalMs))
+            return;
+
+        Interlocked.CompareExchange(ref _reservation, null, reservation);
     }
 
     internal static void Reset()
     {
-        _reservedUntil = 0;
+        Interlocked.Exchange(ref _reservation, null);
+    }
+
+    private static Reservation? GetActiveReservation(long now)
+    {
+        while (true)
+        {
+            var reservation = Volatile.Read(ref _reservation);
+            if (reservation == null || now < reservation.Until) return reservation;
+
+            if (Interlocked.CompareExchange(ref _reservation, null, reservation) == reservation)
+                return null;
+        }
     }
 }

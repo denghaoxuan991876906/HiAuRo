@@ -778,7 +778,10 @@ public sealed class GameEventHook
                 var isSelf = sourceId == (Data.Me.Object?.EntityID ?? 0);
 
                 if (isSelf)
+                {
                     Runtime.SpellActionTracker.Instance.Notify(Runtime.SpellActionType.Effect, actionId);
+                    Runtime.AbilityThrottle.ConfirmActionEffect(actionId);
+                }
 
                 var entries = effectArray != nint.Zero ? (EffectEntry*)effectArray : null;
                 var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
