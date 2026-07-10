@@ -95,6 +95,7 @@ public sealed partial class AIRunner
         CurrentEntry?.Dispose();
 
         BattleData.Reset();
+        CountDownHandler.Instance.Reset();
         SpellQueue.Clear();
         Coroutine.Instance.Clear();
 
