@@ -38,42 +38,59 @@ public sealed class SlotExecutor
     {
         if (bd.NextSlot == null) return false;
         bd.NextSlot.InSequence = true;
+        bd.NextSlot.BypassesRotationPause = true;
         bd.SetCurrSlot(bd.NextSlot);
         bd.NextSlot = null;
         return true;
     }
 
-    public async Task<bool> HandleSlot(BattleData bd)
+    public async Task<bool> HandleSlot(BattleData bd, bool rotationPaused = false)
     {
-        if (bd.WaitGcdSlot != null)
+        var handledWaitGcdSlot = false;
+        if (bd.WaitGcdSlot is { } waitGcdSlot
+            && AIRunner.ShouldHandleCurrentSlotDuringRotationPause(rotationPaused, waitGcdSlot))
         {
             if (!GCDHelper.CanUseGCD()) return true;
 
-            if (bd.WaitGcdSlot.AppendedSequence != null)
+            if (waitGcdSlot.AppendedSequence != null)
             {
                 var wrapper = new SequenceWrapper
                 {
-                    Sequence = bd.WaitGcdSlot.AppendedSequence,
-                    CompeltedAction = bd.WaitGcdSlot.CompletedAction
+                    Sequence = waitGcdSlot.AppendedSequence,
+                    CompeltedAction = waitGcdSlot.CompletedAction
                 };
                 bd.PushSequence(wrapper);
             }
             else
             {
-                bd.WaitGcdSlot.CompletedAction?.Invoke();
+                waitGcdSlot.CompletedAction?.Invoke();
             }
             bd.WaitGcdSlot = null;
+            handledWaitGcdSlot = true;
         }
 
-        if (bd.CurrSlot == null && !bd.PopCurrSlot()) return false;
-
-        if (bd.CurrSlot != null)
+        if (bd.CurrSlot == null)
         {
-            if (await RunSlot(bd, bd.CurrSlot, true))
+            if (!bd.CurrSlotStack.TryPeek(out var stackedSlot)
+                || !AIRunner.ShouldHandleCurrentSlotDuringRotationPause(rotationPaused, stackedSlot))
+                return handledWaitGcdSlot;
+            bd.PopCurrSlot();
+        }
+
+        if (bd.CurrSlot is { } currentSlot)
+        {
+            if (!AIRunner.ShouldHandleCurrentSlotDuringRotationPause(rotationPaused, currentSlot))
+                return handledWaitGcdSlot;
+
+            if (await RunSlot(bd, currentSlot, true))
+            {
+                TryDequeueCompletedHighPrioritySlot(bd.HighPrioritySlots_GCD, currentSlot);
+                TryDequeueCompletedHighPrioritySlot(bd.HighPrioritySlots_OffGCD, currentSlot);
                 bd.SetCurrSlot(null);
+            }
             return true;
         }
-        return false;
+        return handledWaitGcdSlot;
     }
 
     public async Task<bool> HandleSlotSequence(BattleData bd)
@@ -148,6 +165,7 @@ public sealed class SlotExecutor
                     Hi.AcrRuntimeDebug($"[SlotExec] 丢弃高优 Slot: {slot.Source}");
                     return;
                 }
+                slot.BypassesRotationPause = true;
                 if (await RunSlot(bd, slot, false))
                     TryDequeueCompletedHighPrioritySlot(bd.HighPrioritySlots_GCD, slot);
                 return;
@@ -167,6 +185,7 @@ public sealed class SlotExecutor
                     Hi.AcrRuntimeDebug($"[SlotExec] 丢弃高优 Slot: {slot.Source}");
                     return;
                 }
+                slot.BypassesRotationPause = true;
                 if (await RunSlot(bd, slot, false))
                     TryDequeueCompletedHighPrioritySlot(bd.HighPrioritySlots_OffGCD, slot);
                 return;
@@ -222,6 +241,12 @@ public sealed class SlotExecutor
     {
         if (TryScheduleBeforeSpell(bd, slot)) return false;
 
+        if (slot.Actions.Count == 0)
+        {
+            CompleteSlot(bd, slot);
+            return true;
+        }
+
         if (slot.breakTime == 0L)
             slot.breakTime = Environment.TickCount64 + slot.MaxDuration;
 
@@ -274,22 +299,12 @@ public sealed class SlotExecutor
                 if (slot.Wait2NextGcd)
                 {
                     Hi.AcrRuntimeDebug($"[SlotExec] [{slot.Source}] 延后到下个GCD");
-                    bd.WaitGcdSlot = slot;
                 }
                 else if (slot.AppendedSequence != null)
                 {
-                    var wrapper = new SequenceWrapper
-                    {
-                        Sequence = slot.AppendedSequence,
-                        CompeltedAction = slot.CompletedAction
-                    };
                     Hi.AcrRuntimeDebug($"[SlotExec] [{slot.Source}] 追加序列");
-                    bd.PushSequence(wrapper);
                 }
-                else
-                {
-                    slot.CompletedAction?.Invoke();
-                }
+                CompleteSlot(bd, slot);
                 return true;
             }
         }
@@ -303,10 +318,34 @@ public sealed class SlotExecutor
         var beforeSlot = _runner.EventHandler?.BeforeSpell(slot);
         if (!ShouldScheduleBeforeSpell(beforeSlot, slot)) return false;
 
+        var scheduledSlot = beforeSlot!;
+        if (slot.BypassesRotationPause)
+            scheduledSlot.BypassesRotationPause = true;
         if (!ReferenceEquals(bd.CurrSlot, slot))
             bd.SetCurrSlot(slot);
-        bd.SetCurrSlot(beforeSlot);
+        bd.SetCurrSlot(scheduledSlot);
         return true;
+    }
+
+    internal static void CompleteSlot(BattleData bd, Slot slot)
+    {
+        if (slot.Wait2NextGcd)
+        {
+            bd.WaitGcdSlot = slot;
+            return;
+        }
+
+        if (slot.AppendedSequence != null)
+        {
+            bd.PushSequence(new SequenceWrapper
+            {
+                Sequence = slot.AppendedSequence,
+                CompeltedAction = slot.CompletedAction
+            });
+            return;
+        }
+
+        slot.CompletedAction?.Invoke();
     }
 
     private async Task<bool> ExecuteActionAsync(BattleData bd, SlotAction action, Slot slot)

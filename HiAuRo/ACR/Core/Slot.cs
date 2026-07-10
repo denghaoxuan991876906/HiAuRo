@@ -33,6 +33,8 @@ public sealed class Slot
 
     internal bool BeforeSpellHandled { get; private set; }
 
+    internal bool BypassesRotationPause { get; set; }
+
     internal bool TryMarkBeforeSpellHandled()
     {
         if (BeforeSpellHandled) return false;

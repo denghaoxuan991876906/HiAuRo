@@ -7,6 +7,7 @@ namespace HiAuRo.Runtime;
 public sealed partial class AIRunner
 {
     internal static bool IsRotationPauseRequested(Func<int>? check) => check != null && check() >= 1;
+    internal static bool ShouldHandleCurrentSlotDuringRotationPause(bool rotationPaused, Slot? slot) => !rotationPaused || slot?.BypassesRotationPause == true;
 
     internal async Task CalSlotAsync()
     {
@@ -81,6 +82,7 @@ public sealed partial class AIRunner
                 var sqSlot = SpellQueue.DequeueNext();
                 if (sqSlot == null) goto AfterSpellQueue;
                 sqSlot.Source = "SpellQueue";
+                sqSlot.BypassesRotationPause = true;
                 bd.SetCurrSlot(sqSlot);
                 if (await _slotExecutor.HandleSlot(bd)) { Debug.Phase = "SpellQueue"; return; }
             }
@@ -89,9 +91,17 @@ public sealed partial class AIRunner
     AfterSpellQueue:
         if (_slotExecutor.CheckNextSlot(bd)) { Debug.Phase = "NextSlot"; return; }
 
-        if (await _slotExecutor.HandleSlot(bd)) { Debug.Phase = "HandleSlot"; return; }
-
         var rotationPaused = IsRotationPauseRequested(CurrentRotation?.CanPauseACRCheck);
+        Slot? currentSlot = bd.CurrSlot;
+        if (currentSlot == null && bd.CurrSlotStack.TryPeek(out var stackedSlot))
+            currentSlot = stackedSlot;
+        if ((ShouldHandleCurrentSlotDuringRotationPause(rotationPaused, currentSlot)
+             || ShouldHandleCurrentSlotDuringRotationPause(rotationPaused, bd.WaitGcdSlot))
+            && await _slotExecutor.HandleSlot(bd, rotationPaused))
+        {
+            Debug.Phase = "HandleSlot";
+            return;
+        }
 
         if (!rotationPaused && !Data.Combat.InCombat && !CountDownHandler.Instance.Start && !CountDownHandler.Instance.CanDoAction
             && CurrentRotation?.EventHandler != null)

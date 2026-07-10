@@ -1260,7 +1260,7 @@ rot.AddCanPauseACRCheck(() =>
     DService.Instance().Chat.IsChatOpen ? 1 : -1);
 ```
 
-返回 `>=1` 时，跳过 `OnPreCombat`、Slot 序列和普通 Resolver；已入队的 SpellQueue 与高优先级 Slot 仍可执行。
+返回 `>=1` 时，跳过 `OnPreCombat`、Slot 序列和普通 Resolver；普通待处理 Slot 保留至恢复。已入队的 SpellQueue、NextSlot/强制 Slot 与高优先级 Slot 仍可执行。
 
 ### 8.6 CanUseHighPrioritySlotCheck — 拒绝高优先级技能
 
