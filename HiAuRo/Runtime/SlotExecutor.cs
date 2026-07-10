@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using HiAuRo.ACR;
 using static HiAuRo.Data;
 
@@ -24,6 +25,12 @@ public sealed class SlotExecutor
     }
 
     internal static bool ShouldDiscardHighPrioritySlot(Func<Slot?, int>? check, Slot slot) => check != null && check(slot) < 0;
+
+    internal static bool TryDequeueCompletedHighPrioritySlot(ConcurrentQueue<Slot> queue, Slot completedSlot)
+    {
+        if (!queue.TryPeek(out var head) || !ReferenceEquals(head, completedSlot)) return false;
+        return queue.TryDequeue(out _);
+    }
 
     public bool CheckNextSlot(BattleData bd)
     {
@@ -140,7 +147,7 @@ public sealed class SlotExecutor
                     return;
                 }
                 if (await RunSlot(bd, slot, false))
-                    bd.HighPrioritySlots_GCD.TryDequeue(out _);
+                    TryDequeueCompletedHighPrioritySlot(bd.HighPrioritySlots_GCD, slot);
                 return;
             }
         }
@@ -159,7 +166,7 @@ public sealed class SlotExecutor
                     return;
                 }
                 if (await RunSlot(bd, slot, false))
-                    bd.HighPrioritySlots_OffGCD.TryDequeue(out _);
+                    TryDequeueCompletedHighPrioritySlot(bd.HighPrioritySlots_OffGCD, slot);
                 return;
             }
         }
