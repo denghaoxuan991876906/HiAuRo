@@ -272,7 +272,7 @@ public class Rotation
     public Func<int>? CanPauseACRCheck;  // 暂停 ACR 的条件检查
 
     // === 扩展字段 ===
-    public Func<int>? CanUseHighPrioritySlotCheck; // 高优先级技能插入合法性检查
+    public Func<Slot?, int>? CanUseHighPrioritySlotCheck; // 高优先级技能插入合法性检查
 
     // === 链式调用方法 ===
     public Rotation AddOpener(IOpener opener);

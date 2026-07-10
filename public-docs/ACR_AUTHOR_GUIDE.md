@@ -271,7 +271,7 @@ public sealed class Rotation
 
     // 钩子
     Func<int>? CanPauseACRCheck;             // 返回 >=1 暂停 ACR
-    Func<int>? CanUseHighPrioritySlotCheck;  // 返回 <0 拒绝高优先技能插入
+    Func<Slot?, int>? CanUseHighPrioritySlotCheck;  // 返回 <0 拒绝高优先技能插入
 }
 ```
 
@@ -691,7 +691,7 @@ public class BRDEventHandler : IRotationEventHandler
         _dotTimer = (int)(dotLeft / 1000);
     }
 
-    // 游戏事件：捕获 Boss 读条，立即使用减伤
+    // 游戏事件：捕获 Boss 读条，提交高优先级减伤
     public void OnGameEvent(ITriggerCondParams eventParams)
     {
         if (eventParams is ActorCastParams cast && cast.ActionID == 12345)
@@ -793,10 +793,10 @@ TargetHelper.GetMostCanTargetObjects(id, min, r)  // 找最佳 AOE 目标
 
 ### 6.7 SlotHelper — 回调中手动释放技能
 
-在事件回调（`OnGameEvent` / `OnBattleUpdate` 等）中，可以直接向框架提交 Slot 执行：
+在事件回调（`OnGameEvent` / `OnBattleUpdate` 等）中，可以向高优先级队列提交 Slot，等待下一次符合条件的 `ResolveSlots` 处理：
 
 ```csharp
-// 立即执行（主线程同步）
+// 加入高优先级队列，在下一次符合条件的 ResolveSlots 处理中执行
 SlotHelper.Execute(new Slot(new Spell(7561, SpellTargetType.Self)));
 
 // 加入 SpellQueue 排队执行（下次队列处理时）
@@ -804,12 +804,12 @@ SlotHelper.Enqueue(new Slot(new Spell(7561, SpellTargetType.Self)));
 ```
 
 ```csharp
-// 使用示例：监听到 Boss 读条后立即使用减伤
+// 使用示例：监听到 Boss 读条后提交高优先级减伤
 public void OnGameEvent(ITriggerCondParams eventParams)
 {
     if (eventParams is ActorCastParams cast && cast.ActionID == 12345)
     {
-        // Boss 在读 AOE，立即放策动
+        // Boss 在读 AOE，提交高优先级策动
         var slot = new Slot();
         slot.Add(new Spell(7561, SpellTargetType.Self));
         SlotHelper.Execute(slot);

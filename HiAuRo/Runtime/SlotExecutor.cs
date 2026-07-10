@@ -164,13 +164,15 @@ public sealed class SlotExecutor
                 {
                     highPrioritySlots.TryDequeue(out _);
                     Hi.AcrRuntimeDebug($"[SlotExec] 丢弃高优 Slot: {slot.Source}");
+                }
+                else
+                {
+                    slot.BypassesRotationPause = true;
+                    slot.HighPriorityQueueOwner = highPrioritySlots;
+                    if (await RunSlot(bd, slot, false))
+                        TryDequeueCompletedHighPrioritySlot(highPrioritySlots, slot);
                     return;
                 }
-                slot.BypassesRotationPause = true;
-                slot.HighPriorityQueueOwner = highPrioritySlots;
-                if (await RunSlot(bd, slot, false))
-                    TryDequeueCompletedHighPrioritySlot(highPrioritySlots, slot);
-                return;
             }
         }
         else
@@ -186,13 +188,15 @@ public sealed class SlotExecutor
                 {
                     highPrioritySlots.TryDequeue(out _);
                     Hi.AcrRuntimeDebug($"[SlotExec] 丢弃高优 Slot: {slot.Source}");
+                }
+                else
+                {
+                    slot.BypassesRotationPause = true;
+                    slot.HighPriorityQueueOwner = highPrioritySlots;
+                    if (await RunSlot(bd, slot, false))
+                        TryDequeueCompletedHighPrioritySlot(highPrioritySlots, slot);
                     return;
                 }
-                slot.BypassesRotationPause = true;
-                slot.HighPriorityQueueOwner = highPrioritySlots;
-                if (await RunSlot(bd, slot, false))
-                    TryDequeueCompletedHighPrioritySlot(highPrioritySlots, slot);
-                return;
             }
         }
 
