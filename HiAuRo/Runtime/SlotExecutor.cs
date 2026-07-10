@@ -141,9 +141,11 @@ public sealed class SlotExecutor
         else
         {
             var slot = new Slot();
-            slist[bd.CurrSequenceIndex]?.Invoke(slot);
+            var sequenceIndex = bd.CurrSequenceIndex;
+            slist[sequenceIndex]?.Invoke(slot);
             slot.InSequence = true;
-            var stepName = slist[bd.CurrSequenceIndex]?.Method.Name ?? "?";
+            slot.Source = $"Sequence:{cseq.Sequence.GetType().Name}[{sequenceIndex}]";
+            var stepName = slist[sequenceIndex]?.Method.Name ?? "?";
             bd.CurrSequenceIndex++;
             bd.SetCurrSlot(slot);
             Hi.AcrRuntimeDebug($"[SlotExec] 序列步进: {cseq.Sequence.GetType().Name}[{bd.CurrSequenceIndex - 1}] → {string.Join(",", slot.Actions.Select(a => a.Spell.Name))}");
@@ -225,7 +227,10 @@ public sealed class SlotExecutor
     {
         if (resolver.Check() < 0) return false;
 
-        var slot = new Slot();
+        var slot = new Slot
+        {
+            Source = $"Resolver:{resolver.GetType().Name}"
+        };
         resolver.Build(slot);
 
         if (TryScheduleBeforeSpell(bd, slot)) return true;
@@ -370,11 +375,14 @@ public sealed class SlotExecutor
                 break;
             case WaitType.WaitForSndHalfWindow:
                 while (GCDHelper.GetGCDCooldown() >= 1000)
+                {
+                    if (slot.InSequence && SpellCast.IsExecutionDeadlineExpired(slot.breakTime, Environment.TickCount64)) return false;
                     await Coroutine.Instance.WaitAsync(1);
+                }
                 break;
         }
 
-        bool result = await SpellCast.ExecuteAsync(slot, spell, _runner);
+        bool result = await SpellCast.ExecuteAsync(slot, spell, _runner, slot.InSequence ? slot.breakTime : 0);
 
         if (result)
         {

@@ -11,7 +11,10 @@ public static class SpellCast
         return !isAbility && castTimeMs > 0;
     }
 
-    public static async Task<bool> ExecuteAsync(Slot slot, Spell spell, AIRunner runner)
+    internal static bool IsExecutionDeadlineExpired(long deadline, long now)
+        => deadline > 0 && now >= deadline;
+
+    public static async Task<bool> ExecuteAsync(Slot slot, Spell spell, AIRunner runner, long deadline = 0)
     {
         if (Data.Me.Object is { IsDead: true }) return false;
 
@@ -51,6 +54,7 @@ public static class SpellCast
 
         while (!GCDHelper.CanUseOffGcd())
         {
+            if (IsExecutionDeadlineExpired(deadline, Environment.TickCount64)) return false;
             if (tracker.HasFlag(spellId, SpellActionType.ActionRejected)
                 || tracker.HasFlag(spellId, SpellActionType.CancelCast))
                 return false;
@@ -146,7 +150,10 @@ public static class SpellCast
         tracker.Clear();
 
         while (!GCDHelper.CanUseOffGcd())
+        {
+            if (IsExecutionDeadlineExpired(deadline, Environment.TickCount64)) break;
             await Coroutine.Instance.WaitAsync(1);
+        }
 
         if (ShouldRaiseSpellCastSuccessCallback(isAbility, castTime))
             runner.EventHandler?.OnSpellCastSuccess(slot, spell);
