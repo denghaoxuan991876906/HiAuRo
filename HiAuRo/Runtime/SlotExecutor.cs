@@ -65,7 +65,7 @@ public sealed class SlotExecutor
             {
                 waitGcdSlot.CompletedAction?.Invoke();
             }
-            bd.WaitGcdSlot = null;
+            bd.PopWaitGcdSlot();
             handledWaitGcdSlot = true;
         }
 
@@ -323,7 +323,7 @@ public sealed class SlotExecutor
     {
         if (slot.Wait2NextGcd)
         {
-            bd.WaitGcdSlot = slot;
+            bd.PushWaitGcdSlot(slot);
             return;
         }
 

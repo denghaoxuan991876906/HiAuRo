@@ -15,6 +15,7 @@ public sealed class BattleData
     public Stack<SequenceWrapper> CurrSequenceStack { get; } = new();
     public Stack<int> CurrSequenceIndexStack { get; } = new();
     public Stack<Slot> CurrSlotStack { get; } = new();
+    public Stack<Slot> WaitGcdSlotStack { get; } = new();
     public int AbilityCount { get; set; }
     public int CurrGcdAbilityCount { get; set; } = 2;
     public bool UsedOpener { get; set; }
@@ -41,6 +42,18 @@ public sealed class BattleData
         if (CurrSlotStack.Count == 0) return false;
         CurrSlot = CurrSlotStack.Pop();
         return true;
+    }
+
+    public void PushWaitGcdSlot(Slot slot)
+    {
+        if (WaitGcdSlot != null && !ReferenceEquals(WaitGcdSlot, slot))
+            WaitGcdSlotStack.Push(WaitGcdSlot);
+        WaitGcdSlot = slot;
+    }
+
+    public void PopWaitGcdSlot()
+    {
+        WaitGcdSlot = WaitGcdSlotStack.Count > 0 ? WaitGcdSlotStack.Pop() : null;
     }
 
     public void PushSequence(SequenceWrapper wrapper)
@@ -82,6 +95,7 @@ public sealed class BattleData
         HighPrioritySlots_OffGCD = new();
         NextSlot = null;
         WaitGcdSlot = null;
+        WaitGcdSlotStack.Clear();
         CurrSlot = null;
         CurrSequenceIndex = 0;
         CurrSequenceStack.Clear();
