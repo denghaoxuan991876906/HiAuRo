@@ -5,8 +5,8 @@ namespace HiAuRo.Runtime;
 
 public sealed class BattleData
 {
-    public ConcurrentQueue<Slot> HighPrioritySlots_GCD { get; } = new();
-    public ConcurrentQueue<Slot> HighPrioritySlots_OffGCD { get; } = new();
+    public ConcurrentQueue<Slot> HighPrioritySlots_GCD { get; private set; } = new();
+    public ConcurrentQueue<Slot> HighPrioritySlots_OffGCD { get; private set; } = new();
     public Slot? NextSlot { get; set; }
     public Slot? WaitGcdSlot { get; set; }
     public Slot? CurrSlot { get; private set; }
@@ -78,8 +78,8 @@ public sealed class BattleData
     {
         SlotState = false;
         ClearSequence();
-        HighPrioritySlots_GCD.Clear();
-        HighPrioritySlots_OffGCD.Clear();
+        HighPrioritySlots_GCD = new();
+        HighPrioritySlots_OffGCD = new();
         NextSlot = null;
         WaitGcdSlot = null;
         CurrSlot = null;

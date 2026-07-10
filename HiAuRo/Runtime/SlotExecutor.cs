@@ -156,18 +156,19 @@ public sealed class SlotExecutor
         var rot = _runner.CurrentRotation;
         if (mode == 1)
         {
-            if (bd.HighPrioritySlots_GCD.TryPeek(out var slot))
+            var highPrioritySlots = bd.HighPrioritySlots_GCD;
+            if (highPrioritySlots.TryPeek(out var slot))
             {
                 slot.InSequence = true;
                 if (ShouldDiscardHighPrioritySlot(rot?.CanUseHighPrioritySlotCheck, slot))
                 {
-                    bd.HighPrioritySlots_GCD.TryDequeue(out _);
+                    highPrioritySlots.TryDequeue(out _);
                     Hi.AcrRuntimeDebug($"[SlotExec] 丢弃高优 Slot: {slot.Source}");
                     return;
                 }
                 slot.BypassesRotationPause = true;
                 if (await RunSlot(bd, slot, false))
-                    TryDequeueCompletedHighPrioritySlot(bd.HighPrioritySlots_GCD, slot);
+                    TryDequeueCompletedHighPrioritySlot(highPrioritySlots, slot);
                 return;
             }
         }
@@ -176,18 +177,19 @@ public sealed class SlotExecutor
             if (!AbilityThrottle.CanStartNow(Environment.TickCount64))
                 return;
 
-            if (bd.HighPrioritySlots_OffGCD.TryPeek(out var slot))
+            var highPrioritySlots = bd.HighPrioritySlots_OffGCD;
+            if (highPrioritySlots.TryPeek(out var slot))
             {
                 slot.InSequence = true;
                 if (ShouldDiscardHighPrioritySlot(rot?.CanUseHighPrioritySlotCheck, slot))
                 {
-                    bd.HighPrioritySlots_OffGCD.TryDequeue(out _);
+                    highPrioritySlots.TryDequeue(out _);
                     Hi.AcrRuntimeDebug($"[SlotExec] 丢弃高优 Slot: {slot.Source}");
                     return;
                 }
                 slot.BypassesRotationPause = true;
                 if (await RunSlot(bd, slot, false))
-                    TryDequeueCompletedHighPrioritySlot(bd.HighPrioritySlots_OffGCD, slot);
+                    TryDequeueCompletedHighPrioritySlot(highPrioritySlots, slot);
                 return;
             }
         }
