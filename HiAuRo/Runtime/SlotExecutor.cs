@@ -26,6 +26,8 @@ public sealed class SlotExecutor
 
     internal static bool ShouldDiscardHighPrioritySlot(Func<Slot?, int>? check, Slot slot) => check != null && check(slot) < 0;
 
+    internal static bool ShouldScheduleBeforeSpell(Slot? beforeSlot, Slot currentSlot) => beforeSlot != null && !ReferenceEquals(beforeSlot, currentSlot);
+
     internal static bool TryDequeueCompletedHighPrioritySlot(ConcurrentQueue<Slot> queue, Slot completedSlot)
     {
         if (!queue.TryPeek(out var head) || !ReferenceEquals(head, completedSlot)) return false;
@@ -199,14 +201,7 @@ public sealed class SlotExecutor
         var slot = new Slot();
         resolver.Build(slot);
 
-        if (slot.Actions.Count > 0
-            && slot.Actions[0].Spell.IsAbility()
-            && !slot.AbilityThrottleReserved)
-        {
-            if (!AbilityThrottle.TryReserveNow(Environment.TickCount64))
-                return false;
-            slot.AbilityThrottleReserved = true;
-        }
+        if (TryScheduleBeforeSpell(bd, slot)) return true;
 
         if (slot.Actions.Count > 0) return await RunSlot(bd, slot, false);
 
@@ -225,17 +220,7 @@ public sealed class SlotExecutor
 
     public async Task<bool> RunSlot(BattleData bd, Slot slot, bool isNextSlot = false)
     {
-        if (slot.TryMarkBeforeSpellHandled())
-        {
-            var beforeSlot = _runner.EventHandler?.BeforeSpell(slot);
-            if (beforeSlot != null && !ReferenceEquals(beforeSlot, slot))
-            {
-                if (!ReferenceEquals(bd.CurrSlot, slot))
-                    bd.SetCurrSlot(slot);
-                bd.SetCurrSlot(beforeSlot);
-                return false;
-            }
-        }
+        if (TryScheduleBeforeSpell(bd, slot)) return false;
 
         if (slot.breakTime == 0L)
             slot.breakTime = Environment.TickCount64 + slot.MaxDuration;
@@ -308,6 +293,19 @@ public sealed class SlotExecutor
                 return true;
             }
         }
+        return true;
+    }
+
+    private bool TryScheduleBeforeSpell(BattleData bd, Slot slot)
+    {
+        if (!slot.TryMarkBeforeSpellHandled()) return false;
+
+        var beforeSlot = _runner.EventHandler?.BeforeSpell(slot);
+        if (!ShouldScheduleBeforeSpell(beforeSlot, slot)) return false;
+
+        if (!ReferenceEquals(bd.CurrSlot, slot))
+            bd.SetCurrSlot(slot);
+        bd.SetCurrSlot(beforeSlot);
         return true;
     }
 

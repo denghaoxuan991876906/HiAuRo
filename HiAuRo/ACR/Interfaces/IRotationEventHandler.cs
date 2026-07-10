@@ -1,10 +1,10 @@
 namespace HiAuRo.ACR;
 
 /// <summary>
-/// 战斗事件回调处理接口 —— 10 个回调，全部必须显式实现
+/// 战斗事件回调处理接口 —— 11 个回调，除 OnBeforeSpellCast 外均必须显式实现
 /// OnEnterRotation/OnExitRotation 已在 IRotationEntry 上定义，此处不重复
 /// 由 AIRunner 在 Slot 执行过程中同步调用（主线程）
-/// 不需要的回调写空方法体
+/// OnBeforeSpellCast 提供默认空实现；其他不需要的回调写空方法体
 /// </summary>
 public interface IRotationEventHandler
 {
@@ -20,7 +20,7 @@ public interface IRotationEventHandler
     /// <summary>读条判定成功后（读条快结束、可滑步的时间点）</summary>
     void OnSpellCastSuccess(Slot slot, Spell spell);
 
-    /// <summary>Slot 开始执行前触发。返回非 null 时，返回的 Slot 插入到当前 Slot 前面先执行。</summary>
+    /// <summary>Slot 开始执行前触发。仅返回非 null 且不同于当前 Slot 时，才插入到当前 Slot 前面先执行。</summary>
     Slot? BeforeSpell(Slot slot);
 
     /// <summary>每个 Spell UseAction 之前触发。OnBeforeSpellCast(Slot, Spell) 通知回调。</summary>

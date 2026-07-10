@@ -580,7 +580,7 @@ public void OnBattleUpdate(int battleTimeMs)
 | `OnResetBattle()` | 脱战时 | 重置战斗计数器、清缓存 |
 | `OnNoTarget()` | 决策路径中当前目标为 null、非战斗对象或不可选中时触发一次 | 舞者转阶段提前跳舞等 |
 | `OnBattleUpdate(int ms)` | 战斗中每帧（**最常用**） | 更新 Dot 计时、Buff 追踪等 |
-| `BeforeSpell(Slot)` | Slot 开始时触发一次 | 返回非 null Slot 可插入到当前 Slot 前先执行 |
+| `BeforeSpell(Slot)` | Slot 开始时触发一次 | 仅返回非 null 且不同于当前 Slot 时插入前序；原 Slot 保留并在前序 Slot 完成后继续执行 |
 | `OnBeforeSpellCast(Slot, Spell)` | 每个 Action 执行前（有默认实现） | 最后的资源检查 |
 | `AfterSpell(Slot, Spell)` | 技能释放后 | 记录状态变更 |
 | `OnSpellCastSuccess(Slot, Spell)` | 读条技能成功判定时 | 滑步时间记录 |
