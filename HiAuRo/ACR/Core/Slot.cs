@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using HiAuRo.Runtime;
 
 namespace HiAuRo.ACR;
@@ -34,6 +35,8 @@ public sealed class Slot
     internal bool BeforeSpellHandled { get; private set; }
 
     internal bool BypassesRotationPause { get; set; }
+
+    internal ConcurrentQueue<Slot>? HighPriorityQueueOwner { get; set; }
 
     internal bool TryMarkBeforeSpellHandled()
     {

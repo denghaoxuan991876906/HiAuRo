@@ -84,8 +84,8 @@ public sealed class SlotExecutor
 
             if (await RunSlot(bd, currentSlot, true))
             {
-                TryDequeueCompletedHighPrioritySlot(bd.HighPrioritySlots_GCD, currentSlot);
-                TryDequeueCompletedHighPrioritySlot(bd.HighPrioritySlots_OffGCD, currentSlot);
+                if (currentSlot.HighPriorityQueueOwner is { } highPriorityQueueOwner)
+                    TryDequeueCompletedHighPrioritySlot(highPriorityQueueOwner, currentSlot);
                 bd.SetCurrSlot(null);
             }
             return true;
@@ -167,6 +167,7 @@ public sealed class SlotExecutor
                     return;
                 }
                 slot.BypassesRotationPause = true;
+                slot.HighPriorityQueueOwner = highPrioritySlots;
                 if (await RunSlot(bd, slot, false))
                     TryDequeueCompletedHighPrioritySlot(highPrioritySlots, slot);
                 return;
@@ -188,6 +189,7 @@ public sealed class SlotExecutor
                     return;
                 }
                 slot.BypassesRotationPause = true;
+                slot.HighPriorityQueueOwner = highPrioritySlots;
                 if (await RunSlot(bd, slot, false))
                     TryDequeueCompletedHighPrioritySlot(highPrioritySlots, slot);
                 return;
@@ -224,19 +226,7 @@ public sealed class SlotExecutor
 
         if (TryScheduleBeforeSpell(bd, slot)) return true;
 
-        if (slot.Actions.Count > 0) return await RunSlot(bd, slot, false);
-
-        if (slot.AppendedSequence != null)
-        {
-            var wrapper = new SequenceWrapper
-            {
-                Sequence = slot.AppendedSequence,
-                CompeltedAction = slot.CompletedAction
-            };
-            bd.PushSequence(wrapper);
-            return true;
-        }
-        return false;
+        return await RunSlot(bd, slot, false);
     }
 
     public async Task<bool> RunSlot(BattleData bd, Slot slot, bool isNextSlot = false)
