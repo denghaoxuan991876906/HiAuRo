@@ -23,7 +23,7 @@ public interface IRotationEventHandler
     /// <summary>Slot 开始执行前触发。返回非 null 时，返回的 Slot 插入到当前 Slot 前面先执行。</summary>
     Slot? BeforeSpell(Slot slot);
 
-    /// <summary>每个 Spell UseAction 之前触发。BeforeSpell(Slot, Spell) 通知回调。</summary>
+    /// <summary>每个 Spell UseAction 之前触发。OnBeforeSpellCast(Slot, Spell) 通知回调。</summary>
     void OnBeforeSpellCast(Slot slot, Spell spell) { }
 
     /// <summary>技能使用后（DoT刷新后记录是否强化等）</summary>

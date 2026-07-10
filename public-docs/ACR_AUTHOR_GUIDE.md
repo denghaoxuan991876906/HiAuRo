@@ -578,10 +578,10 @@ public void OnBattleUpdate(int battleTimeMs)
 | `OnTerritoryChanged()` | 切图 / 进副本 | 重置副本特定状态 |
 | `OnPreCombat()` | 每帧，未进战时 | 远敏唱歌、T 切姿态 |
 | `OnResetBattle()` | 脱战时 | 重置战斗计数器、清缓存 |
-| `OnNoTarget()` | 战斗中无目标且自动选目标失败 | 舞者转阶段提前跳舞等 |
+| `OnNoTarget()` | 决策路径中当前目标为 null、非战斗对象或不可选中时触发一次 | 舞者转阶段提前跳舞等 |
 | `OnBattleUpdate(int ms)` | 战斗中每帧（**最常用**） | 更新 Dot 计时、Buff 追踪等 |
-| `BeforeSpell(Slot)` | Slot 开始执行前 | 返回非 null Slot 可插入到当前 Slot 前先执行 |
-| `OnBeforeSpellCast(Slot, Spell)` | 每个 Spell UseAction 前（有默认实现） | BeforeSpell 通知 |
+| `BeforeSpell(Slot)` | Slot 开始时触发一次 | 返回非 null Slot 可插入到当前 Slot 前先执行 |
+| `OnBeforeSpellCast(Slot, Spell)` | 每个 Action 执行前（有默认实现） | 最后的资源检查 |
 | `AfterSpell(Slot, Spell)` | 技能释放后 | 记录状态变更 |
 | `OnSpellCastSuccess(Slot, Spell)` | 读条技能成功判定时 | 滑步时间记录 |
 | `OnGameEvent(ITriggerCondParams)` | 底层游戏事件发生时 | Boss 读条检测、Buff 变化追踪、连线检测等 |
@@ -1260,13 +1260,13 @@ rot.AddCanPauseACRCheck(() =>
     DService.Instance().Chat.IsChatOpen ? 1 : -1);
 ```
 
-返回 `>=1` 时，AILoop 正常循环暂停，但强制技能和 SpellQueue 仍会执行。
+返回 `>=1` 时，跳过 `OnPreCombat`、Slot 序列和普通 Resolver；已入队的 SpellQueue 与高优先级 Slot 仍可执行。
 
 ### 8.6 CanUseHighPrioritySlotCheck — 拒绝高优先级技能
 
 ```csharp
 // 某些情况下拒绝执行轴强制插入的技能
-rot.CanUseHighPrioritySlotCheck = () =>
+rot.CanUseHighPrioritySlotCheck = _ =>
     Data.Combat.IsCasting ? -1 : 0; // 读条时拒绝
 ```
 

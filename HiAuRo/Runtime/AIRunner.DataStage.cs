@@ -79,11 +79,6 @@ public sealed partial class AIRunner
 
         if (state != CombatContext.State.InCombat) return;
 
-        if (Data.Target.Current == null)
-        {
-            EventHandler?.OnNoTarget();
-        }
-
         // 事实轴观察层（Boss 时间表推进 + State 重建）属数据刷新，提到此处脱离 AiLoop/ConditionFlag 门控
         if (PluginConfig.Instance.FactAxis.Observe)
             FactTimeline.Instance.Update(BattleTimeMs);

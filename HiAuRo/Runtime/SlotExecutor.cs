@@ -132,7 +132,7 @@ public sealed class SlotExecutor
         return true;
     }
 
-    public async Task ResolveSlots(BattleData bd, int mode)
+    public async Task ResolveSlots(BattleData bd, int mode, bool skipRotationResolvers = false)
     {
         var rot = _runner.CurrentRotation;
         if (mode == 1)
@@ -172,7 +172,7 @@ public sealed class SlotExecutor
         }
 
         // 轴请求停手时：只放行轴强制的 HighPrioritySlot（上方已处理），跳过 rotation resolver
-        if (_runner.IsAxisPaused) return;
+        if (_runner.IsAxisPaused || skipRotationResolvers) return;
 
         if (rot?.SlotResolvers == null || rot.SlotResolvers.Count == 0)
             return;
@@ -225,6 +225,18 @@ public sealed class SlotExecutor
 
     public async Task<bool> RunSlot(BattleData bd, Slot slot, bool isNextSlot = false)
     {
+        if (slot.TryMarkBeforeSpellHandled())
+        {
+            var beforeSlot = _runner.EventHandler?.BeforeSpell(slot);
+            if (beforeSlot != null && !ReferenceEquals(beforeSlot, slot))
+            {
+                if (!ReferenceEquals(bd.CurrSlot, slot))
+                    bd.SetCurrSlot(slot);
+                bd.SetCurrSlot(beforeSlot);
+                return false;
+            }
+        }
+
         if (slot.breakTime == 0L)
             slot.breakTime = Environment.TickCount64 + slot.MaxDuration;
 

@@ -6,6 +6,8 @@ namespace HiAuRo.Runtime;
 
 public sealed partial class AIRunner
 {
+    internal static bool IsRotationPauseRequested(Func<int>? check) => check != null && check() >= 1;
+
     internal async Task CalSlotAsync()
     {
         var bd = BattleData;
@@ -89,7 +91,9 @@ public sealed partial class AIRunner
 
         if (await _slotExecutor.HandleSlot(bd)) { Debug.Phase = "HandleSlot"; return; }
 
-        if (!Data.Combat.InCombat && !CountDownHandler.Instance.Start && !CountDownHandler.Instance.CanDoAction
+        var rotationPaused = IsRotationPauseRequested(CurrentRotation?.CanPauseACRCheck);
+
+        if (!rotationPaused && !Data.Combat.InCombat && !CountDownHandler.Instance.Start && !CountDownHandler.Instance.CanDoAction
             && CurrentRotation?.EventHandler != null)
         {
             Debug.Phase = "OnPreCombat";
@@ -114,9 +118,7 @@ public sealed partial class AIRunner
             return;
         }
 
-        if (await _slotExecutor.HandleSlotSequence(bd)) { Debug.Phase = "SlotSeq"; return; }
-
-        if (CurrentRotation?.SlotResolvers is not { Count: > 0 }) { Debug.Phase = "NoResolver"; return; }
+        if (!rotationPaused && await _slotExecutor.HandleSlotSequence(bd)) { Debug.Phase = "SlotSeq"; return; }
 
         if (GCDHelper.CanUseGCD())
         {
@@ -127,12 +129,12 @@ public sealed partial class AIRunner
             }
 
             Debug.Phase = "GCD";
-            await _slotExecutor.ResolveSlots(bd, 1);
+            await _slotExecutor.ResolveSlots(bd, 1, rotationPaused);
         }
         else if (bd.AbilityCount < bd.CurrGcdAbilityCount)
         {
             Debug.Phase = "OGCD";
-            await _slotExecutor.ResolveSlots(bd, 2);
+            await _slotExecutor.ResolveSlots(bd, 2, rotationPaused);
         }
         else
             Debug.Phase = "Wait";
