@@ -69,6 +69,8 @@ public sealed partial class AIRunner
 
     private async Task 执行核心决策(BattleData bd)
     {
+        var rotationPaused = IsRotationPauseRequested(CurrentRotation?.CanPauseACRCheck);
+
         if (SpellQueue.HasPending())
         {
             var peekSlot = SpellQueue.PeekNext();
@@ -84,14 +86,13 @@ public sealed partial class AIRunner
                 sqSlot.Source = "SpellQueue";
                 sqSlot.BypassesRotationPause = true;
                 bd.SetCurrSlot(sqSlot);
-                if (await _slotExecutor.HandleSlot(bd)) { Debug.Phase = "SpellQueue"; return; }
+                if (await _slotExecutor.HandleSlot(bd, rotationPaused)) { Debug.Phase = "SpellQueue"; return; }
             }
         }
 
     AfterSpellQueue:
         if (_slotExecutor.CheckNextSlot(bd)) { Debug.Phase = "NextSlot"; return; }
 
-        var rotationPaused = IsRotationPauseRequested(CurrentRotation?.CanPauseACRCheck);
         Slot? currentSlot = bd.CurrSlot;
         if (currentSlot == null && bd.CurrSlotStack.TryPeek(out var stackedSlot))
             currentSlot = stackedSlot;
