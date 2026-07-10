@@ -15,7 +15,7 @@
 5. [事件回调](#5-事件回调)
 6. [工具类速查](#6-工具类速查)（含 6.7 SlotHelper + 6.8 MovementHelper + 6.11 HiAuRo.Helper）
 7. [UI 注册](#7-ui-注册)
-8. [高级特性](#8-高级特性)（含 8.8 身位指示器）
+8. [高级特性](#8-高级特性)（含 8.7 身位指示器）
 9. [实战技巧与常见错误](#9-实战技巧与常见错误)
 10. [附录：接口速查表](#10-附录接口速查表)
 
@@ -159,7 +159,6 @@ RuntimeCore.OnTick()
        └─ 进战斗？───→ AIRunner.Update()
                          │
                          ├─ 刷新 Data.Objects / Data.Party
-                         ├─ 无目标？→ TargetResolvers 自动选目标
                          ├─ OnBattleUpdate(battleTimeMs) 事件回调
                          │
                          ├─ 执行轴 / 事实轴 / 辅助轴（Phase 6+）
@@ -264,8 +263,7 @@ public sealed class Rotation
     List<ITriggerAction> TriggerActions;     // 全局触发器
     List<ITriggerCond> TriggerConditions;    // 全局触发条件
 
-    // 目标 & 热键
-    List<ITargetResolver> TargetResolvers;   // 自动目标选择
+    // 热键
     List<IHotkeyEventHandler> HotkeyEventHandlers; // 热键处理器
 
     // 元数据
@@ -284,8 +282,7 @@ public sealed class Rotation
 ```csharp
 var rot = new Rotation { ... }
     .AddOpener(myOpener)
-    .AddSlotSequences(myCombo, myBurst)
-    .AddTargetResolver(myTargetPicker);
+    .AddSlotSequences(myCombo, myBurst);
 ```
 
 ### 3.3 ISlotResolver — 核心决策单元
@@ -1235,32 +1232,7 @@ rot.AddTriggerAction(new UseFeint());
 
 触发器和 ACR 正常循环**并行运行**，互不阻塞。触发器在 `AIRunner.Update()` 中每次循环都检查。
 
-### 8.4 TargetResolver — 自动目标选择
-
-当玩家没有目标时，框架会调用 `TargetResolvers` 帮你自动选目标：
-
-```csharp
-public class NearestEnemyTarget : ITargetResolver
-{
-    public bool ResolveTarget(out IBattleChara agent)
-    {
-        agent = null!;
-        var nearest = Data.Objects.Enemies
-            .OfType<IBattleChara>()
-            .Where(e => e.IsTargetable && !e.IsDead)
-            .OrderBy(e => Me.DistanceToObject2D(e))
-            .FirstOrDefault();
-        if (nearest == null) return false;
-        agent = nearest;
-        return true;
-    }
-}
-
-// 挂载
-rot.AddTargetResolver(new NearestEnemyTarget());
-```
-
-### 8.5 HotkeyEventHandler — 自定义热键
+### 8.4 HotkeyEventHandler — 自定义热键
 
 ```csharp
 public class ManualBurst : IHotkeyEventHandler, IHotkeyResolver
@@ -1280,7 +1252,7 @@ public class ManualBurst : IHotkeyEventHandler, IHotkeyResolver
 }
 ```
 
-### 8.6 CanPauseACRCheck — 暂停 ACR
+### 8.5 CanPauseACRCheck — 暂停 ACR
 
 ```csharp
 // Chat 窗口打开时暂停 ACR
@@ -1290,7 +1262,7 @@ rot.AddCanPauseACRCheck(() =>
 
 返回 `>=1` 时，AILoop 正常循环暂停，但强制技能和 SpellQueue 仍会执行。
 
-### 8.7 CanUseHighPrioritySlotCheck — 拒绝高优先级技能
+### 8.6 CanUseHighPrioritySlotCheck — 拒绝高优先级技能
 
 ```csharp
 // 某些情况下拒绝执行轴强制插入的技能
@@ -1298,7 +1270,7 @@ rot.CanUseHighPrioritySlotCheck = () =>
     Data.Combat.IsCasting ? -1 : 0; // 读条时拒绝
 ```
 
-### 8.8 身位指示器 — 在目标脚下显示身位 VFX
+### 8.7 身位指示器 — 在目标脚下显示身位 VFX
 
 ACR 在每个 GCD 构建 Slot 时调用 `PositionalState.Push()`，系统自动在目标脚下显示身位扇形和攻击范围圈。
 
@@ -1485,7 +1457,6 @@ HiAuRo 内置调试面板（Web UI），会显示每个 Resolver：
 |------|---------|------|
 | `IOpener` | `Sequence`, `StartCheck()`, `StopCheck()`, `InitCountDown()` | 起手爆发序列 |
 | `ISlotSequence` | `Sequence`, `StartCheck()`, `StopCheck()` | 连招序列 |
-| `ITargetResolver` | `bool ResolveTarget(out IBattleChara)` | 自动目标选择 |
 | `ITriggerCond` | `bool Handle(params)` | 全局触发条件 |
 | `ITriggerAction` | `bool Handle()` | 全局触发动作 |
 | `IHotkeyEventHandler` | `HandleKeyPress()`, `OnHotkeyExecuted()` | 热键事件处理 |

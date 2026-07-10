@@ -170,7 +170,6 @@ HiAuRo.ACR/
 ├── ITriggerBase.cs              # 触发器基础接口
 ├── ITriggerCondParams.cs        # 触发条件参数接口
 ├── IRotationEventHandler.cs     # 战斗事件回调（OnBattleUpdate）
-├── ITargetResolver.cs           # 目标选择器接口（ResolveTarget）
 ├── IHotkeyEventHandler.cs       # ACR Rotation 热键事件处理器（Run(HotkeyConfig)）
 ├── HotkeyConfig.cs              # 热键配置数据结构
 ├── SpellsDefine.cs / AurasDefine.cs  # 技能/BUFF ID 常量（中文注释）
@@ -222,7 +221,6 @@ HiAuRo.Runtime/
 - MainControlHelper（暂停/保存）/ QTHelper / HotkeyHelper / HotkeyPoller / ItemHelper
 - KeyBindingParser / MathHelper / SpellExtension / Spell_Computed / SpellHistoryHelper
 - UiSettingsStore（UI 设置持久化）
-- TargetResolvers: 按DataId / 最低HP敌人 / 最佳AOE位置 / 最近敌人 / 读条敌人
 - HotkeyResolvers: 技能 / 吃药 / 极限技 / 疾跑 + NormalSpell / Potion / Sprint / LB
 - Extension: GameObjectExtension / LocalPlayerExtension / Relationship
 
@@ -268,7 +266,6 @@ public class Rotation
     public int MaxLevel;              // 最高等级（MVP 必需）
     public string Description;        // 描述文本（MVP 必需）
 
-    public List<ITargetResolver> TargetResolvers;       // 目标选择器（MVP 必需）
     public List<IHotkeyEventHandler> HotkeyEventHandlers; // 热键事件处理（MVP 必需）
 
     // === 可选字段 ===
@@ -282,7 +279,6 @@ public class Rotation
     public Rotation AddSlotSequences(params ISlotSequence[] seqs);
     public Rotation AddTriggerAction(ITriggerAction action);
     public Rotation AddTriggerCondition(ITriggerCond cond);
-    public Rotation AddTargetResolver(ITargetResolver resolver);
     public Rotation AddHotkeyEventHandlers(params IHotkeyEventHandler[] handlers);
     public Rotation AddCanPauseACRCheck(Func<int> check);
 }
@@ -322,11 +318,6 @@ public interface ISlotSequence
     List<Action<Slot>> Sequence { get; }
     int StartCheck();
     int StopCheck(int index);
-}
-
-public interface ITargetResolver
-{
-    bool ResolveTarget(out IBattleChara agent);  // 选择目标对象，返回 true 表示成功
 }
 
 public interface IHotkeyEventHandler
@@ -502,7 +493,6 @@ HiAuRo/
 │   ├── SpellType.cs                 # 技能类型枚举（GCD/oGCD）
 │   ├── IRotationUI.cs            # ACR 作者 UI 定义（RegisterControls → IUiBuilder）
 │   ├── IUiBuilder.cs              # 描述性 UI 控件注册
-│   ├── ITargetResolver.cs           # 目标选择器接口
 │   ├── IHotkeyEventHandler.cs       # ACR 热键事件处理接口
 │   ├── HotkeyConfig.cs              # 热键配置数据结构
 │   ├── IOpener.cs / OpenerMgr.cs    # 起手爆发
@@ -528,7 +518,6 @@ HiAuRo/
 │   ├── HotkeyHelper.cs              # 热键管理
 │   ├── HotkeyPoller.cs              # 热键轮询器
 │   ├── UiSettingsStore.cs           # UI 设置持久化
-│   ├── TargetResolvers/             # 目标选择器实现
 │   ├── HotkeyResolvers/             # 热键技能解析器
 │   ├── Extension/                   # 游戏对象扩展方法
 │   └── Data/                        # ACR 数据类型定义

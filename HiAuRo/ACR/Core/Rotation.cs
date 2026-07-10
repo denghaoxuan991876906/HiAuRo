@@ -19,7 +19,6 @@ public sealed class Rotation
     public int MaxLevel { get; set; }
     public string Description { get; set; } = string.Empty;
 
-    public List<ITargetResolver> TargetResolvers { get; set; } = [];
     public List<IHotkeyEventHandler> HotkeyEventHandlers { get; set; } = [];
 
     // === 可选字段 ===
@@ -52,12 +51,6 @@ public sealed class Rotation
     public Rotation AddTriggerCondition(ITriggerCond cond)
     {
         TriggerConditions.Add(cond);
-        return this;
-    }
-
-    public Rotation AddTargetResolver(ITargetResolver resolver)
-    {
-        TargetResolvers.Add(resolver);
         return this;
     }
 
