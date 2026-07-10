@@ -1,11 +1,12 @@
+using System.Collections.Concurrent;
 using HiAuRo.ACR;
 
 namespace HiAuRo.Runtime;
 
 public sealed class BattleData
 {
-    public Queue<Slot> HighPrioritySlots_GCD { get; } = new();
-    public Queue<Slot> HighPrioritySlots_OffGCD { get; } = new();
+    public ConcurrentQueue<Slot> HighPrioritySlots_GCD { get; } = new();
+    public ConcurrentQueue<Slot> HighPrioritySlots_OffGCD { get; } = new();
     public Slot? NextSlot { get; set; }
     public Slot? WaitGcdSlot { get; set; }
     public Slot? CurrSlot { get; private set; }

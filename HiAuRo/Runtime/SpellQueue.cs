@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using HiAuRo.ACR;
 
 namespace HiAuRo.Runtime;
@@ -8,7 +9,7 @@ namespace HiAuRo.Runtime;
 public sealed class SpellQueue
 {
     private const int TtlMs = 5000;
-    private readonly Queue<(Slot Slot, long EnqueuedAt)> _queue = new();
+    private readonly ConcurrentQueue<(Slot Slot, long EnqueuedAt)> _queue = new();
 
     /// <summary>入队 Slot</summary>
     public void Enqueue(Slot slot) => _queue.Enqueue((slot, Environment.TickCount64));
@@ -17,7 +18,7 @@ public sealed class SpellQueue
     public bool HasPending()
     {
         ExpireOld();
-        return _queue.Count > 0;
+        return !_queue.IsEmpty;
     }
 
     /// <summary>队列大小</summary>
@@ -27,14 +28,14 @@ public sealed class SpellQueue
     public Slot? PeekNext()
     {
         ExpireOld();
-        return _queue.Count > 0 ? _queue.Peek().Slot : null;
+        return _queue.TryPeek(out var entry) ? entry.Slot : null;
     }
 
     /// <summary>出队下一个待执行 Slot</summary>
     public Slot? DequeueNext()
     {
         ExpireOld();
-        return _queue.Count > 0 ? _queue.Dequeue().Slot : null;
+        return _queue.TryDequeue(out var entry) ? entry.Slot : null;
     }
 
     /// <summary>清空队列</summary>
@@ -43,7 +44,7 @@ public sealed class SpellQueue
     private void ExpireOld()
     {
         var now = Environment.TickCount64;
-        while (_queue.Count > 0 && now - _queue.Peek().EnqueuedAt > TtlMs)
-            _queue.Dequeue();
+        while (_queue.TryPeek(out var entry) && now - entry.EnqueuedAt > TtlMs)
+            _queue.TryDequeue(out _);
     }
 }

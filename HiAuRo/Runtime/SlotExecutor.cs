@@ -23,6 +23,8 @@ public sealed class SlotExecutor
         return SlotActionGateOutcome.Allow;
     }
 
+    internal static bool ShouldDiscardHighPrioritySlot(Func<Slot?, int>? check, Slot slot) => check != null && check(slot) < 0;
+
     public bool CheckNextSlot(BattleData bd)
     {
         if (bd.NextSlot == null) return false;
@@ -128,16 +130,17 @@ public sealed class SlotExecutor
         var rot = _runner.CurrentRotation;
         if (mode == 1)
         {
-            if (bd.HighPrioritySlots_GCD.Count > 0)
+            if (bd.HighPrioritySlots_GCD.TryPeek(out var slot))
             {
-                var slot = bd.HighPrioritySlots_GCD.Peek();
                 slot.InSequence = true;
-                if (rot?.CanUseHighPrioritySlotCheck == null
-                    || rot.CanUseHighPrioritySlotCheck(slot) >= 0)
+                if (ShouldDiscardHighPrioritySlot(rot?.CanUseHighPrioritySlotCheck, slot))
                 {
-                    if (await RunSlot(bd, slot, false))
-                        bd.HighPrioritySlots_GCD.Dequeue();
+                    bd.HighPrioritySlots_GCD.TryDequeue(out _);
+                    Hi.AcrRuntimeDebug($"[SlotExec] 丢弃高优 Slot: {slot.Source}");
+                    return;
                 }
+                if (await RunSlot(bd, slot, false))
+                    bd.HighPrioritySlots_GCD.TryDequeue(out _);
                 return;
             }
         }
@@ -146,16 +149,17 @@ public sealed class SlotExecutor
             if (!AbilityThrottle.CanStartNow(Environment.TickCount64))
                 return;
 
-            if (bd.HighPrioritySlots_OffGCD.Count > 0)
+            if (bd.HighPrioritySlots_OffGCD.TryPeek(out var slot))
             {
-                var slot = bd.HighPrioritySlots_OffGCD.Peek();
                 slot.InSequence = true;
-                if (rot?.CanUseHighPrioritySlotCheck == null
-                    || rot.CanUseHighPrioritySlotCheck(slot) >= 0)
+                if (ShouldDiscardHighPrioritySlot(rot?.CanUseHighPrioritySlotCheck, slot))
                 {
-                    if (await RunSlot(bd, slot, false))
-                        bd.HighPrioritySlots_OffGCD.Dequeue();
+                    bd.HighPrioritySlots_OffGCD.TryDequeue(out _);
+                    Hi.AcrRuntimeDebug($"[SlotExec] 丢弃高优 Slot: {slot.Source}");
+                    return;
                 }
+                if (await RunSlot(bd, slot, false))
+                    bd.HighPrioritySlots_OffGCD.TryDequeue(out _);
                 return;
             }
         }
