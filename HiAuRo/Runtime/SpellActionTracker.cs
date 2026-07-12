@@ -42,11 +42,11 @@ public sealed class SpellActionTracker
     {
         if (slot == _lastSlot) return false;
         _lastSlot = slot;
-        Volatile.Write(ref _pendingSpellId, spell.Id);
         _request = false;
         _effect = false;
         _cancelCast = false;
         _actionRejected = false;
+        Volatile.Write(ref _pendingSpellId, spell.Id);
         return true;
     }
 
