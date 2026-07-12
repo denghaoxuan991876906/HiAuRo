@@ -872,15 +872,7 @@ public sealed class CombatRecorder
         uint pendingCastGcdActionId,
         long pendingCastRecordedAtTicks,
         long nowTicks)
-    {
-        if (pendingCastGcdActionId == 0)
-            return true;
-
-        if (pendingCastGcdActionId != actionId)
-            return true;
-
-        return nowTicks - pendingCastRecordedAtTicks > 3000;
-    }
+        => true;
 
     private void ResetTransientState()
     {
