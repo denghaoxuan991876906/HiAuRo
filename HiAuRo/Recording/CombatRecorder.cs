@@ -156,6 +156,7 @@ public sealed class CombatRecorder
                 _pendingCastGcdRecordedAt = sc.StartCastTime;
                 break;
             case ReceviceAbilityEffectCondParams ae when IsSelfSource(ae.SourceID):
+                if (!ShouldCaptureActionEffect(ae.ActionId)) break;
                 if (IsDuplicateEffect(ae.ActionId)) break;
                 if (IsAbilityAction(ae.ActionId))
                 {
@@ -168,6 +169,7 @@ public sealed class CombatRecorder
                 CaptureEvent(CombatRecorderEventType.GcdReadyAndAction, ae.ActionId, success: true);
                 break;
             case ReceviceNoTargetAbilityEffectCondParams ne when IsSelfSource(ne.SourceID):
+                if (!ShouldCaptureActionEffect(ne.ActionId)) break;
                 if (IsDuplicateEffect(ne.ActionId)) break;
                 if (IsAbilityAction(ne.ActionId))
                 {
@@ -592,6 +594,9 @@ public sealed class CombatRecorder
         long nowTicks)
         => ShouldCaptureGcdEffect(actionId, pendingCastGcdActionId, pendingCastRecordedAtTicks, nowTicks);
 
+    internal static bool ShouldCaptureActionEffectForTests(uint actionId)
+        => ShouldCaptureActionEffect(actionId);
+
     internal static CombatRecorderGcdKind ResolveGcdKindForTests(
         CombatRecorderEventType eventType,
         uint pendingCastGcdActionId,
@@ -648,6 +653,9 @@ public sealed class CombatRecorder
             _ => false
         };
     }
+
+    private static bool ShouldCaptureActionEffect(uint actionId)
+        => actionId != 7;
 
     private static CombatFrameCacheSample? SelectDiffBaseSample(
         IReadOnlyList<CombatFrameCacheSample> window,
