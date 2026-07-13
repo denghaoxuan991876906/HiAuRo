@@ -55,6 +55,8 @@ public static class ACRLifecycle
     private static readonly Dictionary<uint, int> _activeAcrIndices = [];
     /// <summary>外部 ALC 引用（用于 Reload 卸载）</summary>
     private static readonly List<AssemblyLoadContext> _externalAlcs = [];
+    private static bool _developmentOverrideEnabled;
+    private static AcrRegistryEntry? _developmentRegistryEntry;
 
     private static string _configDir = string.Empty;
     private static volatile bool _pendingReload;
@@ -101,6 +103,9 @@ public static class ACRLifecycle
 
         if (HiAuRo.Data.IsReady && Data.Me.ClassJob == jobId && jobId != 0)
         {
+            if (DevelopmentOverrideAppliesTo(jobId, _developmentOverrideEnabled, _developmentRegistryEntry))
+                return;
+
             var reg = list[newIndex];
             var entry = reg.Entry;
             if (entry == null) return;
@@ -110,6 +115,37 @@ public static class ACRLifecycle
 
     /// <summary>强制下一帧重新检查职业（用于加载后触发首次匹配）</summary>
     public static void ForceRecheck() { _lastJob = 0; }
+
+    internal static bool DevelopmentOverrideAppliesTo(
+        uint jobId,
+        bool enabled,
+        AcrRegistryEntry? entry)
+    {
+        if (!enabled) return false;
+        if (entry == null) return true;
+        return entry.Entry.TargetJobs.Any(job => (uint)job == jobId);
+    }
+
+    internal static void SetDevelopmentOverride(bool enabled, AcrRegistryEntry? entry)
+    {
+        var isReady = Data.IsReady;
+        var currentJob = isReady ? Data.Me.ClassJob : 0;
+        var oldApplies = DevelopmentOverrideAppliesTo(
+            currentJob,
+            _developmentOverrideEnabled,
+            _developmentRegistryEntry);
+
+        _developmentOverrideEnabled = enabled;
+        _developmentRegistryEntry = entry;
+
+        if (!isReady) return;
+
+        var newApplies = DevelopmentOverrideAppliesTo(currentJob, enabled, entry);
+        if (!oldApplies && !newApplies) return;
+
+        _lastJob = 0;
+        CheckJobSwitch();
+    }
 
     /// <summary>初始化</summary>
     public static void Init(string settingRoot)
@@ -123,6 +159,8 @@ public static class ACRLifecycle
     {
         DynModuleWatcher.Stop();
         UnloadRotation();
+        _developmentOverrideEnabled = false;
+        _developmentRegistryEntry = null;
         _acrRegistry.Clear();
         _activeAcrIndices.Clear();
         foreach (var alc in _externalAlcs)
@@ -186,6 +224,20 @@ public static class ACRLifecycle
         _lastJob = currentJob;
 
         DService.Instance().Log.Information($"[ACR] 职业切换: {_lastJob} → {currentJob}");
+
+        if (_developmentOverrideEnabled && _developmentRegistryEntry == null)
+        {
+            DService.Instance().Log.Warning("[ACR] 基础开发模式无有效脚本");
+            UnloadRotation();
+            return;
+        }
+
+        if (DevelopmentOverrideAppliesTo(currentJob, _developmentOverrideEnabled, _developmentRegistryEntry))
+        {
+            DService.Instance().Log.Information("[ACR] 加载基础开发模式 ACR");
+            LoadRotation(_developmentRegistryEntry!);
+            return;
+        }
 
         if (_acrRegistry.TryGetValue(currentJob, out var list) && list.Count > 0)
         {
