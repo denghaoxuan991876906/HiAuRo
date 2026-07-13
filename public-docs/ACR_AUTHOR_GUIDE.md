@@ -135,6 +135,54 @@ HiAuRo插件配置目录/ACR/MyFirstACR/
 
 > **关键理解**：`Check()` 返回值本身不影响优先级——优先级由 `SlotResolvers` 列表的**排列顺序**决定。排前面的先 `Check`，先通过就先执行。
 
+### 基础循环单文件开发模式
+
+如果只想快速调试 `SlotResolver` 的排列顺序和优先级，可以使用基础 ACR 开发模式直接加载单个 C# 源文件，不需要创建完整 ACR 项目，也不需要手动构建 DLL。
+
+使用步骤：
+
+1. 在任意目录创建一个受信任的 `.cs` 文件。
+2. 在 HiAuRo 中启用开发者工具，然后打开 **ACR → ACR 调试**。
+3. 打开 **开发模式** 开关。
+4. 在 **源码** 输入框中填写 `.cs` 文件的绝对路径。
+5. 点击 **加载/重载**。
+6. 修改源码后，再次手动点击 **加载/重载** 使改动生效。
+
+下面是一个可直接使用的吟游诗人示例：
+
+```csharp
+using System.Collections.Generic;
+using HiAuRo.ACR;
+
+public sealed class BasicBrd : IBasicAcrScript
+{
+    public Jobs TargetJob => Jobs.BRD;
+
+    public IReadOnlyList<SlotResolverData> BuildSlotResolvers() =>
+    [
+        new() { Resolver = new HeavyShot(), Mode = SlotMode.Gcd },
+    ];
+}
+
+public sealed class HeavyShot : ISlotResolver
+{
+    public int Check() => 0;
+
+    public void Build(Slot slot)
+    {
+        slot.Add(new Spell(97, SpellTargetType.Target));
+    }
+}
+```
+
+这个模式只提供 `TargetJob` 和 `SlotResolver` 列表，适合验证最基础的循环。它不支持 QT、Hotkey、Settings UI、EventHandler、Opener、SlotSequence、自定义触发器、NuGet、项目引用或额外 DLL。源码会作为受信任的本机代码运行，**不是沙箱**；不要加载来源不明的文件。
+
+手动加载/重载只允许在游戏数据就绪、脱离战斗、非切图且 ACR 未处于加载过程时执行。启用或停用开发模式也遵守同一安全门；操作被阻止时不会排队，需要在条件满足后手动重试。
+
+如果编译、入口识别、入口构造、Resolver 列表构建或应用中的任一步失败，开发模式会立即进入无 ACR 状态并停止技能输出：不会继续运行旧版本，也不会回退到正式 ACR。修复源码后手动点击 **加载/重载**，或者关闭 **开发模式** 恢复正式 ACR。
+
+插件重启时，如果配置仍启用了开发模式，会在 Helper 初始化完成并到达上述安全状态后自动进行一次初始加载。这不是源码保存监听；运行期间修改 `.cs` 文件不会被自动监控，也不会自动重载。
+
 ---
 
 ## 2. ACR 运行时全景图
