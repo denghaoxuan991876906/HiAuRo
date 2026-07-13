@@ -55,26 +55,84 @@ public sealed partial class AIRunner
     {
         Unload();
 
-        CurrentEntry = entry;
-        CurrentRotation = entry.Build(settingFolder);
-
-        if (CurrentRotation != null)
+        var registeredHotkeyHandlers = new List<IHotkeyEventHandler>();
+        var enteredRotation = false;
+        try
         {
-            AiLoop = new AILoop_Normal();
-        }
+            CurrentEntry = entry;
+            CurrentRotation = entry.Build(settingFolder);
 
-        if (CurrentRotation?.HotkeyEventHandlers != null)
+            if (CurrentRotation != null)
+            {
+                AiLoop = new AILoop_Normal();
+            }
+
+            if (CurrentRotation?.HotkeyEventHandlers != null)
+            {
+                foreach (var handler in CurrentRotation.HotkeyEventHandlers)
+                {
+                    HotkeyHelper.RegisterHandler(handler);
+                    registeredHotkeyHandlers.Add(handler);
+                }
+            }
+
+            CurrentEntry.OnEnterRotation();
+            enteredRotation = true;
+
+            GameEventHook.Instance.OnEventFired += OnGameEvent;
+            FactTimeline.Instance.PhaseChanged += OnPhaseChanged;
+
+            _loaded = true;
+        }
+        catch
         {
-            foreach (var handler in CurrentRotation.HotkeyEventHandlers)
-                HotkeyHelper.RegisterHandler(handler);
+            RollbackFailedLoad(entry, registeredHotkeyHandlers, enteredRotation);
+            throw;
         }
+    }
 
-        CurrentEntry.OnEnterRotation();
+    private void RollbackFailedLoad(
+        IRotationEntry entry,
+        IReadOnlyList<IHotkeyEventHandler> registeredHotkeyHandlers,
+        bool enteredRotation)
+    {
+        TryLoadRollback(() => GameEventHook.Instance.OnEventFired -= OnGameEvent, "注销游戏事件");
+        TryLoadRollback(() => FactTimeline.Instance.PhaseChanged -= OnPhaseChanged, "注销阶段事件");
 
-        GameEventHook.Instance.OnEventFired += OnGameEvent;
-        FactTimeline.Instance.PhaseChanged += OnPhaseChanged;
+        if (enteredRotation)
+            TryLoadRollback(entry.OnExitRotation, "退出 Rotation");
 
-        _loaded = true;
+        foreach (var handler in registeredHotkeyHandlers)
+            TryLoadRollback(() => HotkeyHelper.UnregisterHandler(handler), "注销热键处理器");
+
+        TryLoadRollback(entry.Dispose, "释放 ACR 入口");
+        TryLoadRollback(BattleData.Reset, "重置 BattleData");
+        TryLoadRollback(() => CountDownHandler.Instance.Reset(), "重置倒计时");
+        TryLoadRollback(SpellQueue.Clear, "清空技能队列");
+        TryLoadRollback(() => Coroutine.Instance.Clear(), "清空协程");
+
+        AiLoop = null;
+        CurrentRotation = null;
+        CurrentEntry = null;
+        _loaded = false;
+        BattleTimeMs = 0;
+    }
+
+    private static void TryLoadRollback(Action action, string operation)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                if (DService.IsInitialized)
+                    DService.Instance().Log.Warning($"[AIRunner] ACR 加载回滚失败 ({operation}): {ex.Message}");
+            }
+            catch { }
+        }
     }
 
     public void Unload()
