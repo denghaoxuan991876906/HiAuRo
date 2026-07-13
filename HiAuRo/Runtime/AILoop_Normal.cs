@@ -35,7 +35,7 @@ public sealed class AILoop_Normal : IAILoop
             Clear(runner);
         }
 
-        Plugin.SafeFire(runner.CalSlotAsync(), "AILoop");
+        runner.StartCalSlot();
     }
 
     public void Clear(AIRunner runner)

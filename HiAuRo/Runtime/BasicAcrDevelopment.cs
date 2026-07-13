@@ -257,10 +257,12 @@ internal static class BasicAcrDevelopment
     internal static bool IsReloadAllowed(
         CombatContext.State state,
         bool isBetweenAreas,
-        bool isLoadingRotation) =>
+        bool isLoadingRotation,
+        bool hasActiveSlotTask) =>
         state is not CombatContext.State.InCombat and not CombatContext.State.Zoning
         && !isBetweenAreas
-        && !isLoadingRotation;
+        && !isLoadingRotation
+        && !hasActiveSlotTask;
 
     internal static bool CanReloadNow()
     {
@@ -274,7 +276,8 @@ internal static class BasicAcrDevelopment
         return IsReloadAllowed(
             CombatContext.CurrentState,
             condition.IsBetweenAreas,
-            ACRLifecycle.IsLoadingRotation);
+            ACRLifecycle.IsLoadingRotation,
+            ACRLifecycle.Runner.HasActiveSlotTask);
     }
 
     internal static bool ShouldRunPendingInitialLoad(
@@ -346,6 +349,22 @@ internal static class BasicAcrDevelopment
     {
         if (compilation is null)
             return;
+
+        var quiescence = ACRLifecycle.Runner.SlotQuiescence;
+        if (!quiescence.IsCompleted)
+        {
+            _ = quiescence.ContinueWith(
+                static (_, state) =>
+                {
+                    try { ((BasicAcrCompilation)state!).Dispose(); }
+                    catch { }
+                },
+                compilation,
+                CancellationToken.None,
+                TaskContinuationOptions.None,
+                TaskScheduler.Default);
+            return;
+        }
 
         try
         {

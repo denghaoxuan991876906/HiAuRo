@@ -26,8 +26,14 @@ public sealed partial class AIRunner
 
     private readonly SlotExecutor _slotExecutor;
     private readonly List<IHotkeyEventHandler> _registeredHotkeyHandlers = [];
+    private CancellationTokenSource? _slotGenerationCts;
+    private Task _activeSlotTask = Task.CompletedTask;
+    private long _slotGeneration;
     private bool _loaded;
     private bool _enteredRotation;
+
+    internal bool HasActiveSlotTask => !_activeSlotTask.IsCompleted;
+    internal Task SlotQuiescence => _activeSlotTask;
 
     /// <summary>当前战斗已持续的毫秒数（进战清零、脱战清零）</summary>
     public int BattleTimeMs { get; internal set; }
@@ -56,6 +62,7 @@ public sealed partial class AIRunner
     public void Load(IRotationEntry entry, string settingFolder)
     {
         Unload();
+        BeginSlotGeneration();
 
         var registeredHotkeyHandlers = new List<IHotkeyEventHandler>();
         var enteredRotation = false;
@@ -100,6 +107,7 @@ public sealed partial class AIRunner
         IReadOnlyList<IHotkeyEventHandler> registeredHotkeyHandlers,
         bool enteredRotation)
     {
+        StopSlotGeneration();
         DetachLoadState();
         CleanupDetachedLoad(entry, registeredHotkeyHandlers, enteredRotation);
     }
@@ -110,9 +118,11 @@ public sealed partial class AIRunner
         var rotation = CurrentRotation;
         var enteredRotation = _enteredRotation;
         var hasState = _loaded || entry != null || rotation != null || AiLoop != null
-            || enteredRotation || _registeredHotkeyHandlers.Count > 0;
+            || enteredRotation || _registeredHotkeyHandlers.Count > 0
+            || _slotGenerationCts != null || HasActiveSlotTask;
         if (!hasState) return;
 
+        StopSlotGeneration();
         var registeredHotkeyHandlers = SnapshotRegisteredHotkeyHandlers();
         DetachLoadState();
         CleanupDetachedLoad(entry, registeredHotkeyHandlers, enteredRotation);
@@ -166,6 +176,52 @@ public sealed partial class AIRunner
         TryCleanupStep(SpellQueue.Clear, "清空技能队列");
         TryCleanupStep(() => Coroutine.Instance.Clear(), "清空协程");
         BattleTimeMs = 0;
+    }
+
+    internal void StartCalSlot()
+    {
+        var cts = _slotGenerationCts;
+        if (!_loaded || cts == null || HasActiveSlotTask) return;
+
+        var startGate = new TaskCompletionSource<bool>();
+        _activeSlotTask = RunCalSlotAsync(_slotGeneration, cts.Token, startGate.Task);
+        startGate.SetResult(true);
+    }
+
+    internal void ResumeSlotGeneration()
+    {
+        if (!_loaded || _slotGenerationCts != null) return;
+        BeginSlotGeneration();
+    }
+
+    internal void StopSlotGeneration()
+    {
+        var cts = _slotGenerationCts;
+        _slotGenerationCts = null;
+        if (cts == null) return;
+
+        cts.Cancel();
+        BattleData.SlotState = false;
+
+        var quiescence = _activeSlotTask;
+        if (quiescence.IsCompleted)
+        {
+            cts.Dispose();
+            return;
+        }
+
+        _ = quiescence.ContinueWith(
+            static (_, state) => ((CancellationTokenSource)state!).Dispose(),
+            cts,
+            CancellationToken.None,
+            TaskContinuationOptions.None,
+            TaskScheduler.Default);
+    }
+
+    private void BeginSlotGeneration()
+    {
+        _slotGeneration++;
+        _slotGenerationCts = new CancellationTokenSource();
     }
 
     private static void TryCleanupStep(Action action, string operation)

@@ -14,8 +14,17 @@ public static class SpellCast
     internal static bool IsExecutionDeadlineExpired(long deadline, long now)
         => deadline > 0 && now >= deadline;
 
-    public static async Task<bool> ExecuteAsync(Slot slot, Spell spell, AIRunner runner, long deadline = 0)
+    public static Task<bool> ExecuteAsync(Slot slot, Spell spell, AIRunner runner, long deadline = 0)
+        => ExecuteAsync(slot, spell, runner, deadline, CancellationToken.None);
+
+    internal static async Task<bool> ExecuteAsync(
+        Slot slot,
+        Spell spell,
+        AIRunner runner,
+        long deadline,
+        CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (Data.Me.Object is { IsDead: true }) return false;
 
         var spellId = spell.Id;
@@ -48,7 +57,7 @@ public static class SpellCast
                 if (tracker.HasFlag(spellId, SpellActionType.ActionRejected)
                     || tracker.HasFlag(spellId, SpellActionType.CancelCast))
                     return false;
-                await Coroutine.Instance.WaitAsync(1);
+                await Coroutine.Instance.WaitAsync(1, ct);
             }
         }
 
@@ -58,24 +67,26 @@ public static class SpellCast
             if (tracker.HasFlag(spellId, SpellActionType.ActionRejected)
                 || tracker.HasFlag(spellId, SpellActionType.CancelCast))
                 return false;
-            await Coroutine.Instance.WaitAsync(1);
+            await Coroutine.Instance.WaitAsync(1, ct);
         }
 
-        var targetId = ResolveTarget(spell);
+        var targetId = ResolveTarget(spell, ct);
         long sendStart = Environment.TickCount64;
         bool accepted = false;
 
         while (Environment.TickCount64 - sendStart < 150
                && !tracker.HasFlag(spellId, SpellActionType.Request))
         {
+            ct.ThrowIfCancellationRequested();
             var useOk = UseActionManager.Instance().UseAction(ActionTypeFF.Action, spellId, targetId, 0, 0, 0);
+            ct.ThrowIfCancellationRequested();
             accepted = useOk || CheckQueued(spellId);
             if (accepted)
             {
                 Hi.AcrRuntimeDebug($"[SpellCast] 队列确认: {spell.Name}({spellId}) useOk={useOk} tryMs={Environment.TickCount64 - sendStart}");
                 break;
             }
-            await Coroutine.Instance.WaitAsync(1);
+            await Coroutine.Instance.WaitAsync(1, ct);
         }
 
         if (!accepted)
@@ -84,8 +95,11 @@ public static class SpellCast
             return false;
         }
 
+        ct.ThrowIfCancellationRequested();
         tracker.Notify(SpellActionType.Request, spellId);
+        ct.ThrowIfCancellationRequested();
         EventSystem.OnUseActionSuccess(spellId, spell.Type);
+        ct.ThrowIfCancellationRequested();
 
         var isAbility = spell.IsAbility();
         long castTime = (long)spell.CastTime.TotalMilliseconds;
@@ -99,7 +113,8 @@ public static class SpellCast
             await Coroutine.Instance.WaitAsync(500,
                 () => !tracker.HasFlag(spellId, SpellActionType.CancelCast)
                    && !tracker.HasFlag(spellId, SpellActionType.ActionRejected)
-                   && !tracker.HasFlag(spellId, SpellActionType.Effect));
+                   && !tracker.HasFlag(spellId, SpellActionType.Effect),
+                ct);
             if (tracker.HasFlag(spellId, SpellActionType.ActionRejected)) return false;
 
             // 8c: 确认 Request 或 Effect 已收到
@@ -114,7 +129,8 @@ public static class SpellCast
                 await Coroutine.Instance.WaitAsync(remaining,
                     () => !tracker.HasFlag(spellId, SpellActionType.CancelCast)
                        && !tracker.HasFlag(spellId, SpellActionType.ActionRejected)
-                       && !tracker.HasFlag(spellId, SpellActionType.Effect));
+                       && !tracker.HasFlag(spellId, SpellActionType.Effect),
+                    ct);
             }
             if (tracker.HasFlag(spellId, SpellActionType.CancelCast)
                 || tracker.HasFlag(spellId, SpellActionType.ActionRejected))
@@ -126,7 +142,8 @@ public static class SpellCast
             await Coroutine.Instance.WaitAsync(500,
                 () => !tracker.HasFlag(spellId, SpellActionType.Request)
                    && !tracker.HasFlag(spellId, SpellActionType.Effect)
-                   && !tracker.HasFlag(spellId, SpellActionType.ActionRejected));
+                   && !tracker.HasFlag(spellId, SpellActionType.ActionRejected),
+                ct);
             if (tracker.HasFlag(spellId, SpellActionType.ActionRejected)) return false;
             if (!tracker.HasFlag(spellId, SpellActionType.Request)
                 && !tracker.HasFlag(spellId, SpellActionType.Effect))
@@ -141,7 +158,8 @@ public static class SpellCast
             await Coroutine.Instance.WaitAsync(500,
                 () => !tracker.HasFlag(spellId, SpellActionType.Effect)
                    && !tracker.HasFlag(spellId, SpellActionType.CancelCast)
-                   && !tracker.HasFlag(spellId, SpellActionType.ActionRejected));
+                   && !tracker.HasFlag(spellId, SpellActionType.ActionRejected),
+                ct);
             if (tracker.HasFlag(spellId, SpellActionType.CancelCast)) return false;
             if (tracker.HasFlag(spellId, SpellActionType.ActionRejected)) return false;
             if (!tracker.HasFlag(spellId, SpellActionType.Effect)) return false;
@@ -152,11 +170,15 @@ public static class SpellCast
         while (!GCDHelper.CanUseOffGcd())
         {
             if (IsExecutionDeadlineExpired(deadline, Environment.TickCount64)) break;
-            await Coroutine.Instance.WaitAsync(1);
+            await Coroutine.Instance.WaitAsync(1, ct);
         }
 
+        ct.ThrowIfCancellationRequested();
         if (ShouldRaiseSpellCastSuccessCallback(isAbility, castTime))
+        {
             runner.EventHandler?.OnSpellCastSuccess(slot, spell);
+            ct.ThrowIfCancellationRequested();
+        }
         Hi.AcrRuntimeDebug($"[SpellCast] 完成: {spell.Name}({spellId})");
 
         return true;
@@ -168,16 +190,23 @@ public static class SpellCast
         return am != null && am->QueuedActionId == spellId;
     }
 
-    private static ulong ResolveTarget(Spell spell)
+    private static ulong ResolveTarget(Spell spell, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var targetType = spell.TargetType;
+        if (targetType == SpellTargetType.DynamicTarget)
+        {
+            var target = spell.GetDynamicTarget?.Invoke();
+            ct.ThrowIfCancellationRequested();
+            return target is IGameObject dynamicTarget ? dynamicTarget.GameObjectID : 0;
+        }
+
         return targetType switch
         {
             SpellTargetType.Self => Data.Me.Object?.GameObjectID ?? 0,
             SpellTargetType.Target => Data.Target.Current?.GameObjectID ?? 0,
             SpellTargetType.TargetTarget => Data.Target.Current is IBattleChara bc ? bc.TargetObjectID : 0,
             SpellTargetType.SpecifyTarget => spell.SpecifyTarget is IGameObject go ? go.GameObjectID : 0,
-            SpellTargetType.DynamicTarget => spell.GetDynamicTarget?.Invoke() is IGameObject dgo ? dgo.GameObjectID : 0,
             _ => Data.Target.Current?.GameObjectID ?? 0
         };
     }

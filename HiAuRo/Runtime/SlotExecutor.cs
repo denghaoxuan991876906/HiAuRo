@@ -34,8 +34,11 @@ public sealed class SlotExecutor
         return queue.TryDequeue(out _);
     }
 
-    public bool CheckNextSlot(BattleData bd)
+    public bool CheckNextSlot(BattleData bd) => CheckNextSlot(bd, CancellationToken.None);
+
+    internal bool CheckNextSlot(BattleData bd, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (bd.NextSlot == null) return false;
         bd.NextSlot.InSequence = true;
         bd.NextSlot.BypassesRotationPause = true;
@@ -44,8 +47,12 @@ public sealed class SlotExecutor
         return true;
     }
 
-    public async Task<bool> HandleSlot(BattleData bd, bool rotationPaused = false)
+    public Task<bool> HandleSlot(BattleData bd, bool rotationPaused = false)
+        => HandleSlot(bd, rotationPaused, CancellationToken.None);
+
+    internal async Task<bool> HandleSlot(BattleData bd, bool rotationPaused, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var handledWaitGcdSlot = false;
         if (bd.WaitGcdSlot is { } waitGcdSlot
             && AIRunner.ShouldHandleCurrentSlotDuringRotationPause(rotationPaused, waitGcdSlot))
@@ -63,7 +70,9 @@ public sealed class SlotExecutor
             }
             else
             {
+                ct.ThrowIfCancellationRequested();
                 waitGcdSlot.CompletedAction?.Invoke();
+                ct.ThrowIfCancellationRequested();
             }
             bd.PopWaitGcdSlot();
             handledWaitGcdSlot = true;
@@ -82,7 +91,7 @@ public sealed class SlotExecutor
             if (!AIRunner.ShouldHandleCurrentSlotDuringRotationPause(rotationPaused, currentSlot))
                 return handledWaitGcdSlot;
 
-            if (await RunSlot(bd, currentSlot, true))
+            if (await RunSlot(bd, currentSlot, true, ct))
             {
                 if (currentSlot.HighPriorityQueueOwner is { } highPriorityQueueOwner)
                     TryDequeueCompletedHighPrioritySlot(highPriorityQueueOwner, currentSlot);
@@ -93,8 +102,12 @@ public sealed class SlotExecutor
         return handledWaitGcdSlot;
     }
 
-    public async Task<bool> HandleSlotSequence(BattleData bd)
+    public Task<bool> HandleSlotSequence(BattleData bd)
+        => HandleSlotSequence(bd, CancellationToken.None);
+
+    internal async Task<bool> HandleSlotSequence(BattleData bd, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var rot = _runner.CurrentRotation;
         if (bd.CurrSequence == null)
         {
@@ -102,7 +115,7 @@ public sealed class SlotExecutor
 
             // 只在倒计时后才自动使用起手
             if (bd.CurrSequence == null && CountDownHandler.Instance.CanDoAction
-                && await OpenerMgr.Instance.UseOpener(bd, rot))
+                && await OpenerMgr.Instance.UseOpener(bd, rot, ct))
             {
                 Hi.AcrRuntimeDebug($"[SlotExec] 起手已推送: {bd.CurrSequence?.Sequence.GetType().Name}");
                 return true;
@@ -112,13 +125,18 @@ public sealed class SlotExecutor
             {
                 foreach (var seq in rot.SlotSequences)
                 {
+                    ct.ThrowIfCancellationRequested();
                     var sc = seq.StartCheck();
+                    ct.ThrowIfCancellationRequested();
                     Hi.AcrRuntimeDebug($"[SlotExec] 检查序列: {seq.GetType().Name} StartCheck={sc}");
                     if (sc >= 0)
                     {
+                        ct.ThrowIfCancellationRequested();
+                        var sequence = (ISlotSequence)Activator.CreateInstance(seq.GetType())!;
+                        ct.ThrowIfCancellationRequested();
                         bd.PushSequence(new SequenceWrapper
                         {
-                            Sequence = (ISlotSequence)Activator.CreateInstance(seq.GetType())!
+                            Sequence = sequence
                         });
                         Hi.AcrRuntimeDebug($"[SlotExec] 序列已启动: {seq.GetType().Name}");
                         return true;
@@ -129,12 +147,22 @@ public sealed class SlotExecutor
         }
 
         var cseq = bd.CurrSequence;
+        ct.ThrowIfCancellationRequested();
         var slist = cseq.Sequence.Sequence;
-        if (bd.CurrSequenceIndex >= slist.Count
-            || cseq.Sequence.StopCheck(bd.CurrSequenceIndex) >= 0)
+        ct.ThrowIfCancellationRequested();
+        var sequenceCompleted = bd.CurrSequenceIndex >= slist.Count;
+        if (!sequenceCompleted)
+        {
+            ct.ThrowIfCancellationRequested();
+            sequenceCompleted = cseq.Sequence.StopCheck(bd.CurrSequenceIndex) >= 0;
+            ct.ThrowIfCancellationRequested();
+        }
+        if (sequenceCompleted)
         {
             Hi.AcrRuntimeDebug($"[SlotExec] 序列完成: {cseq.Sequence.GetType().Name} idx={bd.CurrSequenceIndex}/{slist.Count}");
+            ct.ThrowIfCancellationRequested();
             cseq.CompeltedAction?.Invoke();
+            ct.ThrowIfCancellationRequested();
             bd.ClearSequence();
             bd.CurrSequenceIndex = 0;
         }
@@ -142,7 +170,9 @@ public sealed class SlotExecutor
         {
             var slot = new Slot();
             var sequenceIndex = bd.CurrSequenceIndex;
+            ct.ThrowIfCancellationRequested();
             slist[sequenceIndex]?.Invoke(slot);
+            ct.ThrowIfCancellationRequested();
             slot.InSequence = true;
             slot.Source = $"Sequence:{cseq.Sequence.GetType().Name}[{sequenceIndex}]";
             var stepName = slist[sequenceIndex]?.Method.Name ?? "?";
@@ -153,8 +183,16 @@ public sealed class SlotExecutor
         return true;
     }
 
-    public async Task ResolveSlots(BattleData bd, int mode, bool skipRotationResolvers = false)
+    public Task ResolveSlots(BattleData bd, int mode, bool skipRotationResolvers = false)
+        => ResolveSlots(bd, mode, skipRotationResolvers, CancellationToken.None);
+
+    internal async Task ResolveSlots(
+        BattleData bd,
+        int mode,
+        bool skipRotationResolvers,
+        CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var rot = _runner.CurrentRotation;
         if (mode == 1)
         {
@@ -162,7 +200,10 @@ public sealed class SlotExecutor
             if (highPrioritySlots.TryPeek(out var slot))
             {
                 slot.InSequence = true;
-                if (ShouldDiscardHighPrioritySlot(rot?.CanUseHighPrioritySlotCheck, slot))
+                ct.ThrowIfCancellationRequested();
+                var shouldDiscard = ShouldDiscardHighPrioritySlot(rot?.CanUseHighPrioritySlotCheck, slot);
+                ct.ThrowIfCancellationRequested();
+                if (shouldDiscard)
                 {
                     highPrioritySlots.TryDequeue(out _);
                     Hi.AcrRuntimeDebug($"[SlotExec] 丢弃高优 Slot: {slot.Source}");
@@ -171,7 +212,7 @@ public sealed class SlotExecutor
                 {
                     slot.BypassesRotationPause = true;
                     slot.HighPriorityQueueOwner = highPrioritySlots;
-                    if (await RunSlot(bd, slot, false))
+                    if (await RunSlot(bd, slot, false, ct))
                         TryDequeueCompletedHighPrioritySlot(highPrioritySlots, slot);
                     return;
                 }
@@ -186,7 +227,10 @@ public sealed class SlotExecutor
             if (highPrioritySlots.TryPeek(out var slot))
             {
                 slot.InSequence = true;
-                if (ShouldDiscardHighPrioritySlot(rot?.CanUseHighPrioritySlotCheck, slot))
+                ct.ThrowIfCancellationRequested();
+                var shouldDiscard = ShouldDiscardHighPrioritySlot(rot?.CanUseHighPrioritySlotCheck, slot);
+                ct.ThrowIfCancellationRequested();
+                if (shouldDiscard)
                 {
                     highPrioritySlots.TryDequeue(out _);
                     Hi.AcrRuntimeDebug($"[SlotExec] 丢弃高优 Slot: {slot.Source}");
@@ -195,7 +239,7 @@ public sealed class SlotExecutor
                 {
                     slot.BypassesRotationPause = true;
                     slot.HighPriorityQueueOwner = highPrioritySlots;
-                    if (await RunSlot(bd, slot, false))
+                    if (await RunSlot(bd, slot, false, ct))
                         TryDequeueCompletedHighPrioritySlot(highPrioritySlots, slot);
                     return;
                 }
@@ -210,6 +254,7 @@ public sealed class SlotExecutor
 
         foreach (var item in rot.SlotResolvers)
         {
+            ct.ThrowIfCancellationRequested();
             bool match = mode switch
             {
                 1 => item.Mode is SlotMode.Gcd or SlotMode.Always,
@@ -218,33 +263,46 @@ public sealed class SlotExecutor
             };
             if (!match) continue;
 
-            if (await CheckNext(bd, item.Resolver))
+            if (await CheckNext(bd, item.Resolver, ct))
                 return;
         }
     }
 
-    private async Task<bool> CheckNext(BattleData bd, ISlotResolver resolver)
+    private async Task<bool> CheckNext(BattleData bd, ISlotResolver resolver, CancellationToken ct)
     {
-        if (resolver.Check() < 0) return false;
+        ct.ThrowIfCancellationRequested();
+        var check = resolver.Check();
+        ct.ThrowIfCancellationRequested();
+        if (check < 0) return false;
 
         var slot = new Slot
         {
             Source = $"Resolver:{resolver.GetType().Name}"
         };
+        ct.ThrowIfCancellationRequested();
         resolver.Build(slot);
+        ct.ThrowIfCancellationRequested();
 
-        if (TryScheduleBeforeSpell(bd, slot)) return true;
+        if (TryScheduleBeforeSpell(bd, slot, ct)) return true;
 
-        return await RunSlot(bd, slot, false);
+        return await RunSlot(bd, slot, false, ct);
     }
 
-    public async Task<bool> RunSlot(BattleData bd, Slot slot, bool isNextSlot = false)
+    public Task<bool> RunSlot(BattleData bd, Slot slot, bool isNextSlot = false)
+        => RunSlot(bd, slot, isNextSlot, CancellationToken.None);
+
+    internal async Task<bool> RunSlot(
+        BattleData bd,
+        Slot slot,
+        bool isNextSlot,
+        CancellationToken ct)
     {
-        if (TryScheduleBeforeSpell(bd, slot)) return false;
+        ct.ThrowIfCancellationRequested();
+        if (TryScheduleBeforeSpell(bd, slot, ct)) return false;
 
         if (slot.Actions.Count == 0)
         {
-            CompleteSlot(bd, slot);
+            CompleteSlot(bd, slot, ct);
             return true;
         }
 
@@ -260,21 +318,24 @@ public sealed class SlotExecutor
 
         while (slot.Actions.Count > 0)
         {
+            ct.ThrowIfCancellationRequested();
             var gate = CanUseActionBeforeAction();
             if (gate == SlotActionGateOutcome.StopAndDropSlot) return true;
             if (gate == SlotActionGateOutcome.BlockKeepSlot) return false;
 
-            if (!isNextSlot && CheckNextSlot(bd)) return false;
+            if (!isNextSlot && CheckNextSlot(bd, ct)) return false;
 
             var action = slot.Actions[0];
             _runner.Debug.LastActionName = action.Spell.Name;
             Hi.AcrRuntimeDebug($"[SlotExec] [{slot.Source}] 执行: {action.Spell.Name}({action.Spell.Id}) Wait={action.Wait}");
+            ct.ThrowIfCancellationRequested();
             _runner.EventHandler?.OnBeforeSpellCast(slot, action.Spell);
+            ct.ThrowIfCancellationRequested();
 
             if (slot.Actions.Count == 0) return true;
 
             action = slot.Actions[0];
-            bool success = await ExecuteActionAsync(bd, action, slot);
+            bool success = await ExecuteActionAsync(bd, action, slot, ct);
 
             gate = CanUseActionAfterAction(success);
             if (gate == SlotActionGateOutcome.StopAndDropSlot) return true;
@@ -283,7 +344,7 @@ public sealed class SlotExecutor
             if (slot.InSequence && !success
                 && Environment.TickCount64 < slot.breakTime)
             {
-                await Coroutine.Instance.WaitAsync(100);
+                await Coroutine.Instance.WaitAsync(100, ct);
                 continue;
             }
 
@@ -305,18 +366,21 @@ public sealed class SlotExecutor
                 {
                     Hi.AcrRuntimeDebug($"[SlotExec] [{slot.Source}] 追加序列");
                 }
-                CompleteSlot(bd, slot);
+                CompleteSlot(bd, slot, ct);
                 return true;
             }
         }
         return true;
     }
 
-    private bool TryScheduleBeforeSpell(BattleData bd, Slot slot)
+    private bool TryScheduleBeforeSpell(BattleData bd, Slot slot, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (!slot.TryMarkBeforeSpellHandled()) return false;
 
+        ct.ThrowIfCancellationRequested();
         var beforeSlot = _runner.EventHandler?.BeforeSpell(slot);
+        ct.ThrowIfCancellationRequested();
         if (!ShouldScheduleBeforeSpell(beforeSlot, slot)) return false;
 
         var scheduledSlot = beforeSlot!;
@@ -329,7 +393,11 @@ public sealed class SlotExecutor
     }
 
     internal static void CompleteSlot(BattleData bd, Slot slot)
+        => CompleteSlot(bd, slot, CancellationToken.None);
+
+    private static void CompleteSlot(BattleData bd, Slot slot, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (slot.Wait2NextGcd)
         {
             bd.PushWaitGcdSlot(slot);
@@ -346,16 +414,23 @@ public sealed class SlotExecutor
             return;
         }
 
+        ct.ThrowIfCancellationRequested();
         slot.CompletedAction?.Invoke();
+        ct.ThrowIfCancellationRequested();
     }
 
-    private async Task<bool> ExecuteActionAsync(BattleData bd, SlotAction action, Slot slot)
+    private async Task<bool> ExecuteActionAsync(
+        BattleData bd,
+        SlotAction action,
+        Slot slot,
+        CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var spell = action.Spell;
 
         if (spell.Id == 0 || spell == Spell.Idle)
         {
-            await Coroutine.Instance.WaitAsync(100);
+            await Coroutine.Instance.WaitAsync(100, ct);
             return true;
         }
 
@@ -365,24 +440,30 @@ public sealed class SlotExecutor
         {
             float gcdCD = GCDHelper.GetGCDCooldown();
             if (gcdCD > PluginConfig.Instance.ActionQueueInMs)
-                await Coroutine.Instance.WaitAsync((long)(gcdCD - PluginConfig.Instance.ActionQueueInMs));
+                await Coroutine.Instance.WaitAsync((long)(gcdCD - PluginConfig.Instance.ActionQueueInMs), ct);
         }
 
         switch (action.Wait)
         {
             case WaitType.WaitInMs when action.TimeInMs > 0:
-                await Coroutine.Instance.WaitAsync(action.TimeInMs);
+                await Coroutine.Instance.WaitAsync(action.TimeInMs, ct);
                 break;
             case WaitType.WaitForSndHalfWindow:
                 while (GCDHelper.GetGCDCooldown() >= 1000)
                 {
                     if (slot.InSequence && SpellCast.IsExecutionDeadlineExpired(slot.breakTime, Environment.TickCount64)) return false;
-                    await Coroutine.Instance.WaitAsync(1);
+                    await Coroutine.Instance.WaitAsync(1, ct);
                 }
                 break;
         }
 
-        bool result = await SpellCast.ExecuteAsync(slot, spell, _runner, slot.InSequence ? slot.breakTime : 0);
+        bool result = await SpellCast.ExecuteAsync(
+            slot,
+            spell,
+            _runner,
+            slot.InSequence ? slot.breakTime : 0,
+            ct);
+        ct.ThrowIfCancellationRequested();
 
         if (result)
         {
@@ -406,7 +487,9 @@ public sealed class SlotExecutor
                 Data.Combat.LastGCDCompleted = Environment.TickCount64;
                 bd.GcdGuardUntil = 0;
             }
+            ct.ThrowIfCancellationRequested();
             _runner.EventHandler?.AfterSpell(slot, spell);
+            ct.ThrowIfCancellationRequested();
         }
         else
         {

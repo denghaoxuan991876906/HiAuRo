@@ -36,25 +36,25 @@ public sealed class Coroutine
         {
             try
             {
-                var tcs = TimerActions[id].Tcs;
-                TimerActions[id].Tcs = null!;
+                if (!TimerActions.Remove(id, out var action)) continue;
+                var tcs = action.Tcs;
+                action.Tcs = null!;
                 if (!tcs.Task.IsCompleted)
                     tcs.SetResult(true);
             }
             catch (Exception ex) { DService.Instance().Log.Error($"[Coroutine] failed: {ex}"); }
-            TimerActions.Remove(id);
         }
         foreach (var id in _succeedTimer)
         {
             try
             {
-                var tcs = TimerActions[id].Tcs;
-                TimerActions[id].Tcs = null!;
+                if (!TimerActions.Remove(id, out var action)) continue;
+                var tcs = action.Tcs;
+                action.Tcs = null!;
                 if (!tcs.Task.IsCompleted)
                     tcs.SetResult(true);
             }
             catch (Exception ex) { DService.Instance().Log.Error($"[Coroutine] succeed: {ex}"); }
-            TimerActions.Remove(id);
         }
         _failedTimer.Clear();
         _succeedTimer.Clear();
@@ -66,8 +66,16 @@ public sealed class Coroutine
         return WaitAsync(ms, () => true);
     }
 
+    public Task WaitAsync(long ms, CancellationToken ct)
+    {
+        if (ms <= 0)
+            return ct.IsCancellationRequested ? Task.FromCanceled(ct) : Task.CompletedTask;
+        return WaitAsync(ms, () => true, ct);
+    }
+
     public async Task<bool> WaitAsync(long ms, Func<bool> cond, CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
         if (ms <= 0) return true;
         var expire = Environment.TickCount64 + ms;
         var tcs = new TaskCompletionSource<bool>();
@@ -80,13 +88,19 @@ public sealed class Coroutine
             Check = cond
         };
         TimerActions.Add(id, action);
-        ct.Register(() =>
+        var registration = ct.Register(() =>
         {
             TimerActions.Remove(id);
-            if (!tcs.Task.IsCompleted && !tcs.Task.IsCanceled)
-                tcs.SetResult(false);
+            tcs.TrySetCanceled(ct);
         });
-        return await tcs.Task;
+        try
+        {
+            return await tcs.Task;
+        }
+        finally
+        {
+            registration.Dispose();
+        }
     }
 
     public Task DelayAsync(double ms) => WaitAsync((long)ms);
@@ -96,11 +110,10 @@ public sealed class Coroutine
         var keys = TimerActions.Keys.ToArray();
         foreach (var key in keys)
         {
-            if (TimerActions.TryGetValue(key, out var action)
+            if (TimerActions.Remove(key, out var action)
                 && action.Tcs != null && !action.Tcs.Task.IsCompleted)
                 action.Tcs.SetResult(false);
         }
-        TimerActions.Clear();
         _failedTimer.Clear();
         _succeedTimer.Clear();
     }

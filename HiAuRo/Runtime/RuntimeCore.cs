@@ -29,6 +29,7 @@ public static class RuntimeCore
         );
 #endif
         ACR.MainControlHelper.Unpause();
+        ACRLifecycle.Runner.ResumeSlotGeneration();
         OmenTools.OmenService.FrameworkManager.Instance().Reg(OnTick);
         IsRunning = true;
     }
@@ -36,14 +37,14 @@ public static class RuntimeCore
     /// <summary>停止 Tick 循环</summary>
     public static void Stop()
     {
-        if (!IsRunning) return;
         IsRunning = false;
+        ACRLifecycle.Runner.StopSlotGeneration();
     }
 
     /// <summary>完全关闭，注销 tick（插件 Dispose 时调用）</summary>
     public static void Shutdown()
     {
-        if (IsRunning) Stop();
+        Stop();
         OmenTools.OmenService.FrameworkManager.Instance().Unreg(OnTick);
     }
 

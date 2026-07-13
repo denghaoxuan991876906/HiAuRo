@@ -9,16 +9,25 @@ public sealed partial class AIRunner
     internal static bool IsRotationPauseRequested(Func<int>? check) => check != null && check() >= 1;
     internal static bool ShouldHandleCurrentSlotDuringRotationPause(bool rotationPaused, Slot? slot) => !rotationPaused || slot?.BypassesRotationPause == true;
 
-    internal async Task CalSlotAsync()
-    {
-        var bd = BattleData;
-        if (bd.SlotState) return;
+    internal static bool ShouldFinalizeSlotGeneration(
+        long taskGeneration,
+        long currentGeneration,
+        bool cancellationRequested) =>
+        taskGeneration == currentGeneration && !cancellationRequested;
 
+    private async Task RunCalSlotAsync(long generation, CancellationToken ct, Task startSignal)
+    {
+        await startSignal;
+        var bd = BattleData;
         bd.SlotState = true;
         try
         {
-            PushCombatSources();
-            await 执行核心决策(bd);
+            ct.ThrowIfCancellationRequested();
+            PushCombatSources(ct);
+            await 执行核心决策(bd, ct);
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (Exception ex)
         {
@@ -26,13 +35,25 @@ public sealed partial class AIRunner
         }
         finally
         {
-            CaptureDebug(bd);
-            bd.SlotState = false;
+            if (ShouldFinalizeSlotGeneration(generation, _slotGeneration, ct.IsCancellationRequested))
+            {
+                try
+                {
+                    CaptureDebug(bd, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+
+                if (ShouldFinalizeSlotGeneration(generation, _slotGeneration, ct.IsCancellationRequested))
+                    bd.SlotState = false;
+            }
         }
     }
 
-    private void CaptureDebug(BattleData bd)
+    private void CaptureDebug(BattleData bd, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         Debug.SlotState = bd.SlotState;
         Debug.HighPriGcd = bd.HighPrioritySlots_GCD.Count;
         Debug.HighPriOgcd = bd.HighPrioritySlots_OffGCD.Count;
@@ -45,18 +66,22 @@ public sealed partial class AIRunner
         Debug.HasWaitGcdSlot = bd.WaitGcdSlot != null;
         Debug.HasCurrSlot = bd.CurrSlot != null;
         Debug.CurrSeqName = bd.CurrSequence?.Sequence.GetType().Name;
-        CollectResolverDebug();
+        CollectResolverDebug(ct);
     }
 
-    private void CollectResolverDebug()
+    private void CollectResolverDebug(CancellationToken ct)
     {
-        if (CurrentRotation?.SlotResolvers == null) return;
+        ct.ThrowIfCancellationRequested();
+        var rotation = CurrentRotation;
+        if (rotation?.SlotResolvers == null) return;
         Debug.Resolvers.Clear();
-        foreach (var rd in CurrentRotation.SlotResolvers)
+        foreach (var rd in rotation.SlotResolvers)
         {
+            ct.ThrowIfCancellationRequested();
             int cr;
             try { cr = rd.Resolver.Check(); }
             catch { cr = -99; }
+            ct.ThrowIfCancellationRequested();
             Debug.Resolvers.Add(new ResolverInfo
             {
                 Name = rd.Resolver.GetType().Name,
@@ -67,9 +92,11 @@ public sealed partial class AIRunner
         }
     }
 
-    private async Task 执行核心决策(BattleData bd)
+    private async Task 执行核心决策(BattleData bd, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var rotationPaused = IsRotationPauseRequested(CurrentRotation?.CanPauseACRCheck);
+        ct.ThrowIfCancellationRequested();
 
         if (SpellQueue.HasPending())
         {
@@ -86,19 +113,19 @@ public sealed partial class AIRunner
                 sqSlot.Source = "SpellQueue";
                 sqSlot.BypassesRotationPause = true;
                 bd.SetCurrSlot(sqSlot);
-                if (await _slotExecutor.HandleSlot(bd, rotationPaused)) { Debug.Phase = "SpellQueue"; return; }
+                if (await _slotExecutor.HandleSlot(bd, rotationPaused, ct)) { Debug.Phase = "SpellQueue"; return; }
             }
         }
 
     AfterSpellQueue:
-        if (_slotExecutor.CheckNextSlot(bd)) { Debug.Phase = "NextSlot"; return; }
+        if (_slotExecutor.CheckNextSlot(bd, ct)) { Debug.Phase = "NextSlot"; return; }
 
         Slot? currentSlot = bd.CurrSlot;
         if (currentSlot == null && bd.CurrSlotStack.TryPeek(out var stackedSlot))
             currentSlot = stackedSlot;
         if ((ShouldHandleCurrentSlotDuringRotationPause(rotationPaused, currentSlot)
              || ShouldHandleCurrentSlotDuringRotationPause(rotationPaused, bd.WaitGcdSlot))
-            && await _slotExecutor.HandleSlot(bd, rotationPaused))
+            && await _slotExecutor.HandleSlot(bd, rotationPaused, ct))
         {
             Debug.Phase = "HandleSlot";
             return;
@@ -108,7 +135,9 @@ public sealed partial class AIRunner
             && CurrentRotation?.EventHandler != null)
         {
             Debug.Phase = "OnPreCombat";
+            ct.ThrowIfCancellationRequested();
             CurrentRotation.EventHandler.OnPreCombat();
+            ct.ThrowIfCancellationRequested();
         }
 
         bool inFight = Data.Combat.InCombat;
@@ -124,12 +153,14 @@ public sealed partial class AIRunner
             if (Data.Combat.InCombat)
             {
                 Debug.Phase = "NoTarget";
+                ct.ThrowIfCancellationRequested();
                 CurrentRotation?.EventHandler?.OnNoTarget();
+                ct.ThrowIfCancellationRequested();
             }
             return;
         }
 
-        if (!rotationPaused && await _slotExecutor.HandleSlotSequence(bd)) { Debug.Phase = "SlotSeq"; return; }
+        if (!rotationPaused && await _slotExecutor.HandleSlotSequence(bd, ct)) { Debug.Phase = "SlotSeq"; return; }
 
         if (GCDHelper.CanUseGCD())
         {
@@ -140,12 +171,12 @@ public sealed partial class AIRunner
             }
 
             Debug.Phase = "GCD";
-            await _slotExecutor.ResolveSlots(bd, 1, rotationPaused);
+            await _slotExecutor.ResolveSlots(bd, 1, rotationPaused, ct);
         }
         else if (bd.AbilityCount < bd.CurrGcdAbilityCount)
         {
             Debug.Phase = "OGCD";
-            await _slotExecutor.ResolveSlots(bd, 2, rotationPaused);
+            await _slotExecutor.ResolveSlots(bd, 2, rotationPaused, ct);
         }
         else
             Debug.Phase = "Wait";
@@ -157,8 +188,9 @@ public sealed partial class AIRunner
     /// <summary>执行轴/辅助轴是否请求暂停 ACR 输出（每帧由轴 output 的 PauseAcr 设置；ResumeAcr 即停止设置）</summary>
     internal bool IsAxisPaused => _execOutput?.PauseAcr == true || _assistOutput?.PauseAcr == true;
 
-    private void PushCombatSources()
+    private void PushCombatSources(CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (!Data.Combat.InCombat) return;
 
         // _execOutput/_assistOutput 已在 Refresh() 中产出（脱离 ConditionFlag 门控）
@@ -166,21 +198,33 @@ public sealed partial class AIRunner
         {
             UpdateFactAxis();
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             DService.Instance().Log.Error($"[PushCombatSources] {ex}");
         }
 
-        PushAxisSpell(_execOutput?.ForceSpell, "ExecAxis");
-        PushAxisSpell(_assistOutput?.ForceSpell, "AssistAxis");
+        ct.ThrowIfCancellationRequested();
+        PushAxisSpell(_execOutput?.ForceSpell, "ExecAxis", ct);
+        PushAxisSpell(_assistOutput?.ForceSpell, "AssistAxis", ct);
     }
 
-    private void PushAxisSpell(Spell? spell, string source)
+    private void PushAxisSpell(Spell? spell, string source, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (spell == null) return;
         var slot = new Slot { Source = source };
         slot.Add(spell);
-        if (CurrentRotation?.CanUseHighPrioritySlotCheck?.Invoke(slot) < 0) return;
+        var canUseHighPrioritySlotCheck = CurrentRotation?.CanUseHighPrioritySlotCheck;
+        if (canUseHighPrioritySlotCheck != null)
+        {
+            var check = canUseHighPrioritySlotCheck(slot);
+            ct.ThrowIfCancellationRequested();
+            if (check < 0) return;
+        }
 
         if (!spell.IsAbility())
             BattleData.HighPrioritySlots_GCD.Enqueue(slot);
