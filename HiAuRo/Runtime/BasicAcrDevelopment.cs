@@ -68,21 +68,14 @@ internal static class BasicAcrDevelopment
         if (!pendingInitialLoad)
             return;
 
-        var isDataReady = HiAuRo.Data.IsReady;
-        if (!isDataReady)
-            return;
-
         var initializationTask = helperInitializationTask;
         if (initializationTask?.IsCompleted != true)
             return;
 
         if (!ShouldRunPendingInitialLoad(
                 pendingInitialLoad,
-                isDataReady,
                 initializationTask.IsCompleted,
-                CombatContext.CurrentState,
-                DService.Instance().Condition.IsBetweenAreas,
-                ACRLifecycle.IsLoadingRotation))
+                CanReloadNow()))
             return;
 
         pendingInitialLoad = false;
@@ -94,10 +87,7 @@ internal static class BasicAcrDevelopment
         var pluginConfig = config
             ?? throw new InvalidOperationException("基础 ACR 开发管理器尚未初始化");
 
-        if (!IsReloadAllowed(
-                CombatContext.CurrentState,
-                DService.Instance().Condition.IsBetweenAreas,
-                ACRLifecycle.IsLoadingRotation))
+        if (!CanReloadNow())
         {
             PrintError("基础 ACR 开关已阻止：请在脱战、非切图且 ACR 未加载时重试");
             return false;
@@ -157,18 +147,11 @@ internal static class BasicAcrDevelopment
         if (pluginConfig?.BasicAcrScriptEnabled != true)
             return false;
 
-        if (!HiAuRo.Data.IsReady)
+        if (!CanReloadNow())
         {
-            PrintError("基础 ACR 重载已阻止：游戏数据尚未加载完成");
-            return false;
-        }
-
-        if (!IsReloadAllowed(
-                CombatContext.CurrentState,
-                DService.Instance().Condition.IsBetweenAreas,
-                ACRLifecycle.IsLoadingRotation))
-        {
-            PrintError("基础 ACR 重载已阻止：请在脱战、非切图且 ACR 未加载时重试");
+            PrintError(HiAuRo.Data.IsReady
+                ? "基础 ACR 重载已阻止：请在脱战、非切图且 ACR 未加载时重试"
+                : "基础 ACR 重载已阻止：游戏数据尚未加载完成");
             return false;
         }
 
@@ -279,17 +262,28 @@ internal static class BasicAcrDevelopment
         && !isBetweenAreas
         && !isLoadingRotation;
 
+    internal static bool CanReloadNow()
+    {
+        if (!HiAuRo.Data.IsReady)
+            return false;
+
+        var condition = DService.Instance().Condition;
+        if (condition[ConditionFlag.InCombat])
+            return false;
+
+        return IsReloadAllowed(
+            CombatContext.CurrentState,
+            condition.IsBetweenAreas,
+            ACRLifecycle.IsLoadingRotation);
+    }
+
     internal static bool ShouldRunPendingInitialLoad(
         bool isPending,
-        bool isDataReady,
         bool isHelperInitializationCompleted,
-        CombatContext.State state,
-        bool isBetweenAreas,
-        bool isLoadingRotation) =>
+        bool canReloadNow) =>
         isPending
-        && isDataReady
         && isHelperInitializationCompleted
-        && IsReloadAllowed(state, isBetweenAreas, isLoadingRotation);
+        && canReloadNow;
 
     internal static BasicAcrCompilation TransferCandidateOwnership(
         ref BasicAcrCompilation? candidate)
