@@ -25,22 +25,27 @@ public static class HelperUpdater
 
     private static string LocalDevMarkerPath => Path.Combine(StoreDir, LocalDevMarkerName);
 
-    private static AssemblyLoadContext? _alc;
-    private static Assembly? _helperAsm;
-    private static byte[]? _cachedDllBytes;
+    private static HelperAssemblySnapshot? _helperSnapshot;
+
+    internal sealed record HelperAssemblySnapshot(
+        AssemblyLoadContext LoadContext,
+        Assembly Assembly,
+        byte[] AssemblyBytes);
 
     /// <summary>Helper DLL 是否已加载</summary>
     public static bool Loaded { get; private set; }
 
     /// <summary>HelperUpdater 已加载的 HiAuRo.Helper 程序集（供 ACRLoader 共享，避免 ALC 隔离）</summary>
-    public static Assembly? HelperAssembly => _helperAsm;
+    public static Assembly? HelperAssembly => HelperSnapshot?.Assembly;
 
-    internal static byte[]? HelperAssemblyBytes => _cachedDllBytes;
+    internal static byte[]? HelperAssemblyBytes => HelperSnapshot?.AssemblyBytes;
+
+    internal static HelperAssemblySnapshot? HelperSnapshot => Volatile.Read(ref _helperSnapshot);
 
     /// <summary>尝试从本地缓存同步加载 Helper DLL（供 ACRLoader 时序竞争回退）</summary>
     public static bool TryLoadLocalSync()
     {
-        if (_helperAsm != null) return true;
+        if (HelperAssembly != null) return true;
 
         var localDll = Path.Combine(StoreDir, DllName);
         if (!File.Exists(localDll)) return false;
@@ -171,15 +176,26 @@ public static class HelperUpdater
     {
         if (!File.Exists(dllPath)) return;
 
-        // 读入内存后立即释放文件句柄，避免下次更新时 DLL 被占用
-        _cachedDllBytes = File.ReadAllBytes(dllPath);
+        var assemblyBytes = File.ReadAllBytes(dllPath);
+        var loadContext = new AssemblyLoadContext("HiAuRo.Helper", isCollectible: true);
+        loadContext.Resolving += ResolveHelperDependency;
 
-        _alc?.Unload();
-        _alc = new AssemblyLoadContext("HiAuRo.Helper", isCollectible: true);
-        _alc.Resolving += ResolveHelperDependency;
+        Assembly assembly;
+        try
+        {
+            using var ms = new MemoryStream(assemblyBytes, writable: false);
+            assembly = loadContext.LoadFromStream(ms);
+        }
+        catch
+        {
+            loadContext.Unload();
+            throw;
+        }
 
-        using var ms = new MemoryStream(_cachedDllBytes, writable: false);
-        _helperAsm = _alc.LoadFromStream(ms);
+        var previousSnapshot = Interlocked.Exchange(
+            ref _helperSnapshot,
+            new HelperAssemblySnapshot(loadContext, assembly, assemblyBytes));
         Loaded = true;
+        previousSnapshot?.LoadContext.Unload();
     }
 }

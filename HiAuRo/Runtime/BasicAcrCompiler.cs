@@ -24,6 +24,7 @@ internal sealed record BasicAcrDiagnostic(
 internal sealed class BasicAcrCompilation : IDisposable
 {
     private AssemblyLoadContext? _loadContext;
+    private BasicAcrEntry? _entry;
 
     internal BasicAcrCompilation(
         AssemblyLoadContext loadContext,
@@ -32,12 +33,13 @@ internal sealed class BasicAcrCompilation : IDisposable
         string scriptTypeName)
     {
         _loadContext = loadContext;
-        Entry = entry;
+        _entry = entry;
         TargetJob = targetJob;
         ScriptTypeName = scriptTypeName;
     }
 
-    internal BasicAcrEntry Entry { get; }
+    internal BasicAcrEntry Entry => Volatile.Read(ref _entry)
+        ?? throw new ObjectDisposedException(nameof(BasicAcrCompilation));
 
     internal Jobs TargetJob { get; }
 
@@ -45,6 +47,7 @@ internal sealed class BasicAcrCompilation : IDisposable
 
     public void Dispose()
     {
+        Interlocked.Exchange(ref _entry, null);
         var loadContext = Interlocked.Exchange(ref _loadContext, null);
         loadContext?.Unload();
     }
@@ -108,6 +111,8 @@ internal static class BasicAcrCompiler
 
         try
         {
+            var helperSnapshot = HelperUpdater.HelperSnapshot;
+            var hostAssemblies = GetHostAssemblies(helperSnapshot);
             var syntaxTree = CSharpSyntaxTree.ParseText(
                 source,
                 new CSharpParseOptions(LanguageVersion.Latest),
@@ -115,7 +120,7 @@ internal static class BasicAcrCompiler
             var compilation = CSharpCompilation.Create(
                 $"HiAuRo.BasicAcr.{Guid.NewGuid():N}",
                 [syntaxTree],
-                GetReferences(hostDllDir),
+                GetReferences(hostDllDir, hostAssemblies, helperSnapshot),
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                     .WithOptimizationLevel(OptimizationLevel.Release));
 
@@ -140,7 +145,8 @@ internal static class BasicAcrCompiler
             candidateContext = new AssemblyLoadContext(
                 $"HiAuRo.BasicAcr.{Guid.NewGuid():N}",
                 isCollectible: true);
-            candidateContext.Resolving += ResolveRuntimeAssembly;
+            candidateContext.Resolving += (_, requestedName) =>
+                ResolveRuntimeAssembly(requestedName, hostAssemblies, helperSnapshot);
             var assembly = candidateContext.LoadFromStream(assemblyStream);
 
             var scriptTypes = assembly.GetExportedTypes()
@@ -187,27 +193,65 @@ internal static class BasicAcrCompiler
         }
     }
 
-    private static IReadOnlyList<MetadataReference> GetReferences(string hostDllDir)
+    private static IReadOnlyDictionary<string, Assembly> GetHostAssemblies(
+        HelperUpdater.HelperAssemblySnapshot? helperSnapshot)
+    {
+        var assemblies = new Dictionary<string, Assembly>(StringComparer.OrdinalIgnoreCase);
+
+        if (helperSnapshot is not null)
+            TryAddHostAssembly(assemblies, helperSnapshot.Assembly);
+
+        TryAddHostAssembly(assemblies, typeof(IBasicAcrScript).Assembly);
+        TryAddHostAssembly(assemblies, typeof(OmenTools.OmenService.GameState).Assembly);
+        TryAddHostAssembly(assemblies, typeof(object).Assembly);
+        TryAddHostAssembly(assemblies, typeof(List<>).Assembly);
+        TryAddHostAssembly(assemblies, typeof(Enumerable).Assembly);
+
+        foreach (var assembly in AssemblyLoadContext.Default.Assemblies)
+            TryAddHostAssembly(assemblies, assembly);
+
+        var hostContext = AssemblyLoadContext.GetLoadContext(typeof(BasicAcrCompiler).Assembly);
+        if (hostContext is not null && !ReferenceEquals(hostContext, AssemblyLoadContext.Default))
+        {
+            foreach (var assembly in hostContext.Assemblies)
+                TryAddHostAssembly(assemblies, assembly);
+        }
+
+        return assemblies;
+    }
+
+    private static void TryAddHostAssembly(
+        IDictionary<string, Assembly> assemblies,
+        Assembly assembly)
+    {
+        if (assembly.IsDynamic)
+            return;
+
+        var name = assembly.GetName().Name;
+        if (string.IsNullOrEmpty(name) || !IsAllowedAssembly(name) || assemblies.ContainsKey(name))
+            return;
+
+        assemblies[name] = assembly;
+    }
+
+    private static IReadOnlyList<MetadataReference> GetReferences(
+        string hostDllDir,
+        IReadOnlyDictionary<string, Assembly> hostAssemblies,
+        HelperUpdater.HelperAssemblySnapshot? helperSnapshot)
     {
         var references = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
 
-        if (HelperUpdater.HelperAssemblyBytes is { } helperBytes)
+        if (helperSnapshot is not null)
         {
             try
             {
-                references["HiAuRo.Helper"] = MetadataReference.CreateFromImage(helperBytes);
+                references["HiAuRo.Helper"] = MetadataReference.CreateFromImage(helperSnapshot.AssemblyBytes);
             }
             catch { }
         }
 
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        foreach (var assembly in hostAssemblies.Values)
             TryAddAssemblyReference(references, assembly, hostDllDir);
-
-        TryAddAssemblyReference(references, typeof(object).Assembly, hostDllDir);
-        TryAddAssemblyReference(references, typeof(List<>).Assembly, hostDllDir);
-        TryAddAssemblyReference(references, typeof(Enumerable).Assembly, hostDllDir);
-        TryAddAssemblyReference(references, typeof(IBasicAcrScript).Assembly, hostDllDir);
-        TryAddAssemblyReference(references, typeof(OmenTools.OmenService.GameState).Assembly, hostDllDir);
 
         return references.Values.ToArray();
     }
@@ -249,22 +293,19 @@ internal static class BasicAcrCompiler
         name is "HiAuRo" or "HiAuRo.Helper" ||
         AllowedAssemblyPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal));
 
-    private static Assembly? ResolveRuntimeAssembly(AssemblyLoadContext context, AssemblyName requestedName)
+    private static Assembly? ResolveRuntimeAssembly(
+        AssemblyName requestedName,
+        IReadOnlyDictionary<string, Assembly> hostAssemblies,
+        HelperUpdater.HelperAssemblySnapshot? helperSnapshot)
     {
         var name = requestedName.Name;
         if (string.IsNullOrEmpty(name) || !IsAllowedAssembly(name))
             return null;
 
         if (name == "HiAuRo.Helper")
-            return HelperUpdater.HelperAssembly;
+            return helperSnapshot?.Assembly;
 
-        var defaultAssembly = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(assembly =>
-            assembly.GetName().Name == name);
-        if (defaultAssembly is not null)
-            return defaultAssembly;
-
-        var hostContext = AssemblyLoadContext.GetLoadContext(typeof(BasicAcrCompiler).Assembly);
-        return hostContext?.Assemblies.FirstOrDefault(assembly => assembly.GetName().Name == name);
+        return hostAssemblies.TryGetValue(name, out var assembly) ? assembly : null;
     }
 
     private static BasicAcrDiagnostic ToBasicDiagnostic(Diagnostic diagnostic)
