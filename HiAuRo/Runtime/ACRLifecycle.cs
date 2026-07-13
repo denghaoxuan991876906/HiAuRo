@@ -126,25 +126,48 @@ public static class ACRLifecycle
         return entry.Entry.TargetJobs.Any(job => (uint)job == jobId);
     }
 
+    internal static uint GetDevelopmentOverrideJobId(
+        bool isReady,
+        uint readyJobId,
+        uint currentJobId,
+        uint lastJobId)
+    {
+        if (isReady) return readyJobId;
+        return currentJobId != 0 ? currentJobId : lastJobId;
+    }
+
     internal static void SetDevelopmentOverride(bool enabled, AcrRegistryEntry? entry)
     {
         var isReady = Data.IsReady;
-        var currentJob = isReady ? Data.Me.ClassJob : 0;
+        var readyJob = isReady ? Data.Me.ClassJob : 0;
+        var currentJob = GetDevelopmentOverrideJobId(isReady, readyJob, CurrentJobId, _lastJob);
         var oldApplies = DevelopmentOverrideAppliesTo(
             currentJob,
             _developmentOverrideEnabled,
             _developmentRegistryEntry);
+        var newApplies = DevelopmentOverrideAppliesTo(currentJob, enabled, entry);
 
         _developmentOverrideEnabled = enabled;
         _developmentRegistryEntry = entry;
 
-        if (!isReady) return;
-
-        var newApplies = DevelopmentOverrideAppliesTo(currentJob, enabled, entry);
         if (!oldApplies && !newApplies) return;
 
         _lastJob = 0;
-        CheckJobSwitch();
+        try
+        {
+            if (isReady)
+                CheckJobSwitch();
+            else
+                UnloadRotation();
+        }
+        catch
+        {
+            _developmentOverrideEnabled = enabled;
+            _developmentRegistryEntry = null;
+            _lastJob = 0;
+            UnloadRotation();
+            throw;
+        }
     }
 
     /// <summary>初始化</summary>
