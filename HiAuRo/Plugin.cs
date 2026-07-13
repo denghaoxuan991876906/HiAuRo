@@ -57,7 +57,8 @@ public partial class Plugin : IDalamudPlugin
             LogManager.Instance.Init(_pluginInterface.ConfigDirectory.FullName);
             Theme.Mode = _config.ImGuiThemeMode == ImGuiThemeMode.Dark ? Theme.ThemeMode.Dark : Theme.ThemeMode.Light;
             IconHelper.Init();
-            SafeFire(HelperUpdater.CheckAndUpdateAsync().ContinueWith(t =>
+            var helperInitializationTask = HelperUpdater.CheckAndUpdateAsync();
+            SafeFire(helperInitializationTask.ContinueWith(t =>
             {
                 DService.Instance()?.Log.Information($"[Lifecycle] HelperUpdater 完成, Loaded={HelperUpdater.Loaded}");
             }), "HelperUpdater");
@@ -146,7 +147,8 @@ public partial class Plugin : IDalamudPlugin
             ACRLoader.LoadAll(_pluginInterface.ConfigDirectory.FullName);
             BasicAcrDevelopment.Init(_config,
                 _pluginInterface.ConfigDirectory.FullName,
-                _pluginInterface.AssemblyLocation.Directory?.FullName ?? ".");
+                _pluginInterface.AssemblyLocation.Directory?.FullName ?? ".",
+                helperInitializationTask);
             DService.Instance().Log.Information("[ACR] 扫描完成, 等待职业切换触发加载");
             ACRLifecycle.ForceRecheck(); // RuntimeCore 可能先于 LoadAll 跑了第一帧，强制重检
 

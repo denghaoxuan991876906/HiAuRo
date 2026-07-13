@@ -18,6 +18,8 @@ internal static class BasicAcrDevelopment
     private static string configDir = string.Empty;
     private static string hostDllDir = string.Empty;
     private static BasicAcrCompilation? current;
+    private static Task? helperInitializationTask;
+    private static bool pendingInitialLoad;
 
     internal static BasicAcrDevelopmentState State { get; private set; } = BasicAcrDevelopmentState.Disabled;
     internal static IReadOnlyList<BasicAcrDiagnostic> Diagnostics { get; private set; } = [];
@@ -26,11 +28,17 @@ internal static class BasicAcrDevelopment
     internal static Jobs? TargetJob => current?.TargetJob;
     internal static DateTimeOffset? LoadedAt { get; private set; }
 
-    internal static void Init(PluginConfig pluginConfig, string pluginConfigDir, string pluginHostDllDir)
+    internal static void Init(
+        PluginConfig pluginConfig,
+        string pluginConfigDir,
+        string pluginHostDllDir,
+        Task initializationTask)
     {
         config = pluginConfig;
         configDir = pluginConfigDir;
         hostDllDir = pluginHostDllDir;
+        helperInitializationTask = initializationTask;
+        pendingInitialLoad = false;
         Diagnostics = [];
         LastError = null;
         LoadedAt = null;
@@ -41,7 +49,6 @@ internal static class BasicAcrDevelopment
             return;
         }
 
-        State = BasicAcrDevelopmentState.NotLoaded;
         try
         {
             ACRLifecycle.SetDevelopmentOverride(true, null);
@@ -52,21 +59,46 @@ internal static class BasicAcrDevelopment
             return;
         }
 
-        try
-        {
-            Reload(initialLoad: true);
-        }
-        catch (Exception ex)
-        {
-            FailClosed($"基础 ACR 初始加载失败: {ex.GetBaseException().Message}");
-        }
+        State = BasicAcrDevelopmentState.NotLoaded;
+        pendingInitialLoad = true;
     }
 
-    internal static void SetEnabled(bool enabled)
+    internal static void Update()
+    {
+        if (!pendingInitialLoad)
+            return;
+
+        var initializationTask = helperInitializationTask;
+        if (initializationTask?.IsCompleted != true)
+            return;
+
+        if (!ShouldRunPendingInitialLoad(
+                pendingInitialLoad,
+                initializationTask.IsCompleted,
+                CombatContext.CurrentState,
+                DService.Instance().Condition.IsBetweenAreas,
+                ACRLifecycle.IsLoadingRotation))
+            return;
+
+        pendingInitialLoad = false;
+        ReloadAfterGate();
+    }
+
+    internal static bool SetEnabled(bool enabled)
     {
         var pluginConfig = config
             ?? throw new InvalidOperationException("基础 ACR 开发管理器尚未初始化");
 
+        if (!IsReloadAllowed(
+                CombatContext.CurrentState,
+                DService.Instance().Condition.IsBetweenAreas,
+                ACRLifecycle.IsLoadingRotation))
+        {
+            PrintError("基础 ACR 开关已阻止：请在脱战、非切图且 ACR 未加载时重试");
+            return false;
+        }
+
+        pendingInitialLoad = false;
         Diagnostics = [];
         LastError = null;
         LoadedAt = null;
@@ -81,14 +113,14 @@ internal static class BasicAcrDevelopment
             catch (Exception ex)
             {
                 FailClosed($"启用基础 ACR 开发模式失败: {ex.GetBaseException().Message}");
-                return;
+                return true;
             }
 
             var old = current;
             current = null;
             DisposeCompilation(old, "重置旧脚本");
             State = BasicAcrDevelopmentState.NotLoaded;
-            return;
+            return true;
         }
 
         string? switchError = null;
@@ -110,22 +142,46 @@ internal static class BasicAcrDevelopment
             State = BasicAcrDevelopmentState.Disabled;
             LastError = switchError;
         }
+
+        return true;
     }
 
-    internal static bool Reload(bool initialLoad = false)
+    internal static bool Reload()
     {
         var pluginConfig = config;
         if (pluginConfig?.BasicAcrScriptEnabled != true)
             return false;
 
-        if (!initialLoad && !IsReloadAllowed(
+        if (!IsReloadAllowed(
                 CombatContext.CurrentState,
                 DService.Instance().Condition.IsBetweenAreas,
                 ACRLifecycle.IsLoadingRotation))
         {
-            Hi.PrintError("基础 ACR 重载已阻止：请在脱战、非切图且 ACR 未加载时重试");
+            PrintError("基础 ACR 重载已阻止：请在脱战、非切图且 ACR 未加载时重试");
             return false;
         }
+
+        pendingInitialLoad = false;
+        return ReloadAfterGate();
+    }
+
+    private static bool ReloadAfterGate()
+    {
+        try
+        {
+            return ReloadCore();
+        }
+        catch (Exception ex)
+        {
+            return FailClosed($"基础 ACR 重载失败: {ex.GetBaseException().Message}");
+        }
+    }
+
+    private static bool ReloadCore()
+    {
+        var pluginConfig = config;
+        if (pluginConfig?.BasicAcrScriptEnabled != true)
+            return false;
 
         Diagnostics = [];
         LastError = null;
@@ -156,16 +212,23 @@ internal static class BasicAcrDevelopment
         using var result = BasicAcrCompiler.Compile(source, scriptPath, hostDllDir);
         Diagnostics = result.Diagnostics.ToArray();
         if (!result.Success)
-            return FailClosed(result.ErrorMessage ?? "基础 ACR 编译失败");
+        {
+            var message = result.ErrorMessage ?? "基础 ACR 编译失败";
+            if (Diagnostics.Any(diagnostic =>
+                    string.Equals(diagnostic.ToString(), message, StringComparison.Ordinal)))
+                message = "基础 ACR 编译失败";
+            return FailClosed(message);
+        }
 
         BasicAcrCompilation? candidate = result.TakeCompilation();
         if (candidate is null)
             return FailClosed("基础 ACR 编译结果为空");
 
         var old = current;
+        var loadedJob = Jobs.None;
         try
         {
-            var candidateTargetJob = candidate.TargetJob;
+            loadedJob = candidate.TargetJob;
             var registry = new ACRLifecycle.AcrRegistryEntry(
                 InstallKey,
                 $"Basic ACR: {Path.GetFileNameWithoutExtension(scriptPath)}",
@@ -183,8 +246,6 @@ internal static class BasicAcrDevelopment
             State = BasicAcrDevelopmentState.Ready;
             LastError = null;
             LoadedAt = DateTimeOffset.Now;
-            Hi.Print($"基础 ACR 已加载: {Path.GetFileName(scriptPath)} ({candidateTargetJob})");
-            return true;
         }
         catch (Exception ex)
         {
@@ -194,6 +255,9 @@ internal static class BasicAcrDevelopment
         {
             DisposeCompilation(candidate, "释放未应用的候选脚本");
         }
+
+        PrintSuccess(scriptPath, loadedJob);
+        return true;
     }
 
     internal static bool IsReloadAllowed(
@@ -203,6 +267,16 @@ internal static class BasicAcrDevelopment
         state is not CombatContext.State.InCombat and not CombatContext.State.Zoning
         && !isBetweenAreas
         && !isLoadingRotation;
+
+    internal static bool ShouldRunPendingInitialLoad(
+        bool isPending,
+        bool isHelperInitializationCompleted,
+        CombatContext.State state,
+        bool isBetweenAreas,
+        bool isLoadingRotation) =>
+        isPending
+        && isHelperInitializationCompleted
+        && IsReloadAllowed(state, isBetweenAreas, isLoadingRotation);
 
     internal static BasicAcrCompilation TransferCandidateOwnership(
         ref BasicAcrCompilation? candidate)
@@ -215,6 +289,7 @@ internal static class BasicAcrDevelopment
 
     internal static bool FailClosed(string message)
     {
+        pendingInitialLoad = false;
         try
         {
             ACRLifecycle.SetDevelopmentOverride(true, null);
@@ -232,16 +307,21 @@ internal static class BasicAcrDevelopment
         LastError = message;
         LoadedAt = null;
 
-        var details = Diagnostics.Count == 0
-            ? message
-            : $"{message}{Environment.NewLine}{string.Join(Environment.NewLine, Diagnostics)}";
-        LogError(details);
+        LogError(message);
+        foreach (var diagnostic in Diagnostics)
+        {
+            var diagnosticText = diagnostic.ToString();
+            if (!string.Equals(diagnosticText, message, StringComparison.Ordinal))
+                LogError(diagnosticText);
+        }
         PrintError($"基础 ACR 已停止: {message}");
         return false;
     }
 
     internal static void Shutdown()
     {
+        pendingInitialLoad = false;
+        helperInitializationTask = null;
         var old = current;
         current = null;
         DisposeCompilation(old, "关闭开发管理器");
@@ -299,6 +379,18 @@ internal static class BasicAcrDevelopment
         catch (Exception ex)
         {
             LogWarning($"输出错误提示失败: {ex.GetBaseException().Message}");
+        }
+    }
+
+    private static void PrintSuccess(string scriptPath, Jobs targetJob)
+    {
+        try
+        {
+            Hi.Print($"基础 ACR 已加载: {Path.GetFileName(scriptPath)} ({targetJob})");
+        }
+        catch (Exception ex)
+        {
+            LogWarning($"输出成功提示失败: {ex.GetBaseException().Message}");
         }
     }
 }
