@@ -165,9 +165,37 @@ public static class ACRLifecycle
             _developmentOverrideEnabled = enabled;
             _developmentRegistryEntry = null;
             _lastJob = 0;
-            UnloadRotation();
+            try
+            {
+                UnloadRotation();
+            }
+            catch (Exception cleanupEx)
+            {
+                LogDevelopmentCleanupFailure("卸载 Rotation", cleanupEx);
+                try { Runner.Unload(); }
+                catch (Exception runnerCleanupEx)
+                {
+                    LogDevelopmentCleanupFailure("卸载 Runner", runnerCleanupEx);
+                }
+            }
+            finally
+            {
+                _developmentOverrideEnabled = enabled;
+                _developmentRegistryEntry = null;
+                _lastJob = 0;
+            }
             throw;
         }
+    }
+
+    private static void LogDevelopmentCleanupFailure(string operation, Exception ex)
+    {
+        try
+        {
+            if (DService.IsInitialized)
+                DService.Instance().Log.Warning($"[ACR] 开发覆盖失败清理异常 ({operation}): {ex.Message}");
+        }
+        catch { }
     }
 
     /// <summary>初始化</summary>

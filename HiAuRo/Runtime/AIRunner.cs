@@ -25,7 +25,9 @@ public sealed partial class AIRunner
     internal SlotExecutor SlotExecutor => _slotExecutor;
 
     private readonly SlotExecutor _slotExecutor;
+    private readonly List<IHotkeyEventHandler> _registeredHotkeyHandlers = [];
     private bool _loaded;
+    private bool _enteredRotation;
 
     /// <summary>当前战斗已持续的毫秒数（进战清零、脱战清零）</summary>
     public int BattleTimeMs { get; internal set; }
@@ -82,6 +84,8 @@ public sealed partial class AIRunner
             GameEventHook.Instance.OnEventFired += OnGameEvent;
             FactTimeline.Instance.PhaseChanged += OnPhaseChanged;
 
+            _registeredHotkeyHandlers.AddRange(registeredHotkeyHandlers);
+            _enteredRotation = enteredRotation;
             _loaded = true;
         }
         catch
@@ -96,29 +100,75 @@ public sealed partial class AIRunner
         IReadOnlyList<IHotkeyEventHandler> registeredHotkeyHandlers,
         bool enteredRotation)
     {
-        TryLoadRollback(() => GameEventHook.Instance.OnEventFired -= OnGameEvent, "注销游戏事件");
-        TryLoadRollback(() => FactTimeline.Instance.PhaseChanged -= OnPhaseChanged, "注销阶段事件");
+        DetachLoadState();
+        CleanupDetachedLoad(entry, registeredHotkeyHandlers, enteredRotation);
+    }
 
-        if (enteredRotation)
-            TryLoadRollback(entry.OnExitRotation, "退出 Rotation");
+    public void Unload()
+    {
+        var entry = CurrentEntry;
+        var rotation = CurrentRotation;
+        var enteredRotation = _enteredRotation;
+        var hasState = _loaded || entry != null || rotation != null || AiLoop != null
+            || enteredRotation || _registeredHotkeyHandlers.Count > 0;
+        if (!hasState) return;
 
-        foreach (var handler in registeredHotkeyHandlers)
-            TryLoadRollback(() => HotkeyHelper.UnregisterHandler(handler), "注销热键处理器");
+        var registeredHotkeyHandlers = SnapshotRegisteredHotkeyHandlers();
+        DetachLoadState();
+        CleanupDetachedLoad(entry, registeredHotkeyHandlers, enteredRotation);
+    }
 
-        TryLoadRollback(entry.Dispose, "释放 ACR 入口");
-        TryLoadRollback(BattleData.Reset, "重置 BattleData");
-        TryLoadRollback(() => CountDownHandler.Instance.Reset(), "重置倒计时");
-        TryLoadRollback(SpellQueue.Clear, "清空技能队列");
-        TryLoadRollback(() => Coroutine.Instance.Clear(), "清空协程");
+    private IHotkeyEventHandler[] SnapshotRegisteredHotkeyHandlers()
+    {
+        try
+        {
+            return [.. _registeredHotkeyHandlers];
+        }
+        catch (Exception ex)
+        {
+            LogCleanupFailure("快照热键处理器", ex);
+            return [];
+        }
+    }
 
+    private void DetachLoadState()
+    {
+        _loaded = false;
+        _enteredRotation = false;
+        _registeredHotkeyHandlers.Clear();
         AiLoop = null;
         CurrentRotation = null;
         CurrentEntry = null;
-        _loaded = false;
+    }
+
+    private void CleanupDetachedLoad(
+        IRotationEntry? entry,
+        IEnumerable<IHotkeyEventHandler> registeredHotkeyHandlers,
+        bool enteredRotation)
+    {
+        TryCleanupStep(() => GameEventHook.Instance.OnEventFired -= OnGameEvent, "注销游戏事件");
+        TryCleanupStep(() => FactTimeline.Instance.PhaseChanged -= OnPhaseChanged, "注销阶段事件");
+
+        if (enteredRotation && entry != null)
+            TryCleanupStep(entry.OnExitRotation, "退出 Rotation");
+
+        TryCleanupStep(() =>
+        {
+            foreach (var handler in registeredHotkeyHandlers)
+                TryCleanupStep(() => HotkeyHelper.UnregisterHandler(handler), "注销热键处理器");
+        }, "枚举热键处理器");
+
+        if (entry != null)
+            TryCleanupStep(entry.Dispose, "释放 ACR 入口");
+
+        TryCleanupStep(BattleData.Reset, "重置 BattleData");
+        TryCleanupStep(() => CountDownHandler.Instance.Reset(), "重置倒计时");
+        TryCleanupStep(SpellQueue.Clear, "清空技能队列");
+        TryCleanupStep(() => Coroutine.Instance.Clear(), "清空协程");
         BattleTimeMs = 0;
     }
 
-    private static void TryLoadRollback(Action action, string operation)
+    private static void TryCleanupStep(Action action, string operation)
     {
         try
         {
@@ -126,42 +176,18 @@ public sealed partial class AIRunner
         }
         catch (Exception ex)
         {
-            try
-            {
-                if (DService.IsInitialized)
-                    DService.Instance().Log.Warning($"[AIRunner] ACR 加载回滚失败 ({operation}): {ex.Message}");
-            }
-            catch { }
+            LogCleanupFailure(operation, ex);
         }
     }
 
-    public void Unload()
+    private static void LogCleanupFailure(string operation, Exception ex)
     {
-        if (!_loaded) return;
-
-        GameEventHook.Instance.OnEventFired -= OnGameEvent;
-        FactTimeline.Instance.PhaseChanged -= OnPhaseChanged;
-
-        CurrentEntry?.OnExitRotation();
-
-        if (CurrentRotation?.HotkeyEventHandlers != null)
+        try
         {
-            foreach (var handler in CurrentRotation.HotkeyEventHandlers)
-                HotkeyHelper.UnregisterHandler(handler);
+            if (DService.IsInitialized)
+                DService.Instance().Log.Warning($"[AIRunner] ACR 清理失败 ({operation}): {ex.Message}");
         }
-
-        CurrentEntry?.Dispose();
-
-        BattleData.Reset();
-        CountDownHandler.Instance.Reset();
-        SpellQueue.Clear();
-        Coroutine.Instance.Clear();
-
-        AiLoop = null;
-        CurrentRotation = null;
-        CurrentEntry = null;
-        _loaded = false;
-        BattleTimeMs = 0;
+        catch { }
     }
 
     private float _lastCountRemaining;
