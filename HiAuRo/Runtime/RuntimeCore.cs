@@ -49,6 +49,7 @@ public static class RuntimeCore
 
     private static void OnTick(Dalamud.Plugin.Services.IFramework _)
     {
+        BasicAcrDevelopment.Update();
 #if DEBUG
         long _totalStart = System.Diagnostics.Stopwatch.GetTimestamp();
         long _pt0 = _totalStart;

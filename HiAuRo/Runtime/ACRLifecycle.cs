@@ -226,7 +226,6 @@ public static class ACRLifecycle
     /// <summary>每帧由 RuntimeCore 调用</summary>
     public static void Update()
     {
-        BasicAcrDevelopment.Update();
         CheckPendingReload();
         CheckJobSwitch();
         CheckAutoSave();
