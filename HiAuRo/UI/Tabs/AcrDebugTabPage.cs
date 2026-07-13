@@ -82,7 +82,14 @@ public sealed class AcrDebugTabPage : TabPageBase
             _saveConfig();
 
         var scriptPath = _config.BasicAcrScriptPath;
-        if (ComponentLibrary.InputText("basic_acr_development_source", "源码", ref scriptPath, 1024, 520f))
+        var availableWidth = Math.Max(0f, ImGui.GetContentRegionAvail().X);
+        var remainingWidth = Math.Max(0f,
+            availableWidth - ImGui.CalcTextSize("源码").X - ImGui.GetStyle().ItemSpacing.X);
+        const float minimumInputWidth = 120f;
+        var inputWidth = remainingWidth >= minimumInputWidth
+            ? Math.Clamp(remainingWidth, minimumInputWidth, Math.Min(520f, availableWidth))
+            : remainingWidth;
+        if (ComponentLibrary.InputText("basic_acr_development_source", "源码", ref scriptPath, 1024, inputWidth))
         {
             _config.BasicAcrScriptPath = scriptPath;
             _saveConfig();
@@ -107,7 +114,7 @@ public sealed class AcrDebugTabPage : TabPageBase
                 ComponentLibrary.StatusDot(true, "运行中", Theme.Colors.AccentGreen);
                 break;
             case BasicAcrDevelopmentState.Failed:
-                ComponentLibrary.StatusDot(true, "编译失败", Theme.Colors.AccentRed);
+                ComponentLibrary.StatusDot(true, "加载失败", Theme.Colors.AccentRed);
                 break;
         }
 
