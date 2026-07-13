@@ -35,6 +35,8 @@ public static class HelperUpdater
     /// <summary>HelperUpdater 已加载的 HiAuRo.Helper 程序集（供 ACRLoader 共享，避免 ALC 隔离）</summary>
     public static Assembly? HelperAssembly => _helperAsm;
 
+    internal static byte[]? HelperAssemblyBytes => _cachedDllBytes;
+
     /// <summary>尝试从本地缓存同步加载 Helper DLL（供 ACRLoader 时序竞争回退）</summary>
     public static bool TryLoadLocalSync()
     {

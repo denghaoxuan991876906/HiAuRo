@@ -16,3 +16,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("CountdownStartTests")]
 [assembly: InternalsVisibleTo("CountdownFlowTests")]
 [assembly: InternalsVisibleTo("AcrRuntimeChainTests")]
+[assembly: InternalsVisibleTo("BasicAcrDevelopmentTests")]
