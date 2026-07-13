@@ -144,6 +144,9 @@ public partial class Plugin : IDalamudPlugin
             DService.Instance().Log.Information("[ACR] 开始扫描外部 ACR...");
             ACRLifecycle.Init(_pluginInterface.ConfigDirectory.FullName);
             ACRLoader.LoadAll(_pluginInterface.ConfigDirectory.FullName);
+            BasicAcrDevelopment.Init(_config,
+                _pluginInterface.ConfigDirectory.FullName,
+                _pluginInterface.AssemblyLocation.Directory?.FullName ?? ".");
             DService.Instance().Log.Information("[ACR] 扫描完成, 等待职业切换触发加载");
             ACRLifecycle.ForceRecheck(); // RuntimeCore 可能先于 LoadAll 跑了第一帧，强制重检
 
@@ -238,6 +241,7 @@ public partial class Plugin : IDalamudPlugin
 
         // 先关 ACR（UnloadRotation 依赖 Plugin.Instance）
         ACRLifecycle.Shutdown();
+        BasicAcrDevelopment.Shutdown();
 
         // 注销 IPC
         try { DService.Instance().PI.GetIpcProvider<string, object>("HiAuRo.AddMovementDemand").UnregisterAction(); } catch { }

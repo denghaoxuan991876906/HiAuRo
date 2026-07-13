@@ -68,6 +68,10 @@ public sealed class PluginConfig : SettingsBase
     public bool DebugEnabled { get; set; }
     /// <summary>是否输出 ACR 运行时细粒度调试日志（SpellCast/Action/SlotExec/EventSystem）</summary>
     public bool AcrRuntimeDebugEnabled { get; set; }
+    /// <summary>是否启用基础 ACR 脚本开发模式</summary>
+    public bool BasicAcrScriptEnabled { get; set; }
+    /// <summary>基础 ACR 开发脚本的绝对 .cs 文件路径</summary>
+    public string BasicAcrScriptPath { get; set; } = "";
     /// <summary>上次使用的插件版本</summary>
     public string? LastSeenPluginVersion { get; set; }
     /// <summary>插件加载次数</summary>
