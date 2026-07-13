@@ -43,7 +43,7 @@ public sealed class MainWindow : Window
             new AcrInstalledTabPage(),
             new AcrSourcesTabPage(),
             new AcrListTabPage(_config, _saveConfig),
-            new AcrDebugTabPage(),
+            new AcrDebugTabPage(_config, _saveConfig),
             new TimelineTabPage(_config, _saveConfig),
             new CombatRecorderTabPage(_config, _saveConfig),
             new VfxTabPage(),
