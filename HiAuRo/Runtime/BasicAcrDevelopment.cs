@@ -68,12 +68,17 @@ internal static class BasicAcrDevelopment
         if (!pendingInitialLoad)
             return;
 
+        var isDataReady = HiAuRo.Data.IsReady;
+        if (!isDataReady)
+            return;
+
         var initializationTask = helperInitializationTask;
         if (initializationTask?.IsCompleted != true)
             return;
 
         if (!ShouldRunPendingInitialLoad(
                 pendingInitialLoad,
+                isDataReady,
                 initializationTask.IsCompleted,
                 CombatContext.CurrentState,
                 DService.Instance().Condition.IsBetweenAreas,
@@ -151,6 +156,12 @@ internal static class BasicAcrDevelopment
         var pluginConfig = config;
         if (pluginConfig?.BasicAcrScriptEnabled != true)
             return false;
+
+        if (!HiAuRo.Data.IsReady)
+        {
+            PrintError("基础 ACR 重载已阻止：游戏数据尚未加载完成");
+            return false;
+        }
 
         if (!IsReloadAllowed(
                 CombatContext.CurrentState,
@@ -270,11 +281,13 @@ internal static class BasicAcrDevelopment
 
     internal static bool ShouldRunPendingInitialLoad(
         bool isPending,
+        bool isDataReady,
         bool isHelperInitializationCompleted,
         CombatContext.State state,
         bool isBetweenAreas,
         bool isLoadingRotation) =>
         isPending
+        && isDataReady
         && isHelperInitializationCompleted
         && IsReloadAllowed(state, isBetweenAreas, isLoadingRotation);
 
