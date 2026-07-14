@@ -61,6 +61,7 @@ public static class ACRLifecycle
     private static string _configDir = string.Empty;
     private static volatile bool _pendingReload;
     private static uint _lastJob;
+    private static bool _preserveCombatProgressOnNextJobCheck;
 
     /// <summary>注册外部 ACR</summary>
     public static void RegisterExternal(uint jobId, AcrRegistryEntry registryEntry)
@@ -156,23 +157,27 @@ public static class ACRLifecycle
         try
         {
             if (isReady)
-                CheckJobSwitch();
+                CheckJobSwitch(preserveCombatProgress: true);
             else
-                UnloadRotation();
+            {
+                _preserveCombatProgressOnNextJobCheck = true;
+                UnloadRotation(preserveCombatProgress: true);
+            }
         }
         catch
         {
             _developmentOverrideEnabled = enabled;
             _developmentRegistryEntry = null;
             _lastJob = 0;
+            _preserveCombatProgressOnNextJobCheck = !Data.IsReady;
             try
             {
-                UnloadRotation();
+                UnloadRotation(preserveCombatProgress: true);
             }
             catch (Exception cleanupEx)
             {
                 LogDevelopmentCleanupFailure("卸载 Rotation", cleanupEx);
-                try { Runner.Unload(); }
+                try { Runner.Unload(preserveCombatProgress: true); }
                 catch (Exception runnerCleanupEx)
                 {
                     LogDevelopmentCleanupFailure("卸载 Runner", runnerCleanupEx);
@@ -209,6 +214,7 @@ public static class ACRLifecycle
     public static void Shutdown()
     {
         DynModuleWatcher.Stop();
+        _preserveCombatProgressOnNextJobCheck = false;
         UnloadRotation();
         _developmentOverrideEnabled = false;
         _developmentRegistryEntry = null;
@@ -266,12 +272,19 @@ public static class ACRLifecycle
             ACR.MainControlHelper.IsPaused, ACR.HotkeyHelper.GetAll(), ACR.QTHelper.GetAll());
     }
 
-    private static void CheckJobSwitch()
+    private static void CheckJobSwitch(bool preserveCombatProgress = false)
     {
-        if (!HiAuRo.Data.IsReady) return;
+        preserveCombatProgress |= _preserveCombatProgressOnNextJobCheck;
+        if (!HiAuRo.Data.IsReady)
+        {
+            _preserveCombatProgressOnNextJobCheck = preserveCombatProgress;
+            return;
+        }
+
+        _preserveCombatProgressOnNextJobCheck = false;
 
         var currentJob = Data.Me.ClassJob;
-        if (currentJob == _lastJob && currentJob != 0) return;
+        if (!preserveCombatProgress && currentJob == _lastJob && currentJob != 0) return;
         _lastJob = currentJob;
 
         DService.Instance().Log.Information($"[ACR] 职业切换: {_lastJob} → {currentJob}");
@@ -279,14 +292,14 @@ public static class ACRLifecycle
         if (_developmentOverrideEnabled && _developmentRegistryEntry == null)
         {
             DService.Instance().Log.Warning("[ACR] 基础开发模式无有效脚本");
-            UnloadRotation();
+            UnloadRotation(preserveCombatProgress);
             return;
         }
 
         if (DevelopmentOverrideAppliesTo(currentJob, _developmentOverrideEnabled, _developmentRegistryEntry))
         {
             DService.Instance().Log.Information("[ACR] 加载基础开发模式 ACR");
-            LoadRotation(_developmentRegistryEntry!);
+            LoadRotation(_developmentRegistryEntry!, preserveCombatProgress);
             return;
         }
 
@@ -297,13 +310,13 @@ public static class ACRLifecycle
             if (reg.Entry != null)
             {
                 DService.Instance().Log.Information($"[ACR] 找到匹配ACR: idx={idx} {reg.SettingDir}");
-                LoadRotation(reg);
+                LoadRotation(reg, preserveCombatProgress);
             }
         }
         else
         {
             DService.Instance().Log.Information($"[ACR] 无匹配ACR, 卸载");
-            UnloadRotation();
+            UnloadRotation(preserveCombatProgress);
         }
 
         if (Plugin.IsWebUI && Plugin.Instance._uiBridge != null)
@@ -388,22 +401,27 @@ public static class ACRLifecycle
         CheckJobSwitch();
     }
 
-    private static void LoadRotation(AcrRegistryEntry registryEntry)
+    private static void LoadRotation(
+        AcrRegistryEntry registryEntry,
+        bool preserveCombatProgress = false)
     {
         IsLoadingRotation = true;
         try
         {
-            UnloadRotation();
+            UnloadRotation(preserveCombatProgress);
 
             var entry = registryEntry.Entry;
             var settingFolder = registryEntry.SettingDir;
 
-        // 切换 ACR 时重置 GCD 能力技计数和上限
-        Data.Combat.AbilityCountInGcd = 0;
-        Data.Combat.LastAbilityUseTime = 0;
-        Data.Combat.LastGCDCompleted = 0;
-        Data.Combat.MaxAbilityTimesInGcd = PluginConfig.Instance.MaxAbilityTimesInGcd;
-        AbilityThrottle.Reset();
+        if (!preserveCombatProgress)
+        {
+            // 切换 ACR 时重置 GCD 能力技计数和上限
+            Data.Combat.AbilityCountInGcd = 0;
+            Data.Combat.LastAbilityUseTime = 0;
+            Data.Combat.LastGCDCompleted = 0;
+            Data.Combat.MaxAbilityTimesInGcd = PluginConfig.Instance.MaxAbilityTimesInGcd;
+            AbilityThrottle.Reset();
+        }
 
         CurrentJobId = _lastJob;
 
@@ -453,7 +471,7 @@ public static class ACRLifecycle
         }
 
         DService.Instance().Log.Information($"[ACR] LoadRotation 开始: author={entry.AuthorName}, jobId={CurrentJobId}, settingFolder={settingFolder}");
-        Runner.Load(entry, settingFolder);
+        Runner.Load(entry, settingFolder, preserveCombatProgress);
         CurrentEntry = entry;
         CurrentRegistryEntry = registryEntry;
         DService.Instance().Log.Information($"[ACR] Runner.Load 完成, CurrentRotation={Runner.CurrentRotation != null}");
@@ -658,7 +676,7 @@ public static class ACRLifecycle
         {
             try
             {
-                UnloadRotation();
+                UnloadRotation(preserveCombatProgress);
             }
             catch (Exception cleanupEx)
             {
@@ -677,7 +695,7 @@ public static class ACRLifecycle
         }
     }
 
-    private static void UnloadRotation()
+    private static void UnloadRotation(bool preserveCombatProgress = false)
     {
         if (Plugin.Instance != null)
             Plugin.Instance._uiManager?.RemoveCustomWindows();
@@ -687,7 +705,7 @@ public static class ACRLifecycle
         _defaultSettings = null;
         UiBuilder = null;
 
-        Runner.Unload();
+        Runner.Unload(preserveCombatProgress);
         CurrentEntry = null;
         CurrentRegistryEntry = null;
         CurrentJobId = 0;
@@ -699,7 +717,8 @@ public static class ACRLifecycle
             _settingsProviders.Clear();
         }
         ACR.MainControlHelper.Reset();
-        AbilityThrottle.Reset();
+        if (!preserveCombatProgress)
+            AbilityThrottle.Reset();
         ImGuiOverlayState.Reset(RuntimeCore.IsRunning);
     }
 

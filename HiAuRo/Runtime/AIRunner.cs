@@ -62,7 +62,12 @@ public sealed partial class AIRunner
 
     public void Load(IRotationEntry entry, string settingFolder)
     {
-        Unload();
+        Load(entry, settingFolder, preserveCombatProgress: false);
+    }
+
+    internal void Load(IRotationEntry entry, string settingFolder, bool preserveCombatProgress)
+    {
+        Unload(preserveCombatProgress);
         BeginSlotGeneration();
 
         var registeredHotkeyHandlers = new List<IHotkeyEventHandler>();
@@ -98,7 +103,7 @@ public sealed partial class AIRunner
         }
         catch
         {
-            RollbackFailedLoad(entry, registeredHotkeyHandlers, enteredRotation);
+            RollbackFailedLoad(entry, registeredHotkeyHandlers, enteredRotation, preserveCombatProgress);
             throw;
         }
     }
@@ -106,14 +111,20 @@ public sealed partial class AIRunner
     private void RollbackFailedLoad(
         IRotationEntry entry,
         IReadOnlyList<IHotkeyEventHandler> registeredHotkeyHandlers,
-        bool enteredRotation)
+        bool enteredRotation,
+        bool preserveCombatProgress)
     {
         StopSlotGeneration();
         DetachLoadState();
-        CleanupDetachedLoad(entry, registeredHotkeyHandlers, enteredRotation);
+        CleanupDetachedLoad(entry, registeredHotkeyHandlers, enteredRotation, preserveCombatProgress);
     }
 
     public void Unload()
+    {
+        Unload(preserveCombatProgress: false);
+    }
+
+    internal void Unload(bool preserveCombatProgress)
     {
         var entry = CurrentEntry;
         var rotation = CurrentRotation;
@@ -126,7 +137,7 @@ public sealed partial class AIRunner
         StopSlotGeneration();
         var registeredHotkeyHandlers = SnapshotRegisteredHotkeyHandlers();
         DetachLoadState();
-        CleanupDetachedLoad(entry, registeredHotkeyHandlers, enteredRotation);
+        CleanupDetachedLoad(entry, registeredHotkeyHandlers, enteredRotation, preserveCombatProgress);
     }
 
     private IHotkeyEventHandler[] SnapshotRegisteredHotkeyHandlers()
@@ -155,7 +166,8 @@ public sealed partial class AIRunner
     private void CleanupDetachedLoad(
         IRotationEntry? entry,
         IEnumerable<IHotkeyEventHandler> registeredHotkeyHandlers,
-        bool enteredRotation)
+        bool enteredRotation,
+        bool preserveCombatProgress)
     {
         TryCleanupStep(() => GameEventHook.Instance.OnEventFired -= OnGameEvent, "注销游戏事件");
         TryCleanupStep(() => FactTimeline.Instance.PhaseChanged -= OnPhaseChanged, "注销阶段事件");
@@ -172,12 +184,16 @@ public sealed partial class AIRunner
         if (entry != null)
             TryCleanupStep(entry.Dispose, "释放 ACR 入口");
 
-        TryCleanupStep(BattleData.Reset, "重置 BattleData");
+        if (preserveCombatProgress)
+            TryCleanupStep(BattleData.ClearPendingSlots, "清理待执行 Slot");
+        else
+            TryCleanupStep(BattleData.Reset, "重置 BattleData");
         TryCleanupStep(() => CountDownHandler.Instance.Reset(), "重置倒计时");
         TryCleanupStep(SpellQueue.Clear, "清空技能队列");
         TryCleanupStep(() => Coroutine.Instance.Clear(), "清空协程");
         TryCleanupStep(() => SpellActionTracker.Instance.Clear(), "清空技能追踪");
-        BattleTimeMs = 0;
+        if (!preserveCombatProgress)
+            BattleTimeMs = 0;
     }
 
     internal void StartCalSlot()

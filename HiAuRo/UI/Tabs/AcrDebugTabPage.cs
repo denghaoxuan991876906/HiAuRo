@@ -111,7 +111,7 @@ public sealed class AcrDebugTabPage : TabPageBase
                 ComponentLibrary.StatusDot(true, "未加载", Theme.Colors.AccentOrange);
                 break;
             case BasicAcrDevelopmentState.Ready:
-                ComponentLibrary.StatusDot(true, "运行中", Theme.Colors.AccentGreen);
+                ComponentLibrary.StatusDot(true, "已就绪", Theme.Colors.AccentGreen);
                 break;
             case BasicAcrDevelopmentState.Failed:
                 ComponentLibrary.StatusDot(true, "加载失败", Theme.Colors.AccentRed);
