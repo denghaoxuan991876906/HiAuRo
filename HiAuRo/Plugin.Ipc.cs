@@ -179,19 +179,15 @@ public partial class Plugin
     private static async Task SendUiSettings(HiAuRo.ACR.AcrSettings s)
     {
         if (!IsWebUI) return;
-        await Instance._uiBridge!.SendAsync(new
+        await Instance._uiBridge!.PublishUiSettingsAsync(new
         {
-            type = "uiSettings",
-            data = new
-            {
-                qtCols = s.QtCols,
-                qtBtnW = s.QtBtnW,
-                qtVisible = s.QtVisible,
-                hkCols = s.HkCols,
-                hkBtnSize = s.HkBtnSize,
-                hkVisible = s.HkVisible,
-                hkBindings = s.HkBindings
-            }
+            qtCols = s.QtCols,
+            qtBtnW = s.QtBtnW,
+            qtVisible = s.QtVisible,
+            hkCols = s.HkCols,
+            hkBtnSize = s.HkBtnSize,
+            hkVisible = s.HkVisible,
+            hkBindings = s.HkBindings
         });
     }
 

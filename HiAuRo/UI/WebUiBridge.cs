@@ -42,8 +42,9 @@ public sealed class WebUiBridge : IDisposable
     internal static bool IsCurrentSnapshot(AcrSnapshot candidate, AcrSnapshot? current)
         => current?.Generation == candidate.Generation;
 
-    internal static AcrSnapshot SelectCurrentSnapshot(AcrSnapshot captured, AcrSnapshot? current)
-        => current is not null && current.Generation > captured.Generation ? current : captured;
+    internal static bool ShouldRetryInitialSnapshot(AcrSnapshot captured, AcrSnapshot? current)
+        => current is not null
+           && (!ReferenceEquals(captured, current) || captured.Generation != current.Generation);
 
     /// <summary>按代发布完整 ACR Web 状态</summary>
     internal async Task PublishAcrStateAsync(
@@ -63,6 +64,43 @@ public sealed class WebUiBridge : IDisposable
             sendTargets = [.._clients];
         }
 
+        await BroadcastSnapshotAsync(snapshot, sendTargets);
+    }
+
+    /// <summary>更新 UI 设置并按新代发布完整 ACR Web 状态</summary>
+    internal async Task PublishUiSettingsAsync(object uiSettings)
+    {
+        var uiSettingsBytes = JsonSerializer.SerializeToUtf8Bytes(
+            new { type = "uiSettings", data = uiSettings }, _jsonOptions);
+        AcrSnapshot? captured;
+        lock (_lock)
+        {
+            if (_disposed) return;
+            captured = _cachedAcrSnapshot;
+        }
+        captured ??= CreateFallbackSnapshot();
+
+        AcrSnapshot snapshot;
+        List<WebSocket> sendTargets;
+        lock (_lock)
+        {
+            if (_disposed) return;
+            var current = _cachedAcrSnapshot ?? captured;
+            snapshot = current with
+            {
+                Generation = ++_acrGeneration,
+                UiSettings = uiSettingsBytes
+            };
+            _cachedAcrSnapshot = snapshot;
+            _clients.RemoveAll(c => c.State != WebSocketState.Open);
+            sendTargets = [.._clients];
+        }
+
+        await BroadcastSnapshotAsync(snapshot, sendTargets);
+    }
+
+    private async Task BroadcastSnapshotAsync(AcrSnapshot snapshot, List<WebSocket> sendTargets)
+    {
         if (sendTargets.Count == 0) return;
 
         List<WebSocket>? failedClients = null;
@@ -82,7 +120,7 @@ public sealed class WebUiBridge : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    DService.Instance().Log.Warning($"[WebUiBridge] PublishAcrStateAsync 失败: {ex.Message}");
+                    DService.Instance().Log.Warning($"[WebUiBridge] 整代状态广播失败: {ex.Message}");
                     (failedClients ??= []).Add(client);
                 }
             }
@@ -131,9 +169,15 @@ public sealed class WebUiBridge : IDisposable
         hkBindings = new Dictionary<string, string>()
     };
 
-    private static async Task SendSnapshotAsync(WebSocket client, AcrSnapshot snapshot)
+    private static Task SendSnapshotAsync(WebSocket client, AcrSnapshot snapshot) =>
+        SendSnapshotAsync(client, snapshot.Status, snapshot);
+
+    private static async Task SendSnapshotAsync(
+        WebSocket client,
+        byte[] status,
+        AcrSnapshot snapshot)
     {
-        await client.SendAsync(snapshot.Status, WebSocketMessageType.Text, true, CancellationToken.None);
+        await client.SendAsync(status, WebSocketMessageType.Text, true, CancellationToken.None);
         await client.SendAsync(snapshot.Controls, WebSocketMessageType.Text, true, CancellationToken.None);
         await client.SendAsync(snapshot.UiSettings, WebSocketMessageType.Text, true, CancellationToken.None);
     }
@@ -282,24 +326,31 @@ public sealed class WebUiBridge : IDisposable
     {
         try
         {
-            AcrSnapshot? snapshot;
-            lock (_lock)
-            {
-                if (_disposed) return;
-                snapshot = _cachedAcrSnapshot;
-            }
-            snapshot ??= CreateFallbackSnapshot();
-
             await _writeLock.WaitAsync();
             try
             {
-                lock (_lock)
+                while (true)
                 {
-                    if (_disposed) return;
-                    snapshot = SelectCurrentSnapshot(snapshot, _cachedAcrSnapshot);
+                    AcrSnapshot? snapshot;
+                    lock (_lock)
+                    {
+                        if (_disposed) return;
+                        snapshot = _cachedAcrSnapshot;
+                    }
+                    snapshot ??= CreateFallbackSnapshot();
+                    var status = SerializeCurrentStatus();
+
+                    lock (_lock)
+                    {
+                        if (_disposed) return;
+                        if (ShouldRetryInitialSnapshot(snapshot, _cachedAcrSnapshot))
+                            continue;
+                    }
+
+                    DService.Instance().Log.Information($"[WS] PushInitialStatus: generation={snapshot.Generation}");
+                    await SendSnapshotAsync(ws, status, snapshot);
+                    break;
                 }
-                DService.Instance().Log.Information($"[WS] PushInitialStatus: generation={snapshot.Generation}");
-                await SendSnapshotAsync(ws, snapshot);
             }
             finally
             {
@@ -310,6 +361,14 @@ public sealed class WebUiBridge : IDisposable
     }
 
     private AcrSnapshot CreateFallbackSnapshot()
+    {
+        return SerializeSnapshot(0, CreateCurrentStatusData(), [], CreateDefaultUiSettings());
+    }
+
+    private byte[] SerializeCurrentStatus() => JsonSerializer.SerializeToUtf8Bytes(
+        new { type = "status", data = CreateCurrentStatusData() }, _jsonOptions);
+
+    private static object CreateCurrentStatusData()
     {
         var hotkeys = ACR.HotkeyHelper.GetAll().Select(r => new
         {
@@ -331,21 +390,17 @@ public sealed class WebUiBridge : IDisposable
             binding = q.HotkeyBinding
         }).ToList();
 
-        return SerializeSnapshot(
-            0,
-            new
-            {
-                job = HiAuRo.Runtime.ACRLifecycle.CurrentAcrName,
-                enabled = HiAuRo.Runtime.RuntimeCore.IsRunning,
-                paused = HiAuRo.ACR.MainControlHelper.IsPaused,
-                inCombat = HiAuRo.Runtime.CombatContext.IsInCombat,
-                currentSpell = "Idle",
-                gcdRemaining = 0,
-                gcdDuration = 2500,
-                hotkeys,
-                qts
-            },
-            [],
-            CreateDefaultUiSettings());
+        return new
+        {
+            job = HiAuRo.Runtime.ACRLifecycle.CurrentAcrName,
+            enabled = HiAuRo.Runtime.RuntimeCore.IsRunning,
+            paused = HiAuRo.ACR.MainControlHelper.IsPaused,
+            inCombat = HiAuRo.Runtime.CombatContext.IsInCombat,
+            currentSpell = "Idle",
+            gcdRemaining = 0,
+            gcdDuration = 2500,
+            hotkeys,
+            qts
+        };
     }
 }
