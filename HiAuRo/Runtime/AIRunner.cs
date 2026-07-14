@@ -197,6 +197,13 @@ public sealed partial class AIRunner
         BeginSlotGeneration();
     }
 
+    internal void CancelSlotExecution()
+    {
+        StopSlotGeneration();
+        BattleData.Reset();
+        SpellActionTracker.Instance.Clear();
+    }
+
     internal void StopSlotGeneration()
     {
         var cts = _slotGenerationCts;

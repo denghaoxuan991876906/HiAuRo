@@ -78,6 +78,8 @@ internal static class BasicAcrDevelopment
     {
         var pluginConfig = config
             ?? throw new InvalidOperationException("基础 ACR 开发管理器尚未初始化");
+        var runner = ACRLifecycle.Runner;
+        runner.CancelSlotExecution();
 
         pendingInitialLoad = false;
         Diagnostics = [];
@@ -124,6 +126,9 @@ internal static class BasicAcrDevelopment
             LastError = switchError;
         }
 
+        if (switchError == null)
+            runner.ResumeSlotGeneration();
+
         return true;
     }
 
@@ -140,7 +145,7 @@ internal static class BasicAcrDevelopment
     private static bool ReloadNow()
     {
         var runner = ACRLifecycle.Runner;
-        runner.StopSlotGeneration();
+        runner.CancelSlotExecution();
 
         try
         {
