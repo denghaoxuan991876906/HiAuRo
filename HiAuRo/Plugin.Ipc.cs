@@ -22,9 +22,12 @@ public partial class Plugin
     {
         bridge.On("toggleACR", _d =>
         {
-            if (RuntimeCore.IsRunning) RuntimeCore.Stop();
-            else RuntimeCore.Start();
-            SafeFire(SendStatusState(), "SendStatusState");
+            SafeFire(DService.Instance().Framework.RunOnFrameworkThread(() =>
+            {
+                if (RuntimeCore.IsRunning) RuntimeCore.Stop();
+                else RuntimeCore.Start();
+                SafeFire(SendStatusState(), "SendStatusState");
+            }), "toggleACR");
         });
 
         bridge.On("pause", _d =>

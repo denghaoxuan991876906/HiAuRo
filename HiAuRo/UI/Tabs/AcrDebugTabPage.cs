@@ -95,7 +95,7 @@ public sealed class AcrDebugTabPage : TabPageBase
             _saveConfig();
         }
 
-        var canReload = _config.BasicAcrScriptEnabled && BasicAcrDevelopment.CanReloadNow();
+        var canReload = _config.BasicAcrScriptEnabled;
         ImGui.BeginDisabled(!canReload);
         if (ComponentLibrary.DefaultButton("加载/重载"))
             BasicAcrDevelopment.Reload();

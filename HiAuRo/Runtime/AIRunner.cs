@@ -34,6 +34,7 @@ public sealed partial class AIRunner
 
     internal bool HasActiveSlotTask => !_activeSlotTask.IsCompleted;
     internal Task SlotQuiescence => _activeSlotTask;
+    internal CancellationToken SlotGenerationToken => _slotGenerationCts?.Token ?? CancellationToken.None;
 
     /// <summary>当前战斗已持续的毫秒数（进战清零、脱战清零）</summary>
     public int BattleTimeMs { get; internal set; }
