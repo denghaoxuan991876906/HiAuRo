@@ -185,6 +185,7 @@ public sealed partial class AIRunner
 
         var startGate = new TaskCompletionSource<bool>();
         _activeSlotTask = RunCalSlotAsync(_slotGeneration, cts.Token, startGate.Task);
+        Plugin.SafeFire(_activeSlotTask, "AILoop");
         startGate.SetResult(true);
     }
 

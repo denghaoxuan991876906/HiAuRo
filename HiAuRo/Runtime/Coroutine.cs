@@ -13,51 +13,57 @@ public sealed class Coroutine
     public static Coroutine Instance { get; } = new();
 
     public Dictionary<long, TimerAction> TimerActions { get; } = new(1000);
-    private readonly HashSet<long> _failedTimer = new();
-    private readonly HashSet<long> _succeedTimer = new();
+    private readonly object _timerLock = new();
     private long _id;
 
     private Coroutine() { }
 
-    public long GenerateId() => _id++;
+    public long GenerateId() => Interlocked.Increment(ref _id) - 1;
 
     public void Update()
     {
-        if (TimerActions.Count == 0) return;
+        TimerAction[] snapshot;
+        lock (_timerLock)
+        {
+            if (TimerActions.Count == 0) return;
+            snapshot = TimerActions.Values.ToArray();
+        }
+
         long now = Environment.TickCount64;
-        foreach (var kv in TimerActions)
+        List<TimerAction> readyActions = [];
+        foreach (var action in snapshot)
         {
-            if (!kv.Value.Check())
-                _failedTimer.Add(kv.Key);
-            else if (kv.Value.Time <= now)
-                _succeedTimer.Add(kv.Key);
+            if (!action.Check() || action.Time <= now)
+                readyActions.Add(action);
         }
-        foreach (var id in _failedTimer)
+
+        if (readyActions.Count == 0) return;
+
+        List<TaskCompletionSource<bool>> completions = [];
+        lock (_timerLock)
         {
-            try
+            foreach (var action in readyActions)
             {
-                if (!TimerActions.Remove(id, out var action)) continue;
+                if (!TimerActions.TryGetValue(action.Id, out var current)
+                    || !ReferenceEquals(current, action)
+                    || !TimerActions.Remove(action.Id))
+                    continue;
+
                 var tcs = action.Tcs;
                 action.Tcs = null!;
                 if (!tcs.Task.IsCompleted)
-                    tcs.SetResult(true);
+                    completions.Add(tcs);
             }
-            catch (Exception ex) { DService.Instance().Log.Error($"[Coroutine] failed: {ex}"); }
         }
-        foreach (var id in _succeedTimer)
+
+        foreach (var tcs in completions)
         {
             try
             {
-                if (!TimerActions.Remove(id, out var action)) continue;
-                var tcs = action.Tcs;
-                action.Tcs = null!;
-                if (!tcs.Task.IsCompleted)
-                    tcs.SetResult(true);
+                tcs.TrySetResult(true);
             }
-            catch (Exception ex) { DService.Instance().Log.Error($"[Coroutine] succeed: {ex}"); }
+            catch (Exception ex) { DService.Instance().Log.Error($"[Coroutine] complete: {ex}"); }
         }
-        _failedTimer.Clear();
-        _succeedTimer.Clear();
     }
 
     public Task WaitAsync(long ms)
@@ -87,11 +93,25 @@ public sealed class Coroutine
             Id = id,
             Check = cond
         };
-        TimerActions.Add(id, action);
+        lock (_timerLock)
+        {
+            TimerActions.Add(id, action);
+        }
         var registration = ct.Register(() =>
         {
-            TimerActions.Remove(id);
-            tcs.TrySetCanceled(ct);
+            TaskCompletionSource<bool>? completion = null;
+            lock (_timerLock)
+            {
+                if (TimerActions.TryGetValue(id, out var current)
+                    && ReferenceEquals(current, action)
+                    && TimerActions.Remove(id))
+                {
+                    completion = action.Tcs;
+                    action.Tcs = null!;
+                }
+            }
+
+            completion?.TrySetCanceled(ct);
         });
         try
         {
@@ -107,14 +127,24 @@ public sealed class Coroutine
 
     public void Clear()
     {
-        var keys = TimerActions.Keys.ToArray();
-        foreach (var key in keys)
+        List<TaskCompletionSource<bool>> completions = [];
+        lock (_timerLock)
         {
-            if (TimerActions.Remove(key, out var action)
-                && action.Tcs != null && !action.Tcs.Task.IsCompleted)
-                action.Tcs.SetResult(false);
+            var keys = TimerActions.Keys.ToArray();
+            foreach (var key in keys)
+            {
+                if (!TimerActions.TryGetValue(key, out var action)
+                    || !TimerActions.Remove(key))
+                    continue;
+
+                var tcs = action.Tcs;
+                action.Tcs = null!;
+                if (tcs != null && !tcs.Task.IsCompleted)
+                    completions.Add(tcs);
+            }
         }
-        _failedTimer.Clear();
-        _succeedTimer.Clear();
+
+        foreach (var tcs in completions)
+            tcs.TrySetResult(false);
     }
 }
