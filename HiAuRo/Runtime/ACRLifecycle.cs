@@ -507,11 +507,10 @@ public static class ACRLifecycle
                     type = "controls",
                     data = controls
                 });
-                Plugin.Instance._uiBridge.CacheControls(controls);
             }
             ImGuiOverlayState.UpdateControls(controls);
 
-            DService.Instance().Log.Information("[ACR] controls 消息已发送 + 已缓存");
+            DService.Instance().Log.Information("[ACR] controls 消息已发送");
         }
         else
         {
@@ -523,32 +522,27 @@ public static class ACRLifecycle
             ACR.QTHelper.SetValue(id, value);
 
         // 推送 UI 设置（从 AcrSettings 读取）
-        if (Plugin.IsWebUI && Plugin.Instance._uiBridge != null)
+        var uiSettings = new
         {
-            _ = Plugin.Instance._uiBridge.SendAsync(new
+            qtCols = currentSettings.QtCols,
+            qtBtnW = currentSettings.QtBtnW,
+            qtVisible = currentSettings.QtVisible,
+            hkCols = currentSettings.HkCols,
+            hkBtnSize = currentSettings.HkBtnSize,
+            hkVisible = currentSettings.HkVisible,
+            hkBindings = currentSettings.HkBindings
+        };
+        if (Plugin.Instance._uiBridge is { } bridge)
+        {
+            if (Plugin.IsWebUI)
             {
-                type = "uiSettings",
-                data = new
+                _ = bridge.SendAsync(new
                 {
-                    qtCols = currentSettings.QtCols,
-                    qtBtnW = currentSettings.QtBtnW,
-                    qtVisible = currentSettings.QtVisible,
-                    hkCols = currentSettings.HkCols,
-                    hkBtnSize = currentSettings.HkBtnSize,
-                    hkVisible = currentSettings.HkVisible,
-                    hkBindings = currentSettings.HkBindings
-                }
-            });
-            Plugin.Instance._uiBridge.CacheUiSettings(new
-            {
-                qtCols = currentSettings.QtCols,
-                qtBtnW = currentSettings.QtBtnW,
-                qtVisible = currentSettings.QtVisible,
-                hkCols = currentSettings.HkCols,
-                hkBtnSize = currentSettings.HkBtnSize,
-                hkVisible = currentSettings.HkVisible,
-                hkBindings = currentSettings.HkBindings
-            });
+                    type = "uiSettings",
+                    data = uiSettings
+                });
+            }
+            bridge.CacheAcrState(controls ?? [], uiSettings);
         }
         DService.Instance().Log.Information($"[ACR] uiSettings 消息已发送 + 已缓存 (qtVisible={currentSettings.QtVisible.Count} hkVisible={currentSettings.HkVisible.Count})");
 

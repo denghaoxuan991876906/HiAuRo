@@ -42,6 +42,21 @@ public sealed class WebUiBridge : IDisposable
         lock (_lock) _cachedUiSettings = bytes;
     }
 
+    /// <summary>原子缓存同一代 ACR 控件和 UI 设置</summary>
+    internal void CacheAcrState(List<UiControlDef> controls, object uiSettings)
+    {
+        var controlsBytes = JsonSerializer.SerializeToUtf8Bytes(
+            new { type = "controls", data = controls }, _jsonOptions);
+        var uiSettingsBytes = JsonSerializer.SerializeToUtf8Bytes(
+            new { type = "uiSettings", data = uiSettings }, _jsonOptions);
+
+        lock (_lock)
+        {
+            _cachedControls = controlsBytes;
+            _cachedUiSettings = uiSettingsBytes;
+        }
+    }
+
     /// <summary>重置 ACR 状态、缓存并通知当前客户端</summary>
     internal async Task ResetAcrStateAsync(bool isRunning)
     {
