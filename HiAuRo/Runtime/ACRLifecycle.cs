@@ -683,6 +683,9 @@ public static class ACRLifecycle
         }
         ACR.MainControlHelper.Reset();
         AbilityThrottle.Reset();
+        ImGuiOverlayState.Reset(RuntimeCore.IsRunning);
+        if (Plugin.Instance?._uiBridge is { } bridge)
+            Plugin.SafeFire(bridge.ResetAcrStateAsync(RuntimeCore.IsRunning), "ResetAcrStateAsync");
     }
 
     private static DateTime _lastAutoSave = DateTime.MinValue;

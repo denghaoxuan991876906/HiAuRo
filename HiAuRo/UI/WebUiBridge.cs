@@ -30,14 +30,103 @@ public sealed class WebUiBridge : IDisposable
     public void CacheControls(List<UiControlDef> controls)
     {
         var json = JsonSerializer.Serialize(new { type = "controls", data = controls }, _jsonOptions);
-        _cachedControls = Encoding.UTF8.GetBytes(json);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        lock (_lock) _cachedControls = bytes;
     }
 
     /// <summary>缓存 UI 设置 JSON，供新 WebSocket 连接补发</summary>
     public void CacheUiSettings(object uiSettings)
     {
         var json = JsonSerializer.Serialize(new { type = "uiSettings", data = uiSettings }, _jsonOptions);
-        _cachedUiSettings = Encoding.UTF8.GetBytes(json);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        lock (_lock) _cachedUiSettings = bytes;
+    }
+
+    /// <summary>重置 ACR 状态、缓存并通知当前客户端</summary>
+    internal async Task ResetAcrStateAsync(bool isRunning)
+    {
+        var status = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            type = "status",
+            data = new
+            {
+                job = "无ACR",
+                enabled = isRunning,
+                paused = false,
+                hotkeys = Array.Empty<object>(),
+                qts = Array.Empty<object>()
+            }
+        }, _jsonOptions);
+        var controls = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            type = "controls",
+            data = Array.Empty<UiControlDef>()
+        }, _jsonOptions);
+        var uiSettings = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            type = "uiSettings",
+            data = new
+            {
+                qtCols = 0,
+                qtBtnW = 0,
+                qtVisible = new Dictionary<string, bool>(),
+                hkCols = 0,
+                hkBtnSize = 52,
+                hkVisible = new Dictionary<string, bool>(),
+                hkBindings = new Dictionary<string, string>()
+            }
+        }, _jsonOptions);
+
+        List<WebSocket> sendTargets;
+        lock (_lock)
+        {
+            _cachedControls = controls;
+            _cachedUiSettings = uiSettings;
+            _clients.RemoveAll(c => c.State != WebSocketState.Open);
+            sendTargets = [.._clients];
+        }
+
+        if (sendTargets.Count == 0) return;
+
+        await _writeLock.WaitAsync();
+        try
+        {
+            foreach (var client in sendTargets)
+            {
+                try
+                {
+                    await client.SendAsync(status, WebSocketMessageType.Text, true, CancellationToken.None);
+                    await client.SendAsync(controls, WebSocketMessageType.Text, true, CancellationToken.None);
+                    await client.SendAsync(uiSettings, WebSocketMessageType.Text, true, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    DService.Instance().Log.Warning($"[WebUiBridge] ResetAcrStateAsync 失败: {ex.Message}");
+                    lock (_lock) _clients.Remove(client);
+                }
+            }
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    internal (string? Controls, string? UiSettings) CachedJsonSnapshots
+    {
+        get
+        {
+            byte[]? controls;
+            byte[]? uiSettings;
+            lock (_lock)
+            {
+                controls = _cachedControls;
+                uiSettings = _cachedUiSettings;
+            }
+            return (
+                controls == null ? null : Encoding.UTF8.GetString(controls),
+                uiSettings == null ? null : Encoding.UTF8.GetString(uiSettings));
+        }
     }
 
     /// <summary>注册消息处理器</summary>
@@ -140,10 +229,10 @@ public sealed class WebUiBridge : IDisposable
                 try { client.Abort(); } catch { }
             }
             _clients.Clear();
+            _cachedControls = null;
+            _cachedUiSettings = null;
         }
         _handlers.Clear();
-        _cachedControls = null;
-        _cachedUiSettings = null;
         _writeLock.Dispose();
     }
 
@@ -191,16 +280,24 @@ public sealed class WebUiBridge : IDisposable
             }, _jsonOptions);
             var bytes = Encoding.UTF8.GetBytes(json);
 
+            byte[]? cachedControls;
+            byte[]? cachedUiSettings;
+            lock (_lock)
+            {
+                cachedControls = _cachedControls;
+                cachedUiSettings = _cachedUiSettings;
+            }
+
             await _writeLock.WaitAsync();
             try
             {
                 await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
 
                 // 补发缓存的 controls / uiSettings（避免 WS 连接前消息丢失）
-                if (_cachedControls != null)
-                    await ws.SendAsync(new ArraySegment<byte>(_cachedControls), WebSocketMessageType.Text, true, CancellationToken.None);
-                if (_cachedUiSettings != null)
-                    await ws.SendAsync(new ArraySegment<byte>(_cachedUiSettings), WebSocketMessageType.Text, true, CancellationToken.None);
+                if (cachedControls != null)
+                    await ws.SendAsync(new ArraySegment<byte>(cachedControls), WebSocketMessageType.Text, true, CancellationToken.None);
+                if (cachedUiSettings != null)
+                    await ws.SendAsync(new ArraySegment<byte>(cachedUiSettings), WebSocketMessageType.Text, true, CancellationToken.None);
             }
             finally
             {

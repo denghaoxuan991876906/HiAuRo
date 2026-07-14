@@ -39,13 +39,22 @@ public static class ImGuiOverlayState
         Qts = qts;
     }
 
+    /// <summary>重置为未加载 ACR 的状态</summary>
+    public static void Reset(bool isRunning)
+    {
+        AcrName = "无ACR";
+        IsRunning = isRunning;
+        IsPaused = false;
+        Controls = [];
+        Qts = [];
+        Hotkeys = [];
+        ActiveTab = string.Empty;
+    }
+
     /// <summary>更新控件列表（ACRLifecycle 调用）</summary>
     public static void UpdateControls(List<UiControlDef> controls)
     {
         Controls = controls;
-        if (controls.Count > 0)
-        {
-            ActiveTab = controls.FirstOrDefault(c => c.Type == "tab")?.Id ?? string.Empty;
-        }
+        ActiveTab = controls.FirstOrDefault(c => c.Type == "tab")?.Id ?? string.Empty;
     }
 }
