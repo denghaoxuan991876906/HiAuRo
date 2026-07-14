@@ -98,11 +98,8 @@ public partial class Plugin
             DService.Instance().Log.Debug($"[UI] saveUiSettings 收到: {json.Length} 字节");
             try
             {
-                var owner = HiAuRo.Runtime.ACRLifecycle.CurrentEntry;
                 var settings = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
-                if (owner != null
-                    && settings != null
-                    && ReferenceEquals(owner, HiAuRo.Runtime.ACRLifecycle.CurrentEntry))
+                if (settings != null)
                 {
                     using var doc = JsonDocument.Parse(json);
                     var root = doc.RootElement;
@@ -119,8 +116,7 @@ public partial class Plugin
                         settings.HkBindings = JsonSerializer.Deserialize<Dictionary<string, string>>(hkBind.GetRawText()) ?? [];
 
                     settings.Save();
-                    if (ReferenceEquals(owner, HiAuRo.Runtime.ACRLifecycle.CurrentEntry))
-                        _ = SendUiSettings(settings, owner);
+                    _ = SendUiSettings(settings);
                 }
             }
             catch (Exception ex) { DService.Instance().Log.Error($"[UI] saveUiSettings 异常: {ex}"); }
@@ -180,19 +176,23 @@ public partial class Plugin
         });
     }
 
-    private static async Task SendUiSettings(HiAuRo.ACR.AcrSettings s, object expectedOwner)
+    private static async Task SendUiSettings(HiAuRo.ACR.AcrSettings s)
     {
         if (!IsWebUI) return;
-        await Instance._uiBridge!.PublishUiSettingsAsync(new
+        await Instance._uiBridge!.SendAsync(new
         {
-            qtCols = s.QtCols,
-            qtBtnW = s.QtBtnW,
-            qtVisible = s.QtVisible,
-            hkCols = s.HkCols,
-            hkBtnSize = s.HkBtnSize,
-            hkVisible = s.HkVisible,
-            hkBindings = s.HkBindings
-        }, expectedOwner);
+            type = "uiSettings",
+            data = new
+            {
+                qtCols = s.QtCols,
+                qtBtnW = s.QtBtnW,
+                qtVisible = s.QtVisible,
+                hkCols = s.HkCols,
+                hkBtnSize = s.HkBtnSize,
+                hkVisible = s.HkVisible,
+                hkBindings = s.HkBindings
+            }
+        });
     }
 
     private static async Task SendPauseState()

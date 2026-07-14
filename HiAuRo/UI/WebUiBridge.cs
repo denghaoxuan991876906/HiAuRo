@@ -21,224 +21,23 @@ public sealed class WebUiBridge : IDisposable
     };
 
     private readonly Dictionary<string, Action<JsonElement?>> _handlers = [];
-    private long _acrGeneration;
-    private AcrSnapshot? _cachedAcrSnapshot;
-    private bool _disposed;
 
-    internal sealed record AcrSnapshot(
-        long Generation,
-        object? Owner,
-        byte[] Status,
-        byte[] Controls,
-        byte[] UiSettings);
+    // 缓存初始数据，新连接时补发（避免 controls/uiSettings 消息在 WS 连接前丢失）
+    private byte[]? _cachedControls;
+    private byte[]? _cachedUiSettings;
 
-    internal AcrSnapshot? CachedAcrSnapshot
+    /// <summary>缓存控件定义 JSON，供新 WebSocket 连接补发</summary>
+    public void CacheControls(List<UiControlDef> controls)
     {
-        get
-        {
-            lock (_lock) return _cachedAcrSnapshot;
-        }
+        var json = JsonSerializer.Serialize(new { type = "controls", data = controls }, _jsonOptions);
+        _cachedControls = Encoding.UTF8.GetBytes(json);
     }
 
-    internal static bool IsCurrentSnapshot(AcrSnapshot candidate, AcrSnapshot? current)
-        => current?.Generation == candidate.Generation;
-
-    internal static bool IsExpectedOwner(AcrSnapshot? snapshot, object? expectedOwner)
-        => snapshot is not null && ReferenceEquals(snapshot.Owner, expectedOwner);
-
-    internal static bool ShouldRetryInitialSnapshot(AcrSnapshot captured, AcrSnapshot? current)
-        => current is not null
-           && (!ReferenceEquals(captured, current) || captured.Generation != current.Generation);
-
-    internal static AcrSnapshot CreateUiSettingsSnapshot(
-        AcrSnapshot captured,
-        long generation,
-        byte[] status,
-        byte[] uiSettings) =>
-        captured with
-        {
-            Generation = generation,
-            Status = status,
-            UiSettings = uiSettings
-        };
-
-    internal void ClearAcrOwner()
+    /// <summary>缓存 UI 设置 JSON，供新 WebSocket 连接补发</summary>
+    public void CacheUiSettings(object uiSettings)
     {
-        lock (_lock)
-        {
-            if (_disposed || _cachedAcrSnapshot?.Owner is null) return;
-            _cachedAcrSnapshot = _cachedAcrSnapshot with
-            {
-                Generation = ++_acrGeneration,
-                Owner = null
-            };
-        }
-    }
-
-    /// <summary>按代发布完整 ACR Web 状态</summary>
-    internal async Task PublishAcrStateAsync(
-        object? owner,
-        object statusData,
-        List<UiControlDef> controls,
-        object uiSettings)
-    {
-        var serialized = SerializeSnapshot(0, owner, statusData, controls, uiSettings);
-        AcrSnapshot snapshot;
-        List<WebSocket> sendTargets;
-        lock (_lock)
-        {
-            if (_disposed) return;
-            snapshot = serialized with { Generation = ++_acrGeneration };
-            _cachedAcrSnapshot = snapshot;
-            _clients.RemoveAll(c => c.State != WebSocketState.Open);
-            sendTargets = [.._clients];
-        }
-
-        await BroadcastSnapshotAsync(snapshot, sendTargets);
-    }
-
-    /// <summary>更新 UI 设置并按新代发布完整 ACR Web 状态</summary>
-    internal async Task<bool> PublishUiSettingsAsync(object uiSettings, object? expectedOwner)
-    {
-        var owner = expectedOwner;
-        await _writeLock.WaitAsync();
-        try
-        {
-            var uiSettingsBytes = JsonSerializer.SerializeToUtf8Bytes(
-                new { type = "uiSettings", data = uiSettings }, _jsonOptions);
-            AcrSnapshot captured;
-            lock (_lock)
-            {
-                if (_disposed || !IsExpectedOwner(_cachedAcrSnapshot, owner)) return false;
-                captured = _cachedAcrSnapshot!;
-            }
-            var status = SerializeCurrentStatus();
-
-            AcrSnapshot snapshot;
-            List<WebSocket> sendTargets;
-            lock (_lock)
-            {
-                if (_disposed || !IsExpectedOwner(_cachedAcrSnapshot, owner)) return false;
-                if (ShouldRetryInitialSnapshot(captured, _cachedAcrSnapshot)) return false;
-
-                snapshot = CreateUiSettingsSnapshot(
-                    captured, ++_acrGeneration, status, uiSettingsBytes);
-                _cachedAcrSnapshot = snapshot;
-                _clients.RemoveAll(c => c.State != WebSocketState.Open);
-                sendTargets = [.._clients];
-            }
-
-            await SendSnapshotWhileWriteLockedAsync(snapshot, sendTargets);
-            return true;
-        }
-        finally
-        {
-            _writeLock.Release();
-        }
-    }
-
-    private async Task BroadcastSnapshotAsync(AcrSnapshot snapshot, List<WebSocket> sendTargets)
-    {
-        if (sendTargets.Count == 0) return;
-
-        await _writeLock.WaitAsync();
-        try
-        {
-            await SendSnapshotWhileWriteLockedAsync(snapshot, sendTargets);
-        }
-        finally
-        {
-            _writeLock.Release();
-        }
-    }
-
-    private async Task SendSnapshotWhileWriteLockedAsync(
-        AcrSnapshot snapshot,
-        List<WebSocket> sendTargets)
-    {
-        if (sendTargets.Count == 0) return;
-
-        lock (_lock)
-        {
-            if (_disposed || !IsCurrentSnapshot(snapshot, _cachedAcrSnapshot)) return;
-        }
-
-        List<WebSocket>? failedClients = null;
-        foreach (var client in sendTargets)
-        {
-            try
-            {
-                await SendSnapshotAsync(client, snapshot);
-            }
-            catch (Exception ex)
-            {
-                DService.Instance().Log.Warning($"[WebUiBridge] 整代状态广播失败: {ex.Message}");
-                (failedClients ??= []).Add(client);
-            }
-        }
-        RemoveFailedClients(failedClients);
-    }
-
-    /// <summary>重置 ACR 状态、缓存并通知当前客户端</summary>
-    internal Task ResetAcrStateAsync(bool isRunning) =>
-        PublishAcrStateAsync(
-            null,
-            new
-            {
-                job = "无ACR",
-                enabled = isRunning,
-                paused = false,
-                hotkeys = Array.Empty<object>(),
-                qts = Array.Empty<object>()
-            },
-            [],
-            CreateDefaultUiSettings());
-
-    private AcrSnapshot SerializeSnapshot(
-        long generation,
-        object? owner,
-        object statusData,
-        List<UiControlDef> controls,
-        object uiSettings) =>
-        new(
-            generation,
-            owner,
-            JsonSerializer.SerializeToUtf8Bytes(new { type = "status", data = statusData }, _jsonOptions),
-            JsonSerializer.SerializeToUtf8Bytes(new { type = "controls", data = controls }, _jsonOptions),
-            JsonSerializer.SerializeToUtf8Bytes(new { type = "uiSettings", data = uiSettings }, _jsonOptions));
-
-    private static object CreateDefaultUiSettings() => new
-    {
-        qtCols = 0,
-        qtBtnW = 0,
-        qtVisible = new Dictionary<string, bool>(),
-        hkCols = 0,
-        hkBtnSize = 52,
-        hkVisible = new Dictionary<string, bool>(),
-        hkBindings = new Dictionary<string, string>()
-    };
-
-    private static Task SendSnapshotAsync(WebSocket client, AcrSnapshot snapshot) =>
-        SendSnapshotAsync(client, snapshot.Status, snapshot);
-
-    private static async Task SendSnapshotAsync(
-        WebSocket client,
-        byte[] status,
-        AcrSnapshot snapshot)
-    {
-        await client.SendAsync(status, WebSocketMessageType.Text, true, CancellationToken.None);
-        await client.SendAsync(snapshot.Controls, WebSocketMessageType.Text, true, CancellationToken.None);
-        await client.SendAsync(snapshot.UiSettings, WebSocketMessageType.Text, true, CancellationToken.None);
-    }
-
-    private void RemoveFailedClients(List<WebSocket>? failedClients)
-    {
-        if (failedClients is null) return;
-        lock (_lock)
-        {
-            foreach (var client in failedClients)
-                _clients.Remove(client);
-        }
+        var json = JsonSerializer.Serialize(new { type = "uiSettings", data = uiSettings }, _jsonOptions);
+        _cachedUiSettings = Encoding.UTF8.GetBytes(json);
     }
 
     /// <summary>注册消息处理器</summary>
@@ -250,63 +49,44 @@ public sealed class WebUiBridge : IDisposable
     /// <summary>推送消息到所有已连接客户端</summary>
     public async Task SendAsync(object message)
     {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(message, _jsonOptions);
+        var json = JsonSerializer.Serialize(message, _jsonOptions);
+        var bytes = Encoding.UTF8.GetBytes(json);
+        var segment = new ArraySegment<byte>(bytes);
 
         List<WebSocket> sendTargets;
         lock (_lock)
         {
-            if (_disposed) return;
             _clients.RemoveAll(c => c.State != WebSocketState.Open);
             sendTargets = [.._clients];
         }
 
-        if (sendTargets.Count == 0) return;
-
-        List<WebSocket>? failedClients = null;
-        await _writeLock.WaitAsync();
-        try
+        foreach (var client in sendTargets)
         {
-            lock (_lock)
+            try
             {
-                if (_disposed) return;
-            }
-
-            foreach (var client in sendTargets)
-            {
+                await _writeLock.WaitAsync();
                 try
                 {
-                    await client.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+                    await client.SendAsync(segment, WebSocketMessageType.Text, true, CancellationToken.None);
                 }
-                catch (Exception ex)
+                finally
                 {
-                    DService.Instance().Log.Warning($"[WebUiBridge] SendAsync 失败: {ex.Message}");
-                    (failedClients ??= []).Add(client);
+                    _writeLock.Release();
                 }
             }
+            catch (Exception ex)
+            {
+                DService.Instance().Log.Warning($"[WebUiBridge] SendAsync 失败: {ex.Message}");
+                lock (_lock) _clients.Remove(client);
+            }
         }
-        finally
-        {
-            _writeLock.Release();
-        }
-
-        RemoveFailedClients(failedClients);
     }
 
     /// <summary>处理单个 WebSocket 连接</summary>
     public async Task HandleConnection(WebSocket ws, CancellationToken ct)
     {
-        int clientCount;
-        lock (_lock)
-        {
-            if (_disposed)
-            {
-                ws.Abort();
-                return;
-            }
-            _clients.Add(ws);
-            clientCount = _clients.Count;
-        }
-        DService.Instance().Log.Information($"[WS] 客户端已连接 (当前{clientCount}个)");
+        lock (_lock) _clients.Add(ws);
+        DService.Instance().Log.Information($"[WS] 客户端已连接 (当前{_clients.Count}个)");
 
         // 连接时推送初始状态
         await PushInitialStatus(ws);
@@ -340,12 +120,8 @@ public sealed class WebUiBridge : IDisposable
         catch (WebSocketException) { }
         finally
         {
-            lock (_lock)
-            {
-                _clients.Remove(ws);
-                clientCount = _clients.Count;
-            }
-            DService.Instance().Log.Information($"[WS] 客户端已断开 (剩余{clientCount}个)");
+            lock (_lock) _clients.Remove(ws);
+            DService.Instance().Log.Information($"[WS] 客户端已断开 (剩余{_clients.Count}个)");
             if (ws.State != WebSocketState.Closed)
             {
                 try { await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None); }
@@ -359,47 +135,72 @@ public sealed class WebUiBridge : IDisposable
     {
         lock (_lock)
         {
-            if (_disposed) return;
-            _disposed = true;
             foreach (var client in _clients)
             {
                 try { client.Abort(); } catch { }
             }
             _clients.Clear();
-            _cachedAcrSnapshot = null;
         }
         _handlers.Clear();
+        _cachedControls = null;
+        _cachedUiSettings = null;
+        _writeLock.Dispose();
     }
 
     private async Task PushInitialStatus(WebSocket ws)
     {
         try
         {
+            var hotkeys = ACR.HotkeyHelper.GetAll().Select(r => new
+            {
+                id = r.Id,
+                label = r.Label,
+                iconId = r.IconId,
+                iconUrl = IconServer.GetIconUrl(r.IconId),
+                available = r.Check() >= 0,
+                binding = ACR.HotkeyHelper.GetBinding(r.Id)
+            }).ToList();
+
+            var qts = ACR.QTHelper.GetAll().Select(q => new
+            {
+                id = q.Id,
+                label = q.Label,
+                value = q.Value,
+                tooltip = q.Tooltip,
+                color = q.Color,
+                binding = q.HotkeyBinding
+            }).ToList();
+
+            DService.Instance().Log.Information($"[WS] PushInitialStatus: hks={hotkeys.Count} qts={qts.Count} acr={HiAuRo.Runtime.ACRLifecycle.CurrentAcrName}");
+
+            var json = JsonSerializer.Serialize(new
+            {
+                type = "status",
+                data = new
+                {
+                    job = HiAuRo.Runtime.ACRLifecycle.CurrentAcrName,
+                    enabled = HiAuRo.Runtime.RuntimeCore.IsRunning,
+                    paused = HiAuRo.ACR.MainControlHelper.IsPaused,
+                    inCombat = HiAuRo.Runtime.CombatContext.IsInCombat,
+                    currentSpell = "Idle",
+                    gcdRemaining = 0,
+                    gcdDuration = 2500,
+                    hotkeys,
+                    qts
+                }
+            }, _jsonOptions);
+            var bytes = Encoding.UTF8.GetBytes(json);
+
             await _writeLock.WaitAsync();
             try
             {
-                while (true)
-                {
-                    AcrSnapshot? snapshot;
-                    lock (_lock)
-                    {
-                        if (_disposed) return;
-                        snapshot = _cachedAcrSnapshot;
-                    }
-                    snapshot ??= CreateFallbackSnapshot();
-                    var status = SerializeCurrentStatus();
+                await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
 
-                    lock (_lock)
-                    {
-                        if (_disposed) return;
-                        if (ShouldRetryInitialSnapshot(snapshot, _cachedAcrSnapshot))
-                            continue;
-                    }
-
-                    DService.Instance().Log.Information($"[WS] PushInitialStatus: generation={snapshot.Generation}");
-                    await SendSnapshotAsync(ws, status, snapshot);
-                    break;
-                }
+                // 补发缓存的 controls / uiSettings（避免 WS 连接前消息丢失）
+                if (_cachedControls != null)
+                    await ws.SendAsync(new ArraySegment<byte>(_cachedControls), WebSocketMessageType.Text, true, CancellationToken.None);
+                if (_cachedUiSettings != null)
+                    await ws.SendAsync(new ArraySegment<byte>(_cachedUiSettings), WebSocketMessageType.Text, true, CancellationToken.None);
             }
             finally
             {
@@ -407,54 +208,5 @@ public sealed class WebUiBridge : IDisposable
             }
         }
         catch (Exception ex) { DService.Instance().Log.Error($"[WS] PushInitialStatus 失败: {ex.Message}"); }
-    }
-
-    private AcrSnapshot CreateFallbackSnapshot()
-    {
-        return SerializeSnapshot(
-            0,
-            HiAuRo.Runtime.ACRLifecycle.CurrentEntry,
-            CreateCurrentStatusData(),
-            [],
-            CreateDefaultUiSettings());
-    }
-
-    private byte[] SerializeCurrentStatus() => JsonSerializer.SerializeToUtf8Bytes(
-        new { type = "status", data = CreateCurrentStatusData() }, _jsonOptions);
-
-    private static object CreateCurrentStatusData()
-    {
-        var hotkeys = ACR.HotkeyHelper.GetAll().Select(r => new
-        {
-            id = r.Id,
-            label = r.Label,
-            iconId = r.IconId,
-            iconUrl = IconServer.GetIconUrl(r.IconId),
-            available = r.Check() >= 0,
-            binding = ACR.HotkeyHelper.GetBinding(r.Id)
-        }).ToList();
-
-        var qts = ACR.QTHelper.GetAll().Select(q => new
-        {
-            id = q.Id,
-            label = q.Label,
-            value = q.Value,
-            tooltip = q.Tooltip,
-            color = q.Color,
-            binding = q.HotkeyBinding
-        }).ToList();
-
-        return new
-        {
-            job = HiAuRo.Runtime.ACRLifecycle.CurrentAcrName,
-            enabled = HiAuRo.Runtime.RuntimeCore.IsRunning,
-            paused = HiAuRo.ACR.MainControlHelper.IsPaused,
-            inCombat = HiAuRo.Runtime.CombatContext.IsInCombat,
-            currentSpell = "Idle",
-            gcdRemaining = 0,
-            gcdDuration = 2500,
-            hotkeys,
-            qts
-        };
     }
 }
