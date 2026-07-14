@@ -517,7 +517,7 @@ public static class ACRLifecycle
             }).ToList()
         };
         if (Plugin.Instance._uiBridge is { } bridge)
-            Plugin.SafeFire(bridge.PublishAcrStateAsync(statusData, controls, uiSettings), "PublishAcrStateAsync");
+            Plugin.SafeFire(bridge.PublishAcrStateAsync(entry, statusData, controls, uiSettings), "PublishAcrStateAsync");
 
         if (!Plugin.IsWebUI)
         {
@@ -634,8 +634,13 @@ public static class ACRLifecycle
         ACR.MainControlHelper.Reset();
         AbilityThrottle.Reset();
         ImGuiOverlayState.Reset(RuntimeCore.IsRunning);
-        if (publishUiState && Plugin.Instance?._uiBridge is { } bridge)
-            Plugin.SafeFire(bridge.ResetAcrStateAsync(RuntimeCore.IsRunning), "ResetAcrStateAsync");
+        if (Plugin.Instance?._uiBridge is { } bridge)
+        {
+            if (publishUiState)
+                Plugin.SafeFire(bridge.ResetAcrStateAsync(RuntimeCore.IsRunning), "ResetAcrStateAsync");
+            else
+                bridge.ClearAcrOwner();
+        }
     }
 
     private static DateTime _lastAutoSave = DateTime.MinValue;

@@ -98,8 +98,11 @@ public partial class Plugin
             DService.Instance().Log.Debug($"[UI] saveUiSettings 收到: {json.Length} 字节");
             try
             {
+                var owner = HiAuRo.Runtime.ACRLifecycle.CurrentEntry;
                 var settings = HiAuRo.Runtime.ACRLifecycle.GetCurrentSettings();
-                if (settings != null)
+                if (owner != null
+                    && settings != null
+                    && ReferenceEquals(owner, HiAuRo.Runtime.ACRLifecycle.CurrentEntry))
                 {
                     using var doc = JsonDocument.Parse(json);
                     var root = doc.RootElement;
@@ -116,7 +119,8 @@ public partial class Plugin
                         settings.HkBindings = JsonSerializer.Deserialize<Dictionary<string, string>>(hkBind.GetRawText()) ?? [];
 
                     settings.Save();
-                    _ = SendUiSettings(settings);
+                    if (ReferenceEquals(owner, HiAuRo.Runtime.ACRLifecycle.CurrentEntry))
+                        _ = SendUiSettings(settings, owner);
                 }
             }
             catch (Exception ex) { DService.Instance().Log.Error($"[UI] saveUiSettings 异常: {ex}"); }
@@ -176,7 +180,7 @@ public partial class Plugin
         });
     }
 
-    private static async Task SendUiSettings(HiAuRo.ACR.AcrSettings s)
+    private static async Task SendUiSettings(HiAuRo.ACR.AcrSettings s, object expectedOwner)
     {
         if (!IsWebUI) return;
         await Instance._uiBridge!.PublishUiSettingsAsync(new
@@ -188,7 +192,7 @@ public partial class Plugin
             hkBtnSize = s.HkBtnSize,
             hkVisible = s.HkVisible,
             hkBindings = s.HkBindings
-        });
+        }, expectedOwner);
     }
 
     private static async Task SendPauseState()

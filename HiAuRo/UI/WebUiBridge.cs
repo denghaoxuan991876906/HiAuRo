@@ -27,6 +27,7 @@ public sealed class WebUiBridge : IDisposable
 
     internal sealed record AcrSnapshot(
         long Generation,
+        object? Owner,
         byte[] Status,
         byte[] Controls,
         byte[] UiSettings);
@@ -41,6 +42,9 @@ public sealed class WebUiBridge : IDisposable
 
     internal static bool IsCurrentSnapshot(AcrSnapshot candidate, AcrSnapshot? current)
         => current?.Generation == candidate.Generation;
+
+    internal static bool IsExpectedOwner(AcrSnapshot? snapshot, object? expectedOwner)
+        => snapshot is not null && ReferenceEquals(snapshot.Owner, expectedOwner);
 
     internal static bool ShouldRetryInitialSnapshot(AcrSnapshot captured, AcrSnapshot? current)
         => current is not null
@@ -58,13 +62,27 @@ public sealed class WebUiBridge : IDisposable
             UiSettings = uiSettings
         };
 
+    internal void ClearAcrOwner()
+    {
+        lock (_lock)
+        {
+            if (_disposed || _cachedAcrSnapshot?.Owner is null) return;
+            _cachedAcrSnapshot = _cachedAcrSnapshot with
+            {
+                Generation = ++_acrGeneration,
+                Owner = null
+            };
+        }
+    }
+
     /// <summary>按代发布完整 ACR Web 状态</summary>
     internal async Task PublishAcrStateAsync(
+        object? owner,
         object statusData,
         List<UiControlDef> controls,
         object uiSettings)
     {
-        var serialized = SerializeSnapshot(0, statusData, controls, uiSettings);
+        var serialized = SerializeSnapshot(0, owner, statusData, controls, uiSettings);
         AcrSnapshot snapshot;
         List<WebSocket> sendTargets;
         lock (_lock)
@@ -80,42 +98,38 @@ public sealed class WebUiBridge : IDisposable
     }
 
     /// <summary>更新 UI 设置并按新代发布完整 ACR Web 状态</summary>
-    internal async Task PublishUiSettingsAsync(object uiSettings)
+    internal async Task<bool> PublishUiSettingsAsync(object uiSettings, object? expectedOwner)
     {
+        var owner = expectedOwner;
         await _writeLock.WaitAsync();
         try
         {
             var uiSettingsBytes = JsonSerializer.SerializeToUtf8Bytes(
                 new { type = "uiSettings", data = uiSettings }, _jsonOptions);
+            AcrSnapshot captured;
+            lock (_lock)
+            {
+                if (_disposed || !IsExpectedOwner(_cachedAcrSnapshot, owner)) return false;
+                captured = _cachedAcrSnapshot!;
+            }
+            var status = SerializeCurrentStatus();
+
             AcrSnapshot snapshot;
             List<WebSocket> sendTargets;
-            while (true)
+            lock (_lock)
             {
-                AcrSnapshot? captured;
-                lock (_lock)
-                {
-                    if (_disposed) return;
-                    captured = _cachedAcrSnapshot;
-                }
-                captured ??= CreateFallbackSnapshot();
-                var status = SerializeCurrentStatus();
+                if (_disposed || !IsExpectedOwner(_cachedAcrSnapshot, owner)) return false;
+                if (ShouldRetryInitialSnapshot(captured, _cachedAcrSnapshot)) return false;
 
-                lock (_lock)
-                {
-                    if (_disposed) return;
-                    if (ShouldRetryInitialSnapshot(captured, _cachedAcrSnapshot))
-                        continue;
-
-                    snapshot = CreateUiSettingsSnapshot(
-                        captured, ++_acrGeneration, status, uiSettingsBytes);
-                    _cachedAcrSnapshot = snapshot;
-                    _clients.RemoveAll(c => c.State != WebSocketState.Open);
-                    sendTargets = [.._clients];
-                    break;
-                }
+                snapshot = CreateUiSettingsSnapshot(
+                    captured, ++_acrGeneration, status, uiSettingsBytes);
+                _cachedAcrSnapshot = snapshot;
+                _clients.RemoveAll(c => c.State != WebSocketState.Open);
+                sendTargets = [.._clients];
             }
 
             await SendSnapshotWhileWriteLockedAsync(snapshot, sendTargets);
+            return true;
         }
         finally
         {
@@ -168,6 +182,7 @@ public sealed class WebUiBridge : IDisposable
     /// <summary>重置 ACR 状态、缓存并通知当前客户端</summary>
     internal Task ResetAcrStateAsync(bool isRunning) =>
         PublishAcrStateAsync(
+            null,
             new
             {
                 job = "无ACR",
@@ -181,11 +196,13 @@ public sealed class WebUiBridge : IDisposable
 
     private AcrSnapshot SerializeSnapshot(
         long generation,
+        object? owner,
         object statusData,
         List<UiControlDef> controls,
         object uiSettings) =>
         new(
             generation,
+            owner,
             JsonSerializer.SerializeToUtf8Bytes(new { type = "status", data = statusData }, _jsonOptions),
             JsonSerializer.SerializeToUtf8Bytes(new { type = "controls", data = controls }, _jsonOptions),
             JsonSerializer.SerializeToUtf8Bytes(new { type = "uiSettings", data = uiSettings }, _jsonOptions));
@@ -394,7 +411,12 @@ public sealed class WebUiBridge : IDisposable
 
     private AcrSnapshot CreateFallbackSnapshot()
     {
-        return SerializeSnapshot(0, CreateCurrentStatusData(), [], CreateDefaultUiSettings());
+        return SerializeSnapshot(
+            0,
+            HiAuRo.Runtime.ACRLifecycle.CurrentEntry,
+            CreateCurrentStatusData(),
+            [],
+            CreateDefaultUiSettings());
     }
 
     private byte[] SerializeCurrentStatus() => JsonSerializer.SerializeToUtf8Bytes(
