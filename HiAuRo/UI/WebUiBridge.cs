@@ -46,6 +46,18 @@ public sealed class WebUiBridge : IDisposable
         => current is not null
            && (!ReferenceEquals(captured, current) || captured.Generation != current.Generation);
 
+    internal static AcrSnapshot CreateUiSettingsSnapshot(
+        AcrSnapshot captured,
+        long generation,
+        byte[] status,
+        byte[] uiSettings) =>
+        captured with
+        {
+            Generation = generation,
+            Status = status,
+            UiSettings = uiSettings
+        };
+
     /// <summary>按代发布完整 ACR Web 状态</summary>
     internal async Task PublishAcrStateAsync(
         object statusData,
@@ -70,74 +82,86 @@ public sealed class WebUiBridge : IDisposable
     /// <summary>更新 UI 设置并按新代发布完整 ACR Web 状态</summary>
     internal async Task PublishUiSettingsAsync(object uiSettings)
     {
-        var uiSettingsBytes = JsonSerializer.SerializeToUtf8Bytes(
-            new { type = "uiSettings", data = uiSettings }, _jsonOptions);
-        AcrSnapshot snapshot;
-        List<WebSocket> sendTargets;
-        while (true)
+        await _writeLock.WaitAsync();
+        try
         {
-            AcrSnapshot? captured;
-            lock (_lock)
+            var uiSettingsBytes = JsonSerializer.SerializeToUtf8Bytes(
+                new { type = "uiSettings", data = uiSettings }, _jsonOptions);
+            AcrSnapshot snapshot;
+            List<WebSocket> sendTargets;
+            while (true)
             {
-                if (_disposed) return;
-                captured = _cachedAcrSnapshot;
-            }
-            captured ??= CreateFallbackSnapshot();
-            var status = SerializeCurrentStatus();
-
-            lock (_lock)
-            {
-                if (_disposed) return;
-                if (ShouldRetryInitialSnapshot(captured, _cachedAcrSnapshot))
-                    continue;
-
-                snapshot = captured with
+                AcrSnapshot? captured;
+                lock (_lock)
                 {
-                    Generation = ++_acrGeneration,
-                    Status = status,
-                    UiSettings = uiSettingsBytes
-                };
-                _cachedAcrSnapshot = snapshot;
-                _clients.RemoveAll(c => c.State != WebSocketState.Open);
-                sendTargets = [.._clients];
-                break;
-            }
-        }
+                    if (_disposed) return;
+                    captured = _cachedAcrSnapshot;
+                }
+                captured ??= CreateFallbackSnapshot();
+                var status = SerializeCurrentStatus();
 
-        await BroadcastSnapshotAsync(snapshot, sendTargets);
+                lock (_lock)
+                {
+                    if (_disposed) return;
+                    if (ShouldRetryInitialSnapshot(captured, _cachedAcrSnapshot))
+                        continue;
+
+                    snapshot = CreateUiSettingsSnapshot(
+                        captured, ++_acrGeneration, status, uiSettingsBytes);
+                    _cachedAcrSnapshot = snapshot;
+                    _clients.RemoveAll(c => c.State != WebSocketState.Open);
+                    sendTargets = [.._clients];
+                    break;
+                }
+            }
+
+            await SendSnapshotWhileWriteLockedAsync(snapshot, sendTargets);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
     }
 
     private async Task BroadcastSnapshotAsync(AcrSnapshot snapshot, List<WebSocket> sendTargets)
     {
         if (sendTargets.Count == 0) return;
 
-        List<WebSocket>? failedClients = null;
         await _writeLock.WaitAsync();
         try
         {
-            lock (_lock)
-            {
-                if (_disposed || !IsCurrentSnapshot(snapshot, _cachedAcrSnapshot)) return;
-            }
-
-            foreach (var client in sendTargets)
-            {
-                try
-                {
-                    await SendSnapshotAsync(client, snapshot);
-                }
-                catch (Exception ex)
-                {
-                    DService.Instance().Log.Warning($"[WebUiBridge] 整代状态广播失败: {ex.Message}");
-                    (failedClients ??= []).Add(client);
-                }
-            }
+            await SendSnapshotWhileWriteLockedAsync(snapshot, sendTargets);
         }
         finally
         {
             _writeLock.Release();
         }
+    }
 
+    private async Task SendSnapshotWhileWriteLockedAsync(
+        AcrSnapshot snapshot,
+        List<WebSocket> sendTargets)
+    {
+        if (sendTargets.Count == 0) return;
+
+        lock (_lock)
+        {
+            if (_disposed || !IsCurrentSnapshot(snapshot, _cachedAcrSnapshot)) return;
+        }
+
+        List<WebSocket>? failedClients = null;
+        foreach (var client in sendTargets)
+        {
+            try
+            {
+                await SendSnapshotAsync(client, snapshot);
+            }
+            catch (Exception ex)
+            {
+                DService.Instance().Log.Warning($"[WebUiBridge] 整代状态广播失败: {ex.Message}");
+                (failedClients ??= []).Add(client);
+            }
+        }
         RemoveFailedClients(failedClients);
     }
 
