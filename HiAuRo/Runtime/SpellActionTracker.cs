@@ -22,6 +22,7 @@ public sealed class SpellActionTracker
     private volatile bool _cancelCast;
     private volatile bool _actionRejected;
     private Slot? _lastSlot;
+    internal bool HasTrackedSlot => _lastSlot != null;
 
     private SpellActionTracker() { }
 
