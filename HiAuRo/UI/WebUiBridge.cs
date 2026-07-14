@@ -72,28 +72,36 @@ public sealed class WebUiBridge : IDisposable
     {
         var uiSettingsBytes = JsonSerializer.SerializeToUtf8Bytes(
             new { type = "uiSettings", data = uiSettings }, _jsonOptions);
-        AcrSnapshot? captured;
-        lock (_lock)
-        {
-            if (_disposed) return;
-            captured = _cachedAcrSnapshot;
-        }
-        captured ??= CreateFallbackSnapshot();
-
         AcrSnapshot snapshot;
         List<WebSocket> sendTargets;
-        lock (_lock)
+        while (true)
         {
-            if (_disposed) return;
-            var current = _cachedAcrSnapshot ?? captured;
-            snapshot = current with
+            AcrSnapshot? captured;
+            lock (_lock)
             {
-                Generation = ++_acrGeneration,
-                UiSettings = uiSettingsBytes
-            };
-            _cachedAcrSnapshot = snapshot;
-            _clients.RemoveAll(c => c.State != WebSocketState.Open);
-            sendTargets = [.._clients];
+                if (_disposed) return;
+                captured = _cachedAcrSnapshot;
+            }
+            captured ??= CreateFallbackSnapshot();
+            var status = SerializeCurrentStatus();
+
+            lock (_lock)
+            {
+                if (_disposed) return;
+                if (ShouldRetryInitialSnapshot(captured, _cachedAcrSnapshot))
+                    continue;
+
+                snapshot = captured with
+                {
+                    Generation = ++_acrGeneration,
+                    Status = status,
+                    UiSettings = uiSettingsBytes
+                };
+                _cachedAcrSnapshot = snapshot;
+                _clients.RemoveAll(c => c.State != WebSocketState.Open);
+                sendTargets = [.._clients];
+                break;
+            }
         }
 
         await BroadcastSnapshotAsync(snapshot, sendTargets);
