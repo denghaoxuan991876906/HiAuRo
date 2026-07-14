@@ -136,6 +136,8 @@ public static class ACRLifecycle
         return currentJobId != 0 ? currentJobId : lastJobId;
     }
 
+    internal static bool ShouldPublishUnloadState(bool isReplacing) => !isReplacing;
+
     internal static void SetDevelopmentOverride(bool enabled, AcrRegistryEntry? entry)
     {
         var isReady = Data.IsReady;
@@ -357,7 +359,7 @@ public static class ACRLifecycle
         IsLoadingRotation = true;
         try
         {
-            UnloadRotation();
+            UnloadRotation(publishUiState: ShouldPublishUnloadState(isReplacing: true));
 
             var entry = registryEntry.Entry;
             var settingFolder = registryEntry.SettingDir;
@@ -584,6 +586,23 @@ public static class ACRLifecycle
 
             // 宿主订阅保存事件 —— 用户点击保存按钮时自动写回所有 settings
             ACR.MainControlHelper.OnSave += HostSaveAllSettings;
+        }
+        catch
+        {
+            try
+            {
+                UnloadRotation(publishUiState: true);
+            }
+            catch (Exception cleanupEx)
+            {
+                try
+                {
+                    if (DService.IsInitialized)
+                        DService.Instance().Log.Warning($"[ACR] 加载失败清理异常: {cleanupEx.Message}");
+                }
+                catch { }
+            }
+            throw;
         }
         finally
         {
