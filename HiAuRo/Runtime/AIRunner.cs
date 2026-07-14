@@ -200,7 +200,7 @@ public sealed partial class AIRunner
     internal void CancelSlotExecution()
     {
         StopSlotGeneration();
-        BattleData.Reset();
+        BattleData.ClearPendingSlots();
         SpellActionTracker.Instance.Clear();
     }
 

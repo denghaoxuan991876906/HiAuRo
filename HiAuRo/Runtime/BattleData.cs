@@ -87,7 +87,7 @@ public sealed class BattleData
         CurrSequenceIndex = 0;
     }
 
-    public void Reset()
+    internal void ClearPendingSlots()
     {
         SlotState = false;
         ClearSequence();
@@ -101,6 +101,11 @@ public sealed class BattleData
         CurrSequenceStack.Clear();
         CurrSequenceIndexStack.Clear();
         CurrSlotStack.Clear();
+    }
+
+    public void Reset()
+    {
+        ClearPendingSlots();
         UsedOpener = false;
         AbilityCount = 0;
         IsDead = false;
