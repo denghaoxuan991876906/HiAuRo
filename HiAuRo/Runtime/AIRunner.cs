@@ -174,8 +174,8 @@ public sealed partial class AIRunner
         TryCleanupStep(BattleData.Reset, "重置 BattleData");
         TryCleanupStep(() => CountDownHandler.Instance.Reset(), "重置倒计时");
         TryCleanupStep(SpellQueue.Clear, "清空技能队列");
-        TryCleanupStep(() => SpellActionTracker.Instance.Clear(), "清空技能追踪");
         TryCleanupStep(() => Coroutine.Instance.Clear(), "清空协程");
+        TryCleanupStep(() => SpellActionTracker.Instance.Clear(), "清空技能追踪");
         BattleTimeMs = 0;
     }
 
