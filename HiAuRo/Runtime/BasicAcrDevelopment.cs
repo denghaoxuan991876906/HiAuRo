@@ -74,12 +74,12 @@ internal static class BasicAcrDevelopment
         ReloadNow();
     }
 
-    internal static bool SetEnabled(bool enabled)
+    internal static bool SetEnabled(bool enabled) => SetEnabled(enabled, ReloadNow);
+
+    internal static bool SetEnabled(bool enabled, Func<bool> reload)
     {
         var pluginConfig = config
             ?? throw new InvalidOperationException("基础 ACR 开发管理器尚未初始化");
-        var runner = ACRLifecycle.Runner;
-        runner.CancelSlotExecution();
 
         pendingInitialLoad = false;
         Diagnostics = [];
@@ -89,22 +89,12 @@ internal static class BasicAcrDevelopment
         if (enabled)
         {
             pluginConfig.BasicAcrScriptEnabled = true;
-            try
-            {
-                ACRLifecycle.SetDevelopmentOverride(true, null);
-            }
-            catch (Exception ex)
-            {
-                FailClosed($"启用基础 ACR 开发模式失败: {ex.GetBaseException().Message}");
-                return true;
-            }
-
-            var old = current;
-            current = null;
-            DisposeCompilation(old, "重置旧脚本");
-            State = BasicAcrDevelopmentState.NotLoaded;
+            reload();
             return true;
         }
+
+        var runner = ACRLifecycle.Runner;
+        runner.CancelSlotExecution();
 
         string? switchError = null;
         try

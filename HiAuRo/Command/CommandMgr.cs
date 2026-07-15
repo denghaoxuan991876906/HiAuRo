@@ -18,6 +18,18 @@ public static class CommandMgr
         ApplyCombatCommandCore(cfg, rawArgs, null);
     }
 
+    internal static bool ReloadAcr(
+        bool basicAcrEnabled,
+        Func<bool> reloadBasicAcr,
+        Action reloadInstalledAcr)
+    {
+        if (basicAcrEnabled)
+            return reloadBasicAcr();
+
+        reloadInstalledAcr();
+        return true;
+    }
+
     public static void Init()
     {
         DService.Instance().Command.AddHandler(MainCommand, new CommandInfo(OnCommand)
@@ -322,8 +334,10 @@ public static class CommandMgr
                 });
                 break;
             case "reload":
-                Runtime.ACRLifecycle.Reload();
-                DService.Instance().Chat.Print("[HiAuRo] ACR 已重新扫描");
+                var basicAcrEnabled = PluginConfig.Instance.BasicAcrScriptEnabled;
+                ReloadAcr(basicAcrEnabled, BasicAcrDevelopment.Reload, ACRLifecycle.Reload);
+                if (!basicAcrEnabled)
+                    DService.Instance().Chat.Print("[HiAuRo] ACR 已重新扫描");
                 break;
             case "fact":
                 ModeSwitch.ToggleFactAxis();
