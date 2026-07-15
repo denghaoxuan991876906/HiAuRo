@@ -43,8 +43,10 @@
     <Content Include="UI/web/jobview.html" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
     <Content Include="UI/web/app.js" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
     <Content Include="UI/web/style.css" CopyToOutputDirectory="PreserveNewest" LinkBase="UI/web/" />
+    <Content Include="Resources\HiAuRoIcon.png" Link="images\icon.png" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Resources\Fonts\*.ttf" />
     <EmbeddedResource Include="Resources\blm_alpha.png" />
+    <EmbeddedResource Include="Resources\HiAuRoIcon.png" />
     <Compile Remove="Jobs\**" />
     <Compile Remove="Sdk\**" />
     <None Remove="Jobs\**" />

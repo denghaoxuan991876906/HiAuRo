@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Numerics;
 using System.Reflection;
+using Dalamud.Interface.Textures;
 using Dalamud.Interface.Windowing;
 using HiAuRo.ACR;
 using HiAuRo.ImGuiLib;
@@ -16,11 +17,15 @@ public sealed class MainWindow : Window
     private readonly PluginConfig _config;
     private readonly Action _saveConfig;
     private readonly List<TabPageBase> _tabPages;
+    private readonly ISharedImmediateTexture _pluginIcon;
 
     public MainWindow(PluginConfig config, Action saveConfig) : base("HiAuRo##Main")
     {
         _config = config;
         _saveConfig = saveConfig;
+        _pluginIcon = DService.Instance().Texture.GetFromManifestResource(
+            typeof(MainWindow).Assembly,
+            "HiAuRo.Resources.HiAuRoIcon.png");
         SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(300, 200), MaximumSize = new Vector2(float.MaxValue, float.MaxValue) };
         IsOpen = false;
 
@@ -237,16 +242,28 @@ public sealed class MainWindow : Window
         var btnSize = new Vector2(28, 28);
         var controlWidth = btnSize.X * 2 + 8f;
         var textH = ImGui.GetTextLineHeight();
-
-        // 整行垂直居中
-        ImGui.SetCursorPosY((region.Y - textH) * 0.5f);
+        var cursorStart = ImGui.GetCursorPos();
+        const float logoSize = 28f;
 
         // ── 左侧：logo 图标 + 名称 + 版本 ──
-        var logoPos = ImGui.GetCursorScreenPos() + new Vector2(2, textH * 0.5f);
-        IconHelper.DrawIcon(ImGui.GetWindowDrawList(), logoPos,
-            IconHelper.Icons.Settings,
-            ImGui.ColorConvertFloat4ToU32(Theme.Colors.AccentBlue), 18f);
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + 26);
+        var logoMin = ImGui.GetCursorScreenPos() + new Vector2(2, (region.Y - logoSize) * 0.5f);
+        if (_pluginIcon.GetWrapOrDefault() is { } logoTexture && logoTexture.Handle != default)
+        {
+            ImGui.GetWindowDrawList().AddImage(
+                logoTexture.Handle,
+                logoMin,
+                logoMin + new Vector2(logoSize));
+        }
+        else
+        {
+            IconHelper.DrawIcon(ImGui.GetWindowDrawList(), logoMin + new Vector2(logoSize * 0.5f),
+                IconHelper.Icons.Settings,
+                ImGui.ColorConvertFloat4ToU32(Theme.Colors.AccentBlue), 18f);
+        }
+
+        ImGui.SetCursorPos(new Vector2(
+            cursorStart.X + logoSize + 10f,
+            cursorStart.Y + (region.Y - textH) * 0.5f));
         ImGui.TextColored(Theme.Colors.TextPrimary, "HiAuRo");
         ImGui.SameLine();
         ImGui.TextColored(Theme.Colors.TextTertiary, $"v{_version}");
