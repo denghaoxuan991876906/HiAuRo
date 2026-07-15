@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">HiAuRo plugin icon</title>
+  <desc id="desc">A geometric AR monogram with a small Hi signature.</desc>
+
+  <rect x="8" y="8" width="496" height="496" rx="88" fill="#0B1118"/>
+  <rect x="14" y="14" width="484" height="484" rx="82" fill="none" stroke="#34414E" stroke-width="12"/>
+
+  <!-- Hi signature -->
+  <g fill="#FFB547">
+    <path d="M76 70h13v18h22V70h13v52h-13v-21H89v21H76z"/>
+    <circle cx="140" cy="76" r="7"/>
+    <path d="M134 91h13v31h-13z"/>
+  </g>
+  <path d="M163 96h76" stroke="#34414E" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- A: the forward-driving half of the monogram -->
+  <path fill="#36D6C8" fill-rule="evenodd"
+        d="M62 394 174 142h67l106 252h-67l-22-57H151l-23 57H62zm112-112h63l-31-83-32 83z"/>
+
+  <!-- R: interlocked over the A to keep the mark compact at small sizes -->
+  <path fill="#F4F7F9" fill-rule="evenodd"
+        d="M238 394V142h101c68 0 106 31 106 87 0 39-20 67-57 81l69 84h-79l-58-73h-20v73h-62zm62-199v75h34c31 0 47-12 47-38 0-25-16-37-47-37h-34z"/>
+
+  <!-- Three concise strokes reference HiAuRo's three-axis runtime. -->
+  <g stroke-linecap="round" stroke-width="9">
+    <path d="M79 440h91" stroke="#36D6C8"/>
+    <path d="M193 440h126" stroke="#F4F7F9"/>
+    <path d="M342 440h91" stroke="#FFB547"/>
+  </g>
+</svg>
