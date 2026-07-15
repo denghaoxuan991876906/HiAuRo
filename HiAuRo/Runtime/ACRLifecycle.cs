@@ -61,7 +61,7 @@ public static class ACRLifecycle
     private static string _configDir = string.Empty;
     private static volatile bool _pendingReload;
     private static uint _lastJob;
-    private static bool _preserveCombatProgressOnNextJobCheck;
+    private static uint _preservedCombatProgressJobId;
 
     /// <summary>注册外部 ACR</summary>
     public static void RegisterExternal(uint jobId, AcrRegistryEntry registryEntry)
@@ -110,6 +110,7 @@ public static class ACRLifecycle
             var reg = list[newIndex];
             var entry = reg.Entry;
             if (entry == null) return;
+            _preservedCombatProgressJobId = 0;
             LoadRotation(reg);
         }
     }
@@ -137,11 +138,30 @@ public static class ACRLifecycle
         return currentJobId != 0 ? currentJobId : lastJobId;
     }
 
+    internal static uint GetCombatProgressJobId(
+        uint currentJobId,
+        uint pendingJobId,
+        uint lastJobId) =>
+        currentJobId != 0 ? currentJobId
+        : pendingJobId != 0 ? pendingJobId
+        : lastJobId;
+
+    internal static bool CanPreserveCombatProgress(uint progressJobId, uint currentJobId) =>
+        progressJobId != 0
+        && currentJobId != 0
+        && progressJobId == currentJobId;
+
     internal static void SetDevelopmentOverride(bool enabled, AcrRegistryEntry? entry)
     {
         var isReady = Data.IsReady;
-        var readyJob = isReady ? Data.Me.ClassJob : 0;
-        var currentJob = GetDevelopmentOverrideJobId(isReady, readyJob, CurrentJobId, _lastJob);
+        var progressJob = GetCombatProgressJobId(
+            CurrentJobId,
+            _preservedCombatProgressJobId,
+            _lastJob);
+        var currentJob = isReady ? Data.Me.ClassJob : progressJob;
+        var preserveCombatProgress = isReady
+            ? CanPreserveCombatProgress(progressJob, currentJob)
+            : progressJob != 0;
         var oldApplies = DevelopmentOverrideAppliesTo(
             currentJob,
             _developmentOverrideEnabled,
@@ -157,11 +177,11 @@ public static class ACRLifecycle
         try
         {
             if (isReady)
-                CheckJobSwitch(preserveCombatProgress: true);
+                CheckJobSwitch(preserveCombatProgress);
             else
             {
-                _preserveCombatProgressOnNextJobCheck = true;
-                UnloadRotation(preserveCombatProgress: true);
+                _preservedCombatProgressJobId = preserveCombatProgress ? progressJob : 0;
+                UnloadRotation(preserveCombatProgress);
             }
         }
         catch
@@ -169,15 +189,17 @@ public static class ACRLifecycle
             _developmentOverrideEnabled = enabled;
             _developmentRegistryEntry = null;
             _lastJob = 0;
-            _preserveCombatProgressOnNextJobCheck = !Data.IsReady;
+            _preservedCombatProgressJobId = !Data.IsReady && preserveCombatProgress
+                ? progressJob
+                : 0;
             try
             {
-                UnloadRotation(preserveCombatProgress: true);
+                UnloadRotation(preserveCombatProgress);
             }
             catch (Exception cleanupEx)
             {
                 LogDevelopmentCleanupFailure("卸载 Rotation", cleanupEx);
-                try { Runner.Unload(preserveCombatProgress: true); }
+                try { Runner.Unload(preserveCombatProgress); }
                 catch (Exception runnerCleanupEx)
                 {
                     LogDevelopmentCleanupFailure("卸载 Runner", runnerCleanupEx);
@@ -214,7 +236,7 @@ public static class ACRLifecycle
     public static void Shutdown()
     {
         DynModuleWatcher.Stop();
-        _preserveCombatProgressOnNextJobCheck = false;
+        _preservedCombatProgressJobId = 0;
         UnloadRotation();
         _developmentOverrideEnabled = false;
         _developmentRegistryEntry = null;
@@ -274,17 +296,18 @@ public static class ACRLifecycle
 
     private static void CheckJobSwitch(bool preserveCombatProgress = false)
     {
-        preserveCombatProgress |= _preserveCombatProgressOnNextJobCheck;
         if (!HiAuRo.Data.IsReady)
-        {
-            _preserveCombatProgressOnNextJobCheck = preserveCombatProgress;
             return;
-        }
-
-        _preserveCombatProgressOnNextJobCheck = false;
 
         var currentJob = Data.Me.ClassJob;
-        if (!preserveCombatProgress && currentJob == _lastJob && currentJob != 0) return;
+        var pendingProgressJob = _preservedCombatProgressJobId;
+        _preservedCombatProgressJobId = 0;
+        preserveCombatProgress |= CanPreserveCombatProgress(pendingProgressJob, currentJob);
+        if (!preserveCombatProgress
+            && pendingProgressJob == 0
+            && currentJob == _lastJob
+            && currentJob != 0)
+            return;
         _lastJob = currentJob;
 
         DService.Instance().Log.Information($"[ACR] 职业切换: {_lastJob} → {currentJob}");
@@ -379,6 +402,7 @@ public static class ACRLifecycle
     /// <summary>热重载</summary>
     public static void Reload()
     {
+        _preservedCombatProgressJobId = 0;
         UnloadRotation();
 
         _acrRegistry.Clear();
