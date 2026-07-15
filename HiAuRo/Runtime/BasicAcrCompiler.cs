@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Reflection.Metadata;
 using System.Runtime.Loader;
 using HiAuRo.ACR;
 using Microsoft.CodeAnalysis;
@@ -257,7 +258,7 @@ internal static class BasicAcrCompiler
         return references.Values.ToArray();
     }
 
-    private static void TryAddAssemblyReference(
+    private static unsafe void TryAddAssemblyReference(
         IDictionary<string, MetadataReference> references,
         Assembly assembly,
         string hostDllDir)
@@ -278,6 +279,18 @@ internal static class BasicAcrCompiler
             }
             catch { }
         }
+
+        try
+        {
+            if (assembly.TryGetRawMetadata(out var metadata, out var size))
+            {
+                var module = ModuleMetadata.CreateFromMetadata((IntPtr)metadata, size);
+                references[name] = AssemblyMetadata.Create(module)
+                    .GetReference(display: assembly.FullName);
+                return;
+            }
+        }
+        catch { }
 
         var fallbackPath = Path.Combine(hostDllDir, name + ".dll");
         if (!File.Exists(fallbackPath))
