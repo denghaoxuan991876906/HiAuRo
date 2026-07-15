@@ -151,6 +151,9 @@ public static class ACRLifecycle
         && currentJobId != 0
         && progressJobId == currentJobId;
 
+    internal static uint GetPendingProgressJobId(bool preserveCombatProgress, uint progressJobId) =>
+        preserveCombatProgress ? progressJobId : 0;
+
     internal static void SetDevelopmentOverride(bool enabled, AcrRegistryEntry? entry)
     {
         var isReady = Data.IsReady;
@@ -180,7 +183,9 @@ public static class ACRLifecycle
                 CheckJobSwitch(preserveCombatProgress);
             else
             {
-                _preservedCombatProgressJobId = preserveCombatProgress ? progressJob : 0;
+                _preservedCombatProgressJobId = GetPendingProgressJobId(
+                    preserveCombatProgress,
+                    progressJob);
                 UnloadRotation(preserveCombatProgress);
             }
         }
@@ -189,9 +194,9 @@ public static class ACRLifecycle
             _developmentOverrideEnabled = enabled;
             _developmentRegistryEntry = null;
             _lastJob = 0;
-            _preservedCombatProgressJobId = !Data.IsReady && preserveCombatProgress
-                ? progressJob
-                : 0;
+            _preservedCombatProgressJobId = GetPendingProgressJobId(
+                preserveCombatProgress,
+                progressJob);
             try
             {
                 UnloadRotation(preserveCombatProgress);
