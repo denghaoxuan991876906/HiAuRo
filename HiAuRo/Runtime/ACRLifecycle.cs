@@ -154,6 +154,26 @@ public static class ACRLifecycle
     internal static uint GetPendingProgressJobId(bool preserveCombatProgress, uint progressJobId) =>
         preserveCombatProgress ? progressJobId : 0;
 
+    internal static bool TryLoadDevelopmentRotation(
+        Action load,
+        bool propagateFailure,
+        Action<Exception> handleFailure)
+    {
+        try
+        {
+            load();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (propagateFailure)
+                throw;
+
+            handleFailure(ex);
+            return false;
+        }
+    }
+
     internal static void SetDevelopmentOverride(bool enabled, AcrRegistryEntry? entry)
     {
         var isReady = Data.IsReady;
@@ -180,7 +200,7 @@ public static class ACRLifecycle
         try
         {
             if (isReady)
-                CheckJobSwitch(preserveCombatProgress);
+                CheckJobSwitch(preserveCombatProgress, propagateDevelopmentLoadFailure: true);
             else
             {
                 _preservedCombatProgressJobId = GetPendingProgressJobId(
@@ -299,7 +319,9 @@ public static class ACRLifecycle
             ACR.MainControlHelper.IsPaused, ACR.HotkeyHelper.GetAll(), ACR.QTHelper.GetAll());
     }
 
-    private static void CheckJobSwitch(bool preserveCombatProgress = false)
+    private static void CheckJobSwitch(
+        bool preserveCombatProgress = false,
+        bool propagateDevelopmentLoadFailure = false)
     {
         if (!HiAuRo.Data.IsReady)
             return;
@@ -327,7 +349,12 @@ public static class ACRLifecycle
         if (DevelopmentOverrideAppliesTo(currentJob, _developmentOverrideEnabled, _developmentRegistryEntry))
         {
             DService.Instance().Log.Information("[ACR] 加载基础开发模式 ACR");
-            LoadRotation(_developmentRegistryEntry!, preserveCombatProgress);
+            if (!TryLoadDevelopmentRotation(
+                    () => LoadRotation(_developmentRegistryEntry!, preserveCombatProgress),
+                    propagateDevelopmentLoadFailure,
+                    ex => BasicAcrDevelopment.FailClosed(
+                        $"应用基础 ACR 失败: {ex.GetBaseException().Message}")))
+                return;
             return;
         }
 

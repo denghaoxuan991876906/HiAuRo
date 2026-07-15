@@ -57,7 +57,7 @@ public static class CommandHelpCatalog
         new("工具与调试",
         [
             new("/hi panel", "打开面板页面", "/hi panel"),
-            new("/hi reload", "重载当前 ACR（开发模式重编译 Basic）", "/hi reload"),
+            new("/hi reload", "重载 ACR（开发模式仅重编译 Basic）", "/hi reload"),
             new("/hi gallery", "打开组件展示窗口", "/hi gallery"),
 #if DEBUG
             new("/hi debug", "切换调试性能窗口", "/hi debug"),

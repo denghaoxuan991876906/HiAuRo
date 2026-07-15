@@ -132,7 +132,11 @@ public sealed partial class AIRunner
         var hasState = _loaded || entry != null || rotation != null || AiLoop != null
             || enteredRotation || _registeredHotkeyHandlers.Count > 0
             || _slotGenerationCts != null || HasActiveSlotTask;
-        if (!hasState) return;
+        if (!hasState)
+        {
+            CleanupExecutionState(preserveCombatProgress);
+            return;
+        }
 
         StopSlotGeneration();
         var registeredHotkeyHandlers = SnapshotRegisteredHotkeyHandlers();
@@ -184,6 +188,11 @@ public sealed partial class AIRunner
         if (entry != null)
             TryCleanupStep(entry.Dispose, "释放 ACR 入口");
 
+        CleanupExecutionState(preserveCombatProgress);
+    }
+
+    private void CleanupExecutionState(bool preserveCombatProgress)
+    {
         if (preserveCombatProgress)
             TryCleanupStep(BattleData.ClearPendingSlots, "清理待执行 Slot");
         else
