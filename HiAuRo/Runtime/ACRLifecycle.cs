@@ -432,29 +432,45 @@ public static class ACRLifecycle
     }
 
     /// <summary>热重载</summary>
-    public static void Reload()
+    public static void Reload() => Reload(reloadConsumers: true);
+
+    internal static void Reload(bool reloadConsumers)
     {
-        _preservedCombatProgressJobId = 0;
-        UnloadRotation();
-
-        _acrRegistry.Clear();
-        _activeAcrIndices.Clear();
-        // 卸载所有外部 ALC
-        foreach (var alc in _externalAlcs)
+        var reloadState = reloadConsumers
+            ? ExtensionConsumerLifecycle.Suspend(clearPluginWindows: false)
+            : null;
+        try
         {
-            try { alc.Unload(); }
-            catch (Exception ex) { DService.Instance().Log.Error($"[ACR] 卸载 ALC 失败: {ex.Message}"); }
+            _preservedCombatProgressJobId = 0;
+            UnloadRotation();
+
+            _acrRegistry.Clear();
+            _activeAcrIndices.Clear();
+            // 卸载所有外部 ALC
+            foreach (var alc in _externalAlcs)
+            {
+                try { alc.Unload(); }
+                catch (Exception ex) { DService.Instance().Log.Error($"[ACR] 卸载 ALC 失败: {ex.Message}"); }
+            }
+            _externalAlcs.Clear();
+
+            // 重新扫描
+            ACRLoader.UnloadAll();
+            ACRLoader.LoadAll(Plugin.Instance.PluginInterface.ConfigDirectory.FullName);
+
+            _lastJob = 0;
+            CheckJobSwitch();
         }
-        _externalAlcs.Clear();
-
-        // 重新扫描
-        ACRLoader.UnloadAll();
-        ACRLoader.LoadAll(Plugin.Instance.PluginInterface.ConfigDirectory.FullName);
-        Execution.TriggerCatalogExporter.RebuildRuntimeTypeRegistry();
-        Execution.TriggerCatalogExporter.ExportToConfigDirectory(Plugin.Instance.PluginInterface.ConfigDirectory.FullName);
-
-        _lastJob = 0;
-        CheckJobSwitch();
+        finally
+        {
+            if (reloadState is not null)
+            {
+                ExtensionConsumerLifecycle.Resume(
+                    reloadState,
+                    Plugin.Instance.PluginInterface.ConfigDirectory.FullName,
+                    refreshPluginWindows: false);
+            }
+        }
     }
 
     private static void LoadRotation(

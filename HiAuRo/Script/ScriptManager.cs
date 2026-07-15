@@ -11,7 +11,6 @@ public static class ScriptManager
     private static readonly List<ScriptRecord> _activeScripts = [];
     private static uint _currentTerritoryId;
     private static bool _combatHooked;
-    private static string? _hostDllDir;
     private static bool _dutyHooked;
     private static bool _lastFrameBoundByDuty;
 
@@ -34,9 +33,6 @@ public static class ScriptManager
         "System.IO.FileSystem", "System.Net",
         "System.Diagnostics.Process", "System.Threading.Tasks.Parallel",
     ];
-
-    /// <summary>设置 HiAuRo.dll 所在目录（从 Plugin.cs 传入）</summary>
-    public static void SetHostDllPath(string dllDir) => _hostDllDir = dllDir;
 
     /// <summary>每帧：检测副本切换、团灭、离本并加载/卸载脚本</summary>
     public static void Update()
@@ -141,8 +137,8 @@ public static class ScriptManager
                 var newInstance = Activator.CreateInstance(record.Type);
                 if (newInstance == null) continue;
 
-                (record.Instance as IDisposable)?.Dispose();
                 ScriptEngine.Instance.UnregisterAll(record);
+                (record.Instance as IDisposable)?.Dispose();
                 record.Instance = newInstance;
 
                 var nameAttr = record.Type.GetCustomAttribute<ScriptTypeAttribute>();
@@ -256,8 +252,8 @@ public static class ScriptManager
             newRecord.MethodEnabled[k] = v;
 
         // 清理旧资源
-        (record.Instance as IDisposable)?.Dispose();
         ScriptEngine.Instance.UnregisterAll(record);
+        (record.Instance as IDisposable)?.Dispose();
         record.Context?.Unload();
 
         // 直接替换 record 字段（不修改引用，保持 _activeScripts 不变）
@@ -271,7 +267,6 @@ public static class ScriptManager
         record.CompileError = null;
 
         ScriptEngine.Instance.Register(record);
-        ScriptEngine.Instance.InvokeInit(record);
         DService.Instance().Log.Information($"[ScriptManager] 热重载完成 {record.Name}");
     }
 
@@ -285,8 +280,8 @@ public static class ScriptManager
         var name = attr?.Name ?? newType.Name;
         LoadSettings(newInstance, newType, record.TerritoryId, name);
 
-        (record.Instance as IDisposable)?.Dispose();
         ScriptEngine.Instance.UnregisterAll(record);
+        (record.Instance as IDisposable)?.Dispose();
 
         record.Instance = newInstance;
         record.Type = newType;
@@ -294,7 +289,6 @@ public static class ScriptManager
         record.CompileError = null;
 
         ScriptEngine.Instance.Register(record);
-        ScriptEngine.Instance.InvokeInit(record);
         DService.Instance().Log.Information($"[ScriptManager] 插件热重载完成 {record.Name}");
     }
 
@@ -384,11 +378,9 @@ public static class ScriptManager
     {
         foreach (var record in _activeScripts)
         {
-            try
-            {
-                (record.Instance as IDisposable)?.Dispose();
-                ScriptEngine.Instance.UnregisterAll(record);
-            }
+            try { ScriptEngine.Instance.UnregisterAll(record); }
+            catch { }
+            try { record.Dispose(); }
             catch { }
         }
 
@@ -407,7 +399,8 @@ public static class ScriptManager
     {
         var wrapped = PrependDefaultUsings(code);
         var syntaxTree = CSharpSyntaxTree.ParseText(wrapped);
-        var references = GetReferences();
+        var bindings = Runtime.SharedAssemblyResolver.Capture();
+        var references = GetReferences(bindings);
 
         var compilation = CSharpCompilation.Create(
             $"Script_{Guid.NewGuid():N}",
@@ -432,59 +425,77 @@ public static class ScriptManager
         ms.Seek(0, SeekOrigin.Begin);
 
         var alc = new AssemblyLoadContext($"Script_{Path.GetFileNameWithoutExtension(filePath)}", isCollectible: true);
-        alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name);
+        alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name, bindings);
+        ScriptRecord? candidateRecord = null;
 
-        var asm = alc.LoadFromStream(ms);
-
-        var found = false;
-        foreach (var type in asm.GetTypes())
+        try
         {
-            if (type.IsAbstract || type.IsInterface) continue;
-            var attr = type.GetCustomAttribute<ScriptTypeAttribute>();
-            if (attr == null) continue;
+            var asm = alc.LoadFromStream(ms);
 
-            var name = attr.Name ?? type.Name;
-
-            if (attr.TerritoryIds?.Contains(territoryId) != true)
+            var found = false;
+            foreach (var type in asm.GetTypes())
             {
-                CompileDiagnostics.Add($"{Path.GetFileName(filePath)}: {name} → 需要副本 {string.Join(",", attr.TerritoryIds ?? [])}，当前 {territoryId}，跳过");
-                continue;
+                if (type.IsAbstract || type.IsInterface) continue;
+                var attr = type.GetCustomAttribute<ScriptTypeAttribute>();
+                if (attr == null) continue;
+
+                var name = attr.Name ?? type.Name;
+
+                if (attr.TerritoryIds?.Contains(territoryId) != true)
+                {
+                    CompileDiagnostics.Add($"{Path.GetFileName(filePath)}: {name} → 需要副本 {string.Join(",", attr.TerritoryIds ?? [])}，当前 {territoryId}，跳过");
+                    continue;
+                }
+
+                var instance = Activator.CreateInstance(type);
+                if (instance == null) continue;
+
+                LoadSettings(instance, type, territoryId, name);
+
+                var record = new ScriptRecord
+                {
+                    Name = name,
+                    Author = attr.Author,
+                    Instance = instance,
+                    Type = type,
+                    Assembly = asm,
+                    Context = alc,
+                    SourcePath = filePath,
+                    TerritoryId = territoryId,
+                    HasSettings = type.GetProperties().Any(p => p.GetCustomAttribute<UserSettingAttribute>() != null)
+                };
+                candidateRecord = record;
+
+                ApplyEnableStates(record, enableStates);
+
+                ScriptEngine.Instance.Register(record);
+                _activeScripts.Add(record);
+                found = true;
+                DService.Instance().Log.Information($"[ScriptManager] 已加载 {name} ({type.Name})");
+                return;
             }
 
-            var instance = Activator.CreateInstance(type);
-            if (instance == null) continue;
-
-            LoadSettings(instance, type, territoryId, name);
-
-            var record = new ScriptRecord
+            if (!found)
             {
-                Name = name,
-                Author = attr.Author,
-                Instance = instance,
-                Type = type,
-                Assembly = asm,
-                Context = alc,
-                SourcePath = filePath,
-                TerritoryId = territoryId,
-                HasSettings = type.GetProperties().Any(p => p.GetCustomAttribute<UserSettingAttribute>() != null)
-            };
+                var typeNames = string.Join(", ", asm.GetTypes().Select(t => t.Name));
+                DService.Instance().Log.Warning($"[ScriptManager] {Path.GetFileName(filePath)} 编译成功，但无匹配当前的副本 {territoryId} 的 [ScriptType] 类。找到的类型: {typeNames}");
+            }
 
-            ApplyEnableStates(record, enableStates);
-
-            ScriptEngine.Instance.Register(record);
-            _activeScripts.Add(record);
-            found = true;
-            DService.Instance().Log.Information($"[ScriptManager] 已加载 {name} ({type.Name})");
-            return;
+            alc.Unload();
         }
-
-        if (!found)
+        catch
         {
-            var typeNames = string.Join(", ", asm.GetTypes().Select(t => t.Name));
-            DService.Instance().Log.Warning($"[ScriptManager] {Path.GetFileName(filePath)} 编译成功，但无匹配当前的副本 {territoryId} 的 [ScriptType] 类。找到的类型: {typeNames}");
+            if (candidateRecord is not null)
+            {
+                _activeScripts.Remove(candidateRecord);
+                try { ScriptEngine.Instance.UnregisterAll(candidateRecord); }
+                catch { }
+                try { candidateRecord.Dispose(); }
+                catch { }
+            }
+            alc.Unload();
+            throw;
         }
-
-        alc.Unload();
     }
 
     /// <summary>在用户代码前注入默认 using（与 GlobalUsings.cs 对齐）</summary>
@@ -558,7 +569,8 @@ using HiAuRo.FA.Shapes;
     {
         var wrapped = PrependDefaultUsings(code);
         var syntaxTree = CSharpSyntaxTree.ParseText(wrapped);
-        var references = GetReferences();
+        var bindings = Runtime.SharedAssemblyResolver.Capture();
+        var references = GetReferences(bindings);
 
         var compilation = CSharpCompilation.Create(
             $"Script_{Guid.NewGuid():N}",
@@ -588,40 +600,52 @@ using HiAuRo.FA.Shapes;
         ms.Seek(0, SeekOrigin.Begin);
 
         var alc = new AssemblyLoadContext($"Script_{Path.GetFileNameWithoutExtension(filePath)}", isCollectible: true);
-        alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name);
+        alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name, bindings);
+        object? candidateInstance = null;
 
-        var asm = alc.LoadFromStream(ms);
-
-        foreach (var type in asm.GetExportedTypes())
+        try
         {
-            if (type.IsAbstract || type.IsInterface) continue;
-            var attr = type.GetCustomAttribute<ScriptTypeAttribute>();
-            if (attr == null) continue;
-            if (attr.TerritoryIds?.Contains(territoryId) != true) continue;
+            var asm = alc.LoadFromStream(ms);
 
-            var instance = Activator.CreateInstance(type);
-            if (instance == null) continue;
-
-            var name = attr.Name ?? type.Name;
-            LoadSettings(instance, type, territoryId, name);
-
-            return new ScriptRecord
+            foreach (var type in asm.GetExportedTypes())
             {
-                Name = name,
-                Author = attr.Author,
-                Instance = instance,
-                SourceWriteTimeUtc = File.GetLastWriteTimeUtc(filePath),
-                Type = type,
-                Assembly = asm,
-                Context = alc,
-                SourcePath = filePath,
-                TerritoryId = territoryId,
-                HasSettings = type.GetProperties().Any(p => p.GetCustomAttribute<UserSettingAttribute>() != null)
-            };
-        }
+                if (type.IsAbstract || type.IsInterface) continue;
+                var attr = type.GetCustomAttribute<ScriptTypeAttribute>();
+                if (attr == null) continue;
+                if (attr.TerritoryIds?.Contains(territoryId) != true) continue;
 
-        alc.Unload();
-        return null;
+                var instance = Activator.CreateInstance(type);
+                if (instance == null) continue;
+                candidateInstance = instance;
+
+                var name = attr.Name ?? type.Name;
+                LoadSettings(instance, type, territoryId, name);
+
+                return new ScriptRecord
+                {
+                    Name = name,
+                    Author = attr.Author,
+                    Instance = instance,
+                    SourceWriteTimeUtc = File.GetLastWriteTimeUtc(filePath),
+                    Type = type,
+                    Assembly = asm,
+                    Context = alc,
+                    SourcePath = filePath,
+                    TerritoryId = territoryId,
+                    HasSettings = type.GetProperties().Any(p => p.GetCustomAttribute<UserSettingAttribute>() != null)
+                };
+            }
+
+            alc.Unload();
+            return null;
+        }
+        catch
+        {
+            try { (candidateInstance as IDisposable)?.Dispose(); }
+            catch { }
+            alc.Unload();
+            throw;
+        }
     }
 
     private static void ApplyEnableStates(ScriptRecord record, Dictionary<string, bool> states)
@@ -814,108 +838,9 @@ using HiAuRo.FA.Shapes;
     }
 
     /// <summary>收集编译引用（白名单过滤）</summary>
-    private static MetadataReference[] GetReferences()
-    {
-        var refs = new List<MetadataReference>();
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            if (asm.IsDynamic) continue;
-            var name = asm.GetName().Name ?? "";
-            if (!IsAllowed(name)) continue;
-
-            // Location 正常 → 直接引用
-            if (!string.IsNullOrEmpty(asm.Location))
-            {
-                try { refs.Add(MetadataReference.CreateFromFile(asm.Location)); continue; }
-                catch { }
-            }
-
-            // Location 为空（Dalamud LoadFromStream）→ 从 host DLL 目录找
-            if (_hostDllDir != null)
-            {
-                var path = Path.Combine(_hostDllDir, name + ".dll");
-                if (File.Exists(path))
-                {
-                    try { refs.Add(MetadataReference.CreateFromFile(path)); continue; }
-                    catch { }
-                }
-            }
-        }
-
-        foreach (var (_, record) in Runtime.PluginLoader.Plugins)
-        {
-            try { refs.Add(MetadataReference.CreateFromImage(record.DllBytes)); }
-            catch { }
-        }
-
-        // 确保核心引用存在
-        EnsureRef(refs, typeof(object).Assembly, "System.Runtime");
-        EnsureRef(refs, typeof(object).Assembly, "System.Private.CoreLib");
-        EnsureRef(refs, typeof(List<>).Assembly, "System.Collections");
-        EnsureRef(refs, typeof(System.Linq.Enumerable).Assembly, "System.Linq");
-        EnsureRef(refs, typeof(System.Numerics.Vector3).Assembly, "System.Numerics.Vectors");
-
-        // 强制加入 HiAuRo + OmenTools 元数据引用
-        // 不依赖 auto-scan 的 Location（Dalamud 环境下可能为空）
-        ForceAddAssembly(refs, typeof(ScriptManager).Assembly);
-        ForceAddAssembly(refs, typeof(OmenTools.OmenService.GameState).Assembly);
-
-        return refs.ToArray();
-    }
-
-    private static void ForceAddAssembly(List<MetadataReference> refs, Assembly asm)
-    {
-        var name = asm.GetName().Name;
-        if (name == null || refs.Any(r => r.Display?.Contains(name) == true)) return;
-
-        // Try file path first
-        if (!string.IsNullOrEmpty(asm.Location))
-        {
-            try { refs.Add(MetadataReference.CreateFromFile(asm.Location)); return; }
-            catch { }
-        }
-
-        // Try host DLL directory (Dalamud LoadFromStream → Location 为空)
-        if (_hostDllDir != null)
-        {
-            var path = Path.Combine(_hostDllDir, name + ".dll");
-            if (File.Exists(path))
-            {
-                try { refs.Add(MetadataReference.CreateFromFile(path)); return; }
-                catch { }
-            }
-        }
-
-        // Fallback: scan modules
-        foreach (var module in asm.Modules)
-        {
-            if (!string.IsNullOrEmpty(module.Name) && module.Name.EndsWith(".dll"))
-            {
-                try
-                {
-                    var fullPath = Path.Combine(Path.GetDirectoryName(asm.Location) ?? ".", module.Name);
-                    if (File.Exists(fullPath))
-                    {
-                        refs.Add(MetadataReference.CreateFromFile(fullPath));
-                        return;
-                    }
-                }
-                catch { }
-            }
-        }
-
-        DService.Instance().Log.Warning($"[ScriptManager] 无法加载程序集引用: {name}");
-    }
-
-    private static void EnsureRef(List<MetadataReference> refs, Assembly asm, string name)
-    {
-        if (refs.Any(r => r.Display?.Contains(name) == true)) return;
-        if (asm != null && !string.IsNullOrEmpty(asm.Location))
-        {
-            try { refs.Add(MetadataReference.CreateFromFile(asm.Location)); }
-            catch { }
-        }
-    }
+    private static MetadataReference[] GetReferences(
+        Runtime.SharedAssemblyResolver.Snapshot bindings) =>
+        bindings.GetMetadataReferences(IsAllowed, includeExtensions: true);
 
     private static bool IsAllowed(string name)
     {
@@ -933,26 +858,13 @@ using HiAuRo.FA.Shapes;
     }
 
     /// <summary>ALC 程序集解析</summary>
-    private static Assembly? ResolveAssembly(AssemblyLoadContext ctx, AssemblyName name)
+    private static Assembly? ResolveAssembly(
+        AssemblyLoadContext ctx,
+        AssemblyName name,
+        Runtime.SharedAssemblyResolver.Snapshot bindings)
     {
-        if (_allowedPrefixes.Any(p => name.Name?.StartsWith(p) == true))
-        {
-            if (name.Name == "HiAuRo")
-                return typeof(ScriptManager).Assembly;
-
-            foreach (var asm in AssemblyLoadContext.Default.Assemblies)
-            {
-                if (asm.GetName().Name == name.Name)
-                    return asm;
-            }
-
-            // 从 PluginLoader 加载的程序集中查找（如 HiAuRo.FA）
-            foreach (var (_, record) in Runtime.PluginLoader.Plugins)
-            {
-                if (record.Assembly.GetName().Name == name.Name)
-                    return record.Assembly;
-            }
-        }
+        if (bindings.IsShared(name.Name))
+            return bindings.Resolve(name);
 
         var scriptsDir = GetScriptDir();
         var dllPath = Path.Combine(scriptsDir, name.Name + ".dll");
@@ -968,6 +880,8 @@ using HiAuRo.FA.Shapes;
 
 public sealed class ScriptRecord : IDisposable
 {
+    private CancellationTokenSource _lifetimeCts = new();
+
     public string Name { get; set; } = "";
     public string? Author { get; set; }
     public object? Instance { get; set; }
@@ -990,9 +904,28 @@ public sealed class ScriptRecord : IDisposable
     /// <summary>方法参数列表：methodKey → [字段名, ...]（由 ScriptEngine.Register 填入）</summary>
     public Dictionary<string, List<string>> MethodParamNames { get; } = [];
 
+    internal CancellationToken LifetimeToken => _lifetimeCts.Token;
+
+    internal void Activate()
+    {
+        if (!_lifetimeCts.IsCancellationRequested)
+            return;
+
+        _lifetimeCts.Dispose();
+        _lifetimeCts = new CancellationTokenSource();
+    }
+
+    internal void Deactivate()
+    {
+        if (!_lifetimeCts.IsCancellationRequested)
+            _lifetimeCts.Cancel();
+    }
+
     public void Dispose()
     {
+        Deactivate();
         if (Instance is IDisposable d) d.Dispose();
+        _lifetimeCts.Dispose();
     }
 }
 

@@ -12,7 +12,8 @@ public static class ACRLoader
 {
     private static readonly Dictionary<string, AssemblyLoadContext> _authorContexts = [];
     private static readonly List<Assembly> _loadedAcrAssemblies = [];
-    private static readonly HashSet<string> _hostPrefixes = ["HiAuRo", "OmenTools", "Dalamud", "FFXIVClientStructs", "Lumina", "ImGuiNET", "TerraFX", "System.", "Microsoft."];
+    private static readonly HashSet<IRotationEntry> _loadedEntries =
+        new(ReferenceEqualityComparer.Instance);
 
     /// <summary>已加载的 ACR 程序集列表</summary>
     public static IReadOnlyList<Assembly> LoadedAcrAssemblies => _loadedAcrAssemblies.AsReadOnly();
@@ -20,6 +21,8 @@ public static class ACRLoader
     /// <summary>扫描并加载所有外部 ACR，注册到 ACRLifecycle</summary>
     public static void LoadAll(string configDir)
     {
+        HelperUpdater.TryLoadLocalSync();
+
         var acrDir = Path.Combine(configDir, "ACR");
         if (!Directory.Exists(acrDir)) return;
 
@@ -43,19 +46,28 @@ public static class ACRLoader
                 DService.Instance().Log.Warning($"[ACRLoader] 跳过 {installKey}: 主 DLL 不存在 {dllPath}");
                 continue;
             }
+            var bindings = SharedAssemblyResolver.CaptureHost();
+            if (SharedAssemblyResolver.IsHostAssemblyFile(dllPath, bindings))
+            {
+                DService.Instance().Log.Error($"[ACRLoader] 跳过 {installKey}: 主 DLL 不能是宿主程序集");
+                continue;
+            }
 
             var alc = new AssemblyLoadContext($"ACR_{installKey}", isCollectible: true);
-            alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name, installDir);
+            alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name, installDir, bindings);
 
             var found = false;
+            Assembly? loadedAssembly = null;
+            var registrations = new List<(uint JobId, ACRLifecycle.AcrRegistryEntry Registry)>();
+            var createdEntries = new List<IRotationEntry>();
             try
             {
                 var dllBytes = File.ReadAllBytes(dllPath);
                 using var ms = new MemoryStream(dllBytes, writable: false);
                 var asm = alc.LoadFromStream(ms);
-                _loadedAcrAssemblies.Add(asm);
+                loadedAssembly = asm;
 
-                PreResolveReferences(alc, asm, installDir);
+                PreResolveReferences(alc, asm, installDir, bindings);
                 foreach (var type in asm.GetExportedTypes())
                 {
                     if (type is { IsAbstract: false, IsInterface: false } &&
@@ -63,21 +75,30 @@ public static class ACRLoader
                     {
                         if (Activator.CreateInstance(type) is IRotationEntry entry)
                         {
-                            foreach (var job in entry.TargetJobs)
+                            createdEntries.Add(entry);
+                            var jobs = entry.TargetJobs.ToArray();
+                            if (jobs.Length == 0)
                             {
-                                ACRLifecycle.RegisterExternal((uint)job, new ACRLifecycle.AcrRegistryEntry(
-                                    installKey,
-                                    !string.IsNullOrWhiteSpace(installed.DisplayName) ? installed.DisplayName : entry.AuthorName,
-                                    installed.PublisherId,
-                                    installed.AcrId,
-                                    installed.Version,
-                                    installDir,
-                                    installed.SettingDir,
-                                    entry,
-                                    false));
+                                entry.Dispose();
+                                createdEntries.Remove(entry);
+                                continue;
+                            }
+                            var registry = new ACRLifecycle.AcrRegistryEntry(
+                                installKey,
+                                !string.IsNullOrWhiteSpace(installed.DisplayName) ? installed.DisplayName : entry.AuthorName,
+                                installed.PublisherId,
+                                installed.AcrId,
+                                installed.Version,
+                                installDir,
+                                installed.SettingDir,
+                                entry,
+                                false);
+                            foreach (var job in jobs)
+                            {
+                                registrations.Add(((uint)job, registry));
                             }
 
-                            DService.Instance().Log.Information($"[ACRLoader] {installKey}/{Path.GetFileName(dllPath)} → {type.Name} [{string.Join(",", entry.TargetJobs)}]");
+                            DService.Instance().Log.Information($"[ACRLoader] {installKey}/{Path.GetFileName(dllPath)} → {type.Name} [{string.Join(",", jobs)}]");
                             found = true;
                         }
                     }
@@ -86,10 +107,22 @@ public static class ACRLoader
             catch (Exception ex)
             {
                 DService.Instance().Log.Error($"[ACRLoader] 加载失败 {dllPath}: {ex.Message}");
+                foreach (var entry in createdEntries)
+                {
+                    try { entry.Dispose(); }
+                    catch { }
+                }
+                registrations.Clear();
+                found = false;
             }
 
             if (found)
             {
+                foreach (var (jobId, registry) in registrations)
+                    ACRLifecycle.RegisterExternal(jobId, registry);
+                foreach (var entry in createdEntries)
+                    _loadedEntries.Add(entry);
+                _loadedAcrAssemblies.Add(loadedAssembly!);
                 _authorContexts[installKey] = alc;
                 ACRLifecycle.RegisterContext(alc);
             }
@@ -113,57 +146,81 @@ public static class ACRLoader
             if (File.Exists(installedMetadataPath))
                 continue;
 
+            var bindings = SharedAssemblyResolver.CaptureHost();
             var dllCandidates = Directory.GetFiles(authorDir, "*.dll")
                 .Where(path => !path.EndsWith(".deps.dll", StringComparison.OrdinalIgnoreCase))
+                .Where(path => !SharedAssemblyResolver.IsHostAssemblyFile(path, bindings))
                 .ToArray();
             if (dllCandidates.Length == 0)
                 continue;
 
             var alc = new AssemblyLoadContext($"ACR_{authorName}", isCollectible: true);
-            alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name, authorDir);
+            alc.Resolving += (ctx, name) => ResolveAssembly(ctx, name, authorDir, bindings);
 
             var found = false;
             foreach (var dllPath in dllCandidates)
             {
+                var registrations = new List<(uint JobId, ACRLifecycle.AcrRegistryEntry Registry)>();
+                var createdEntries = new List<IRotationEntry>();
                 try
                 {
                     var dllBytes = File.ReadAllBytes(dllPath);
                     using var ms = new MemoryStream(dllBytes, writable: false);
                     var asm = alc.LoadFromStream(ms);
-                    _loadedAcrAssemblies.Add(asm);
 
-                    PreResolveReferences(alc, asm, authorDir);
+                    PreResolveReferences(alc, asm, authorDir, bindings);
                     foreach (var type in asm.GetExportedTypes())
                     {
                         if (type is { IsAbstract: false, IsInterface: false } &&
                             typeof(IRotationEntry).IsAssignableFrom(type) &&
                             Activator.CreateInstance(type) is IRotationEntry entry)
                         {
+                            createdEntries.Add(entry);
                             var installKey = authorName;
                             var settingDir = Setting.SettingMgr.GetAcrDir(authorName);
-
-                            foreach (var job in entry.TargetJobs)
+                            var jobs = entry.TargetJobs.ToArray();
+                            if (jobs.Length == 0)
                             {
-                                ACRLifecycle.RegisterExternal((uint)job, new ACRLifecycle.AcrRegistryEntry(
-                                    installKey,
-                                    entry.AuthorName,
-                                    "",
-                                    "",
-                                    "",
-                                    authorDir,
-                                    settingDir,
-                                    entry,
-                                    true));
+                                entry.Dispose();
+                                createdEntries.Remove(entry);
+                                continue;
                             }
+                            var registry = new ACRLifecycle.AcrRegistryEntry(
+                                installKey,
+                                entry.AuthorName,
+                                "",
+                                "",
+                                "",
+                                authorDir,
+                                settingDir,
+                                entry,
+                                true);
 
-                            DService.Instance().Log.Information($"[ACRLoader] legacy {authorName}/{Path.GetFileName(dllPath)} → {type.Name} [{string.Join(",", entry.TargetJobs)}]");
-                            found = true;
+                            foreach (var job in jobs)
+                                registrations.Add(((uint)job, registry));
+
+                            DService.Instance().Log.Information($"[ACRLoader] legacy {authorName}/{Path.GetFileName(dllPath)} → {type.Name} [{string.Join(",", jobs)}]");
                         }
+                    }
+
+                    if (registrations.Count > 0)
+                    {
+                        foreach (var (jobId, registry) in registrations)
+                            ACRLifecycle.RegisterExternal(jobId, registry);
+                        foreach (var entry in createdEntries)
+                            _loadedEntries.Add(entry);
+                        _loadedAcrAssemblies.Add(asm);
+                        found = true;
                     }
                 }
                 catch (Exception ex)
                 {
                     DService.Instance().Log.Error($"[ACRLoader] legacy 加载失败 {dllPath}: {ex.Message}");
+                    foreach (var entry in createdEntries)
+                    {
+                        try { entry.Dispose(); }
+                        catch { }
+                    }
                 }
             }
 
@@ -180,84 +237,20 @@ public static class ACRLoader
     }
 
     /// <summary>程序集解析</summary>
-    private static Assembly? ResolveAssembly(AssemblyLoadContext ctx, AssemblyName name, string authorDir)
+    private static Assembly? ResolveAssembly(
+        AssemblyLoadContext ctx,
+        AssemblyName name,
+        string authorDir,
+        SharedAssemblyResolver.Snapshot bindings)
     {
         DService.Instance().Log.Debug($"[ACRLoader] 解析程序集: {name.Name} v{name.Version} (请求者:{ctx.Name})");
 
-        if (_hostPrefixes.Any(p => name.Name?.StartsWith(p) == true))
+        if (bindings.IsHost(name.Name))
         {
-            // HiAuRo 自身一定已加载（我们正在执行的代码就是它）
-            if (name.Name == "HiAuRo")
-            {
-                var selfAsm = typeof(ACRLoader).Assembly;
-                DService.Instance().Log.Debug($"[ACRLoader]   → 返回自身 HiAuRo 程序集: {selfAsm.GetName().Name} v{selfAsm.GetName().Version}");
-                return selfAsm;
-            }
-
-            // HiAuRo.Helper: 优先用 HelperUpdater 已初始化 _ctx 的程序集，避免 ALC 隔离导致 _ctx=null
-            if (name.Name == "HiAuRo.Helper")
-            {
-                if (HelperUpdater.HelperAssembly != null)
-                {
-                    DService.Instance().Log.Debug($"[ACRLoader]   → 共享 HelperUpdater 的 HiAuRo.Helper 程序集");
-                    return HelperUpdater.HelperAssembly;
-                }
-
-                // 未加载 → 已有缓存文件则同步加载，避免 ACR ALC 内产生独立副本导致 _ctx=null
-                HelperUpdater.TryLoadLocalSync();
-                if (HelperUpdater.HelperAssembly != null)
-                {
-                    DService.Instance().Log.Debug($"[ACRLoader]   → 同步触发 HelperUpdater 缓存加载后共享");
-                    return HelperUpdater.HelperAssembly;
-                }
-            }
-
-            // 其它宿主程序集（OmenTools, Dalamud 等）：
-            // 1. 先在 Default ALC 中查找（如 System.*, Microsoft.*）
-            foreach (var asm in AssemblyLoadContext.Default.Assemblies)
-            {
-                if (asm.GetName().Name == name.Name)
-                {
-                    DService.Instance().Log.Debug($"[ACRLoader]   → 在 Default ALC 找到: {asm.GetName().Name} v{asm.GetName().Version}");
-                    return asm;
-                }
-            }
-
-            // 2. 再在 HiAuRo 自身 ALC 中查找（OmenTools 等宿主程序集在这里）
-            var hostAlc = AssemblyLoadContext.GetLoadContext(typeof(ACRLoader).Assembly);
-            if (hostAlc != null)
-            {
-                foreach (var asm in hostAlc.Assemblies)
-                {
-                    if (asm.GetName().Name == name.Name)
-                    {
-                        DService.Instance().Log.Debug($"[ACRLoader]   → 在宿主 ALC 找到: {asm.GetName().Name} v{asm.GetName().Version}");
-                        return asm;
-                    }
-                }
-
-                // 2.5 宿主 ALC 遍历不到时（如 Dalamud 惰性加载），让宿主 ALC 自身尝试解析
-                try
-                {
-                    var fromHost = hostAlc.LoadFromAssemblyName(name);
-                    if (fromHost != null)
-                    {
-                        DService.Instance().Log.Debug($"[ACRLoader]   → 宿主 ALC 解析: {fromHost.GetName().Name} v{fromHost.GetName().Version}");
-                        return fromHost;
-                    }
-                }
-                catch { }
-            }
-
-            // 3. Fallback: 让 Default ALC 自行解析
-            try
-            {
-                return AssemblyLoadContext.Default.LoadFromAssemblyName(name);
-            }
-            catch (Exception ex)
-            {
-                DService.Instance().Log.Error($"[ACRLoader] LoadFromAssemblyName 失败: {name.Name} — {ex.Message}");
-            }
+            var shared = bindings.Resolve(name);
+            if (shared is null)
+                DService.Instance().Log.Error($"[ACRLoader] 宿主程序集未加载: {name.Name}");
+            return shared;
         }
 
         var path = Path.Combine(authorDir, name.Name + ".dll");
@@ -272,30 +265,30 @@ public static class ACRLoader
     }
 
     /// <summary>立即解析所有引用程序集，避免战斗中 JIT 惰性解析触发 I/O</summary>
-    private static void PreResolveReferences(AssemblyLoadContext alc, Assembly asm, string authorDir)
+    private static void PreResolveReferences(
+        AssemblyLoadContext alc,
+        Assembly asm,
+        string authorDir,
+        SharedAssemblyResolver.Snapshot bindings)
     {
-        foreach (var refName in asm.GetReferencedAssemblies())
-        {
-            try
-            {
-                // 确保引用程序集已加载到该 ALC 中
-                alc.LoadFromAssemblyName(refName);
-            }
-            catch
-            {
-                // 如果 ALC 自身解析不了，尝试 ResolveAssembly 回退（如 ACR 本地依赖）
-                try
-                {
-                    ResolveAssembly(alc, refName, authorDir);
-                }
-                catch { }
-            }
-        }
+        SharedAssemblyResolver.PreloadDependencies(
+            alc,
+            asm,
+            bindings,
+            name => ResolveAssembly(alc, name, authorDir, bindings),
+            "ACR");
     }
 
     /// <summary>卸载所有外部 ACR</summary>
     public static void UnloadAll()
     {
+        foreach (var entry in _loadedEntries.ToArray())
+        {
+            try { entry.Dispose(); }
+            catch (Exception ex) { DService.Instance().Log.Error($"[ACRLoader] 释放入口失败: {ex.Message}"); }
+        }
+        _loadedEntries.Clear();
+
         foreach (var (name, alc) in _authorContexts)
         {
             try { alc.Unload(); }
@@ -303,5 +296,14 @@ public static class ACRLoader
         }
         _authorContexts.Clear();
         _loadedAcrAssemblies.Clear();
+    }
+
+    internal static bool TryDisposeEntry(IRotationEntry entry)
+    {
+        if (!_loadedEntries.Remove(entry))
+            return false;
+
+        entry.Dispose();
+        return true;
     }
 }

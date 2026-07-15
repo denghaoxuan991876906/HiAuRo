@@ -22,10 +22,12 @@ public abstract class TriggerNode
     /// <summary>异步求值。Task 完成 = 节点终结</summary>
     public async Task<bool> Execute(EvalContext ctx)
     {
+        ctx.CancellationToken.ThrowIfCancellationRequested();
         if (!Enable) return true;
         if (ctx.IsDisposed) return false;
         Hi.Verbose($"[ExecNode] ▶ {DisplayName}(#{Id}) 进入");
         var result = await OnExecute(ctx);
+        ctx.CancellationToken.ThrowIfCancellationRequested();
         Hi.Verbose($"[ExecNode] ◀ {DisplayName}(#{Id}) 退出 → {(result ? "成功" : "失败")}");
         return result;
     }
@@ -90,7 +92,14 @@ public sealed class TreeParallel : TriggerCompositeNode
         if (AnyReturn)
         {
             var branches = Childs.Where(c => c.Enable)
-                .Select(c => (Node: c, Context: ctx.CreateChild()))
+                .Select(c =>
+                {
+                    var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                        ctx.CancellationToken);
+                    var branchContext = ctx.CreateChild();
+                    branchContext.CancellationToken = cancellation.Token;
+                    return (Node: c, Context: branchContext, Cancellation: cancellation);
+                })
                 .ToList();
             var tasks = branches.Select(b => b.Node.Execute(b.Context)).ToList();
 
@@ -98,10 +107,28 @@ public sealed class TreeParallel : TriggerCompositeNode
             if (tasks.Count == 0) return true;
 
             var winner = await Task.WhenAny(tasks);
-            foreach (var branch in branches)
-                branch.Context.IsDisposed = true;
-            Hi.Verbose($"[ExecNode] Parallel({Tag}) 竞赛胜出");
-            return await winner;
+            try
+            {
+                var result = await winner;
+                Hi.Verbose($"[ExecNode] Parallel({Tag}) 竞赛胜出");
+                return result;
+            }
+            finally
+            {
+                foreach (var branch in branches)
+                {
+                    branch.Context.IsDisposed = true;
+                    branch.Cancellation.Cancel();
+                }
+
+                try { await Task.WhenAll(tasks); }
+                catch (OperationCanceledException) { }
+                finally
+                {
+                    foreach (var branch in branches)
+                        branch.Cancellation.Dispose();
+                }
+            }
         }
 
         var allTasks = Childs.Where(c => c.Enable).Select(c => c.Execute(ctx)).ToList();
@@ -209,7 +236,8 @@ public sealed class TreeScriptNode : TriggerLeafNode
             DService.Instance().Log.Error($"[TreeScriptNode] 脚本执行异常: {ex.Message}");
         }
         Hi.Verbose($"[ExecNode] Script({Tag}) 进入等待模式");
-        var result = await (ctx.WaitCondFn?.Invoke(this) ?? Task.FromResult(false));
+        var result = await (ctx.WaitCondFn?.Invoke(this, ctx.CancellationToken)
+            ?? Task.FromResult(false));
         Hi.Verbose($"[ExecNode] Script({Tag}) WaitCond 返回: {(result ? "满足" : "取消")}");
         return result;
     }
@@ -277,7 +305,8 @@ public sealed class TreeCondNode : TriggerLeafNode
         else
         {
             Hi.Verbose($"[ExecNode] Cond({Tag}) 进入等待模式");
-            var result = await (ctx.WaitCondFn?.Invoke(this) ?? Task.FromResult(false));
+            var result = await (ctx.WaitCondFn?.Invoke(this, ctx.CancellationToken)
+                ?? Task.FromResult(false));
             Hi.Verbose($"[ExecNode] Cond({Tag}) WaitCond 返回: {(result ? "满足" : "取消")}");
             return result;
         }
@@ -322,6 +351,7 @@ public sealed class TreeActionNode : TriggerLeafNode
     {
         foreach (var action in TriggerActions)
         {
+            ctx.CancellationToken.ThrowIfCancellationRequested();
             try
             {
                 Hi.Verbose($"[ExecNode] Action({Tag}) → {action.GetType().Name}");
@@ -344,7 +374,9 @@ public sealed class TreeDelayNode : TriggerLeafNode
     {
         if (ctx.IsDisposed) return false;
         Hi.Verbose($"[ExecNode] Delay({Tag}) 延迟 {Delay}s 开始");
-        await HiAuRo.Runtime.Coroutine.Instance.DelayAsync(Delay * 1000);
+        await HiAuRo.Runtime.Coroutine.Instance.WaitAsync(
+            (long)(Delay * 1000),
+            ctx.CancellationToken);
         Hi.Verbose($"[ExecNode] Delay({Tag}) 延迟完成");
         return !ctx.IsDisposed;
     }
@@ -385,15 +417,18 @@ public sealed class EvalContext
     public int BattleTimeMs { get; set; }
     /// <summary>变量字典</summary>
     public Dictionary<string, int> Variables { get; } = [];
+    /// <summary>所属轴的运行取消令牌</summary>
+    public CancellationToken CancellationToken { get; set; }
 
     /// <summary>所属轴的 WaitCond 委托（由轴 Start 时注入；节点据此路由到正确的轴，避免跨轴串扰）</summary>
-    public Func<TriggerLeafNode, Task<bool>>? WaitCondFn { get; set; }
+    public Func<TriggerLeafNode, CancellationToken, Task<bool>>? WaitCondFn { get; set; }
 
     public EvalContext CreateChild()
     {
         var child = new EvalContext
         {
             BattleTimeMs = BattleTimeMs,
+            CancellationToken = CancellationToken,
             WaitCondFn = WaitCondFn
         };
 
@@ -416,6 +451,7 @@ public sealed class EvalContext
     {
         IsDisposed = false;
         BattleTimeMs = 0;
+        CancellationToken = default;
     }
 }
 

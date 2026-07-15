@@ -36,6 +36,9 @@ public partial class Plugin : IDalamudPlugin
     private readonly VfxRenderer? _vfxRenderer;
     private readonly Action _windowDrawAction;
     private readonly RemoteMoveIpcProvider _remoteMoveIpc = new();
+    private readonly CancellationTokenSource _helperUpdateCts = new();
+    private Task _helperUpdateTask = Task.CompletedTask;
+    private Task _helperCompletionTask = Task.CompletedTask;
 
     /// <summary>插件实例单例</summary>
     public static Plugin Instance { get; private set; } = null!;
@@ -57,18 +60,24 @@ public partial class Plugin : IDalamudPlugin
             LogManager.Instance.Init(_pluginInterface.ConfigDirectory.FullName);
             Theme.Mode = _config.ImGuiThemeMode == ImGuiThemeMode.Dark ? Theme.ThemeMode.Dark : Theme.ThemeMode.Light;
             IconHelper.Init();
-            var helperInitializationTask = HelperUpdater.CheckAndUpdateAsync();
-            SafeFire(helperInitializationTask.ContinueWith(t =>
+            HelperUpdater.Initialize();
+            var helperLoadedAtStartup = HelperUpdater.TryLoadLocalSync();
+            _helperUpdateTask = HelperUpdater.CheckAndUpdateAsync(_helperUpdateCts.Token);
+            _helperCompletionTask = _helperUpdateTask.ContinueWith(t =>
             {
-                DService.Instance()?.Log.Information($"[Lifecycle] HelperUpdater 完成, Loaded={HelperUpdater.Loaded}");
-            }), "HelperUpdater");
+                if (!t.IsCanceled && !helperLoadedAtStartup && HelperUpdater.Loaded)
+                    PluginLifecycle.RequestReload();
+                if (DService.IsInitialized)
+                    DService.Instance().Log.Information(
+                        $"[Lifecycle] HelperUpdater 完成, Loaded={HelperUpdater.Loaded}");
+            }, TaskContinuationOptions.ExecuteSynchronously);
+            SafeFire(_helperCompletionTask, "HelperUpdater");
             DService.Instance().Log.Information("[Lifecycle] HelperUpdater 异步更新已启动");
 
             CommandMgr.Init();
             EventSystem.Init();
             GameEventHook.Instance.Init();
             CombatEnhancementManager.Instance.Init(_config);
-            ScriptManager.SetHostDllPath(_pluginInterface.AssemblyLocation.Directory?.FullName ?? "");
             ScriptEngine.Instance.Init();
             EncounterRecorder.Instance.Init();
             CombatRecorder.Instance.Init();
@@ -141,14 +150,12 @@ public partial class Plugin : IDalamudPlugin
             _pluginInterface.UiBuilder.OpenMainUi += () => _mainWindow.IsOpen = !_mainWindow.IsOpen;
             _pluginInterface.UiBuilder.OpenConfigUi += () => _mainWindow.IsOpen = !_mainWindow.IsOpen;
 
-            // 加载外部 ACR
-            DService.Instance().Log.Information("[ACR] 开始扫描外部 ACR...");
             ACRLifecycle.Init(_pluginInterface.ConfigDirectory.FullName);
+            DService.Instance().Log.Information("[ACR] 开始扫描外部 ACR...");
             ACRLoader.LoadAll(_pluginInterface.ConfigDirectory.FullName);
             BasicAcrDevelopment.Init(_config,
                 _pluginInterface.ConfigDirectory.FullName,
-                _pluginInterface.AssemblyLocation.Directory?.FullName ?? ".",
-                helperInitializationTask);
+                _helperUpdateTask);
             DService.Instance().Log.Information("[ACR] 扫描完成, 等待职业切换触发加载");
             ACRLifecycle.ForceRecheck(); // RuntimeCore 可能先于 LoadAll 跑了第一帧，强制重检
 
@@ -222,6 +229,10 @@ public partial class Plugin : IDalamudPlugin
     /// <summary>释放插件资源</summary>
     public void Dispose()
     {
+        _helperUpdateCts.Cancel();
+        try { _helperCompletionTask.GetAwaiter().GetResult(); }
+        catch (OperationCanceledException) { }
+        catch { }
         CombatContext.StateChanged -= OnCombatStateChanged;
         ACR.HotkeyHelper.OnExecuted -= OnHotkeyExecuted;
         ACR.QTHelper.OnChanged -= OnQtChanged;
@@ -239,6 +250,7 @@ public partial class Plugin : IDalamudPlugin
         EventSystem.Shutdown();
         CommandMgr.Shutdown();
 
+        PluginWindowManager.Shutdown();
         PluginLifecycle.Shutdown();
 
         // 先关 ACR（UnloadRotation 依赖 Plugin.Instance）
@@ -261,6 +273,8 @@ public partial class Plugin : IDalamudPlugin
 
         // 清除静态缓存（避免下次加载残留）
         ACRLoader.UnloadAll();
+        HelperUpdater.Shutdown();
+        _helperUpdateCts.Dispose();
         Execution.ExecutionJsonLoader.Clear();
         Execution.ScriptCompiler.ClearCache();
         Decision.DecisionSkillRegistry.Clear();

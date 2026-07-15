@@ -25,14 +25,13 @@ public static class PluginLifecycle
         PluginLoader.LoadAll(pluginDir, configDir);
         PluginLoader.InitializeAll();
 
-        // 注入插件程序集到 ScriptCompiler
         try
         {
-            Execution.ScriptCompiler.RegisterPluginReferences();
+            Execution.ScriptCompiler.RefreshAssemblyBindings();
         }
         catch (Exception ex)
         {
-            DService.Instance().Log.Warning($"[PluginLifecycle] ScriptCompiler 注入失败: {ex.Message}");
+            DService.Instance().Log.Warning($"[PluginLifecycle] ScriptCompiler 绑定刷新失败: {ex.Message}");
         }
     }
 
@@ -67,19 +66,25 @@ public static class PluginLifecycle
     /// <summary>热重载所有插件</summary>
     public static void Reload()
     {
-        PluginLoader.UnloadAll();
-        PluginLoader.LoadAll(_pluginDir, _configDir);
-        PluginLoader.InitializeAll();
-
+        var reloadState = ExtensionConsumerLifecycle.Suspend(clearPluginWindows: true);
         try
         {
-            Execution.ScriptCompiler.RegisterPluginReferences();
-            Execution.TriggerCatalogExporter.RebuildRuntimeTypeRegistry();
-            Execution.TriggerCatalogExporter.ExportToConfigDirectory(_configDir);
+            PluginLoader.UnloadAll();
+            PluginLoader.LoadAll(_pluginDir, _configDir);
+            ACRLifecycle.Reload(reloadConsumers: false);
+            PluginLoader.InitializeAll();
         }
-        catch (Exception ex)
+        catch
         {
-            DService.Instance().Log.Warning($"[PluginLifecycle] ScriptCompiler 注入失败: {ex.Message}");
+            PluginLoader.UnloadAll();
+            throw;
+        }
+        finally
+        {
+            ExtensionConsumerLifecycle.Resume(
+                reloadState,
+                _configDir,
+                refreshPluginWindows: true);
         }
     }
 
@@ -87,6 +92,7 @@ public static class PluginLifecycle
     public static void Shutdown()
     {
         DService.Instance().Log.Information("[PluginLifecycle] 关闭所有插件...");
+        Execution.ScriptCompiler.ClearCache();
         PluginLoader.UnloadAll();
     }
 }

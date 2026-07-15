@@ -39,6 +39,9 @@ public sealed class ExecutionAxis
     private bool _paused;
     private uint _previousTerritoryId;
     private CancellationTokenSource? _cts;
+    private Task _runTask = Task.CompletedTask;
+    private long _runGeneration;
+    internal Task Quiescence => _runTask;
 
     /// <summary>WaitCond 注册表</summary>
     private readonly ConcurrentDictionary<TriggerLeafNode, TaskCompletionSource<bool>> _waitingConds = new();
@@ -88,14 +91,15 @@ public sealed class ExecutionAxis
         _paused = false;
         _waitingConds.Clear();
         _cts = new CancellationTokenSource();
+        Context.CancellationToken = _cts.Token;
 
-        _ = RunTreeAsync(_cts.Token);
+        var generation = Interlocked.Increment(ref _runGeneration);
+        _runTask = RunTreeAsync(_cts.Token, generation);
     }
 
     /// <summary>脱战 — 取消触发树</summary>
     public void Stop()
     {
-        if (!IsRunning) return;
         IsRunning = false;
         Context.IsDisposed = true;
         _cts?.Cancel();
@@ -109,7 +113,7 @@ public sealed class ExecutionAxis
         _waitingConds.Clear();
     }
 
-    private async Task RunTreeAsync(CancellationToken ct)
+    private async Task RunTreeAsync(CancellationToken ct, long generation)
     {
         try
         {
@@ -122,6 +126,11 @@ public sealed class ExecutionAxis
         {
             DService.Instance().Log.Error($"[ExecAxis] 触发树异常: {ex}");
         }
+        finally
+        {
+            if (Volatile.Read(ref _runGeneration) == generation)
+                IsRunning = false;
+        }
     }
 
     #endregion
@@ -131,12 +140,19 @@ public sealed class ExecutionAxis
     /// <summary>
     /// 条件节点挂起等待。注册 TCS，由 CheckWaitingConds 或 UseCondParams 唤醒。
     /// </summary>
-    internal Task<bool> WaitCond(TriggerLeafNode node)
+    internal async Task<bool> WaitCond(
+        TriggerLeafNode node,
+        CancellationToken cancellationToken)
     {
         var tcs = new TaskCompletionSource<bool>();
         _waitingConds[node] = tcs;
         Hi.Verbose($"[ExecAxis] WaitCond 注册: {node.DisplayName}(#{node.Id})");
-        return tcs.Task;
+        using var registration = cancellationToken.Register(() =>
+        {
+            if (_waitingConds.TryRemove(node, out var waiting))
+                waiting.TrySetCanceled(cancellationToken);
+        });
+        return await tcs.Task;
     }
 
     /// <summary>每帧检查所有挂起条件</summary>

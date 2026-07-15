@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Reflection;
 using System.Runtime.Loader;
 using HiAuRo.ACR;
 using Microsoft.CodeAnalysis;
@@ -17,6 +16,7 @@ public static class ScriptCompiler
     private static readonly List<MetadataReference> _refCache = [];
     private static readonly object _refLock = new();
     private static bool _refsLoaded;
+    private static Runtime.SharedAssemblyResolver.Snapshot? _bindings;
     private static AssemblyLoadContext? _alc;
 
     /// <summary>允许引用的程序集名称前缀（白名单）</summary>
@@ -81,7 +81,13 @@ public static class ScriptCompiler
 
             ms.Seek(0, SeekOrigin.Begin);
 
-            _alc ??= new AssemblyLoadContext("ScriptCompiler", isCollectible: true);
+            if (_alc is null)
+            {
+                var bindings = _bindings
+                    ?? throw new InvalidOperationException("脚本程序集绑定尚未初始化");
+                _alc = new AssemblyLoadContext("ScriptCompiler", isCollectible: true);
+                _alc.Resolving += (_, name) => bindings.Resolve(name);
+            }
             var assembly = _alc.LoadFromStream(ms);
             var type = assembly.GetTypes().FirstOrDefault(t =>
                 typeof(ITriggerScript).IsAssignableFrom(t) && !t.IsAbstract);
@@ -111,6 +117,7 @@ public static class ScriptCompiler
         {
             _refCache.Clear();
             _refsLoaded = false;
+            _bindings = null;
         }
 
         // 卸载旧的 ALC，下次编译时创建新的
@@ -121,31 +128,8 @@ public static class ScriptCompiler
         }
     }
 
-    /// <summary>从内存字节注入程序集引用到编译上下文（供 PluginLoader 使用）</summary>
-    public static void AddPluginReferenceFromImage(byte[] dllBytes)
-    {
-        lock (_refLock)
-        {
-            _refCache.Add(MetadataReference.CreateFromImage(dllBytes));
-        }
-    }
-
-    /// <summary>批量注册所有已加载插件的程序集引用</summary>
-    public static void RegisterPluginReferences()
-    {
-        foreach (var (name, record) in Runtime.PluginLoader.Plugins)
-        {
-            try
-            {
-                AddPluginReferenceFromImage(record.DllBytes);
-                DService.Instance().Log.Debug($"[ScriptCompiler] 已注入插件程序集: {name}");
-            }
-            catch (Exception ex)
-            {
-                DService.Instance().Log.Error($"[ScriptCompiler] 注入 {name} 失败: {ex.Message}");
-            }
-        }
-    }
+    /// <summary>使下一次编译捕获最新的宿主与扩展程序集绑定。</summary>
+    public static void RefreshAssemblyBindings() => ClearCache();
 
     /// <summary>收集编译引用（白名单过滤）</summary>
     private static List<MetadataReference> GetReferences()
@@ -154,18 +138,9 @@ public static class ScriptCompiler
         {
             if (_refsLoaded) return _refCache;
 
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            foreach (var asm in assemblies)
-            {
-                if (asm.IsDynamic || string.IsNullOrEmpty(asm.Location)) continue;
-                var name = asm.GetName().Name ?? "";
-                if (!IsAllowed(name)) continue;
-                try
-                {
-                    _refCache.Add(MetadataReference.CreateFromFile(asm.Location));
-                }
-                catch { }
-            }
+            _bindings = Runtime.SharedAssemblyResolver.Capture();
+            _refCache.AddRange(
+                _bindings.GetMetadataReferences(IsAllowed, includeExtensions: true));
 
             _refsLoaded = true;
             DService.Instance().Log.Debug($"[ScriptCompiler] 加载 {_refCache.Count} 个程序集引用 (白名单过滤)");

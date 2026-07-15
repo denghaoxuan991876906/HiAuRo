@@ -26,6 +26,9 @@ public static class HelperUpdater
     private static string LocalDevMarkerPath => Path.Combine(StoreDir, LocalDevMarkerName);
 
     private static HelperAssemblySnapshot? _helperSnapshot;
+    private static readonly object _snapshotLock = new();
+    private static volatile bool _acceptLoads;
+    private static volatile bool _loaded;
 
     internal sealed record HelperAssemblySnapshot(
         AssemblyLoadContext LoadContext,
@@ -33,7 +36,7 @@ public static class HelperUpdater
         byte[] AssemblyBytes);
 
     /// <summary>Helper DLL 是否已加载</summary>
-    public static bool Loaded { get; private set; }
+    public static bool Loaded => _loaded;
 
     /// <summary>HelperUpdater 已加载的 HiAuRo.Helper 程序集（供 ACRLoader 共享，避免 ALC 隔离）</summary>
     public static Assembly? HelperAssembly => HelperSnapshot?.Assembly;
@@ -42,7 +45,13 @@ public static class HelperUpdater
 
     internal static HelperAssemblySnapshot? HelperSnapshot => Volatile.Read(ref _helperSnapshot);
 
-    /// <summary>尝试从本地缓存同步加载 Helper DLL（供 ACRLoader 时序竞争回退）</summary>
+    internal static void Initialize()
+    {
+        lock (_snapshotLock)
+            _acceptLoads = true;
+    }
+
+    /// <summary>尝试从本地缓存建立当前宿主生命周期唯一的 Helper 实例。</summary>
     public static bool TryLoadLocalSync()
     {
         if (HelperAssembly != null) return true;
@@ -63,8 +72,8 @@ public static class HelperUpdater
         }
     }
 
-    /// <summary>检查更新，下载并加载最新 DLL（同步，避免与 ACRLoader 时序竞争）</summary>
-    public static async Task CheckAndUpdateAsync()
+    /// <summary>检查更新；当前会话已有 Helper 时只更新下次重载使用的缓存。</summary>
+    public static async Task CheckAndUpdateAsync(CancellationToken cancellationToken = default)
     {
         var localDll = Path.Combine(StoreDir, DllName);
         if (ShouldUseLocalDevHelper(localDll))
@@ -77,13 +86,25 @@ public static class HelperUpdater
         try
         {
             // 直接下载 latest release DLL，无需调用 GitHub API（避免 403 rate limit）
-            var downloaded = await DownloadLatestDll(localDll);
+            var downloaded = await DownloadLatestDll(localDll, cancellationToken).ConfigureAwait(false);
             if (downloaded)
             {
-                DService.Instance().Log.Information($"[HelperUpdater] 已更新 {RepoName}");
-                LoadDll(localDll);
+                if (HelperSnapshot is null)
+                {
+                    LoadDll(localDll);
+                    DService.Instance().Log.Information($"[HelperUpdater] 已更新并加载 {RepoName}");
+                }
+                else
+                {
+                    DService.Instance().Log.Information(
+                        $"[HelperUpdater] 已更新 {RepoName} 缓存，下次 HiAuRo 重载时生效");
+                }
                 return;
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return;
         }
         catch (Exception ex)
         {
@@ -118,73 +139,66 @@ public static class HelperUpdater
     }
 
     /// <summary>下载 latest release DLL（直接链接，不走 API，不受 rate limit 限制）。</summary>
-    private static async Task<bool> DownloadLatestDll(string destPath)
+    private static async Task<bool> DownloadLatestDll(
+        string destPath,
+        CancellationToken cancellationToken)
     {
         // GitHub 支持 /releases/latest/download/ 直接重定向到最新 release 的 asset
         // 格式: https://github.com/{owner}/{repo}/releases/latest/download/{filename}
         var url = $"https://github.com/{RepoOwner}/{RepoName}/releases/latest/download/{DllName}";
         using var req = new HttpRequestMessage(HttpMethod.Head, url); // HEAD 先探测
-        using var headResp = await _http.SendAsync(req);
+        using var headResp = await _http.SendAsync(req, cancellationToken).ConfigureAwait(false);
         if (!headResp.IsSuccessStatusCode) return false;
 
-        using var resp = await _http.GetAsync(url);
+        using var resp = await _http.GetAsync(url, cancellationToken).ConfigureAwait(false);
         if (!resp.IsSuccessStatusCode) return false;
 
         Directory.CreateDirectory(StoreDir);
-        await using var fs = File.Create(destPath);
-        await resp.Content.CopyToAsync(fs);
-        return true;
+        var tempPath = destPath + ".download";
+        try
+        {
+            await using (var fs = File.Create(tempPath))
+                await resp.Content.CopyToAsync(fs, cancellationToken).ConfigureAwait(false);
+            File.Move(tempPath, destPath, overwrite: true);
+            return true;
+        }
+        finally
+        {
+            try { File.Delete(tempPath); }
+            catch { }
+        }
     }
 
-        /// <summary>解析 Helper ALC 中宿主程序集依赖（Dalamud、OmenTools、HiAuRo 等）</summary>
-        private static Assembly? ResolveHelperDependency(AssemblyLoadContext ctx, AssemblyName name)
-        {
-            var hostPrefixes = new[] { "HiAuRo", "OmenTools", "Dalamud", "FFXIVClientStructs",
-                "Lumina", "ImGuiNET", "TerraFX", "System.", "Microsoft." };
-
-            if (!hostPrefixes.Any(p => name.Name?.StartsWith(p) == true))
-                return null;
-
-            // 先在 Default ALC 中查找（System.*、Microsoft.*）
-            foreach (var asm in AssemblyLoadContext.Default.Assemblies)
-            {
-                if (asm.GetName().Name == name.Name)
-                    return asm;
-            }
-
-            // 再在宿主 ALC（HiAuRo 所在）中查找
-            var hostAlc = AssemblyLoadContext.GetLoadContext(typeof(HelperUpdater).Assembly);
-            if (hostAlc != null)
-            {
-                foreach (var asm in hostAlc.Assemblies)
-                {
-                    if (asm.GetName().Name == name.Name)
-                        return asm;
-                }
-
-                try
-                {
-                    return hostAlc.LoadFromAssemblyName(name);
-                }
-                catch { }
-            }
-
-            return null;
-        }
-
-        private static void LoadDll(string dllPath)
+    private static void LoadDll(string dllPath)
     {
-        if (!File.Exists(dllPath)) return;
+        if (!_acceptLoads || HelperSnapshot is not null || !File.Exists(dllPath)) return;
 
         var assemblyBytes = File.ReadAllBytes(dllPath);
+        var bindings = SharedAssemblyResolver.CaptureHost();
         var loadContext = new AssemblyLoadContext("HiAuRo.Helper", isCollectible: true);
-        loadContext.Resolving += ResolveHelperDependency;
+        loadContext.Resolving += (_, name) =>
+            bindings.IsHost(name.Name) ? bindings.Resolve(name) : null;
 
         Assembly assembly;
         try
         {
             using var ms = new MemoryStream(assemblyBytes, writable: false);
             assembly = loadContext.LoadFromStream(ms);
+            if (!string.Equals(
+                    assembly.GetName().Name,
+                    RepoName,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Helper 程序集名称必须为 HiAuRo.Helper");
+            SharedAssemblyResolver.PreloadDependencies(
+                loadContext,
+                assembly,
+                bindings,
+                _ => null,
+                "Helper",
+                allowedHostRootName: RepoName);
+
+            if (!_acceptLoads)
+                throw new OperationCanceledException("HelperUpdater 正在关闭");
         }
         catch
         {
@@ -192,10 +206,32 @@ public static class HelperUpdater
             throw;
         }
 
-        var previousSnapshot = Interlocked.Exchange(
-            ref _helperSnapshot,
-            new HelperAssemblySnapshot(loadContext, assembly, assemblyBytes));
-        Loaded = true;
-        previousSnapshot?.LoadContext.Unload();
+        lock (_snapshotLock)
+        {
+            if (_acceptLoads && _helperSnapshot is null)
+            {
+                Volatile.Write(
+                    ref _helperSnapshot,
+                    new HelperAssemblySnapshot(loadContext, assembly, assemblyBytes));
+                _loaded = true;
+                return;
+            }
+        }
+
+        loadContext.Unload();
+    }
+
+    internal static void Shutdown()
+    {
+        HelperAssemblySnapshot? snapshot;
+        lock (_snapshotLock)
+        {
+            _acceptLoads = false;
+            snapshot = _helperSnapshot;
+            Volatile.Write(ref _helperSnapshot, null);
+            _loaded = false;
+        }
+
+        snapshot?.LoadContext.Unload();
     }
 }

@@ -16,7 +16,6 @@ internal static class BasicAcrDevelopment
 
     private static PluginConfig? config;
     private static string configDir = string.Empty;
-    private static string hostDllDir = string.Empty;
     private static BasicAcrCompilation? current;
     private static Task? helperInitializationTask;
     private static bool pendingInitialLoad;
@@ -31,12 +30,10 @@ internal static class BasicAcrDevelopment
     internal static void Init(
         PluginConfig pluginConfig,
         string pluginConfigDir,
-        string pluginHostDllDir,
         Task initializationTask)
     {
         config = pluginConfig;
         configDir = pluginConfigDir;
-        hostDllDir = pluginHostDllDir;
         helperInitializationTask = initializationTask;
         pendingInitialLoad = false;
         Diagnostics = [];
@@ -182,7 +179,7 @@ internal static class BasicAcrDevelopment
         }
 
         HelperUpdater.TryLoadLocalSync();
-        using var result = BasicAcrCompiler.Compile(source, scriptPath, hostDllDir);
+        using var result = BasicAcrCompiler.Compile(source, scriptPath);
         Diagnostics = result.Diagnostics.ToArray();
         if (!result.Success)
         {
@@ -289,7 +286,6 @@ internal static class BasicAcrDevelopment
 
         config = null;
         configDir = string.Empty;
-        hostDllDir = string.Empty;
         Diagnostics = [];
         LastError = null;
         LoadedAt = null;

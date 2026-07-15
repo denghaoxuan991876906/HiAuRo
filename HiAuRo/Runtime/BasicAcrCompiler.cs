@@ -1,5 +1,3 @@
-using System.Reflection;
-using System.Reflection.Metadata;
 using System.Runtime.Loader;
 using HiAuRo.ACR;
 using Microsoft.CodeAnalysis;
@@ -104,16 +102,14 @@ internal static class BasicAcrCompiler
 
     internal static BasicAcrCompileResult Compile(
         string source,
-        string sourcePath,
-        string hostDllDir)
+        string sourcePath)
     {
         IReadOnlyList<BasicAcrDiagnostic> diagnostics = [];
         AssemblyLoadContext? candidateContext = null;
 
         try
         {
-            var helperSnapshot = HelperUpdater.HelperSnapshot;
-            var hostAssemblies = GetHostAssemblies(helperSnapshot);
+            var bindings = SharedAssemblyResolver.CaptureHost();
             var syntaxTree = CSharpSyntaxTree.ParseText(
                 source,
                 new CSharpParseOptions(LanguageVersion.Latest),
@@ -121,7 +117,7 @@ internal static class BasicAcrCompiler
             var compilation = CSharpCompilation.Create(
                 $"HiAuRo.BasicAcr.{Guid.NewGuid():N}",
                 [syntaxTree],
-                GetReferences(hostDllDir, hostAssemblies, helperSnapshot),
+                bindings.GetMetadataReferences(IsAllowedAssembly, includeExtensions: false),
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                     .WithOptimizationLevel(OptimizationLevel.Release));
 
@@ -146,8 +142,7 @@ internal static class BasicAcrCompiler
             candidateContext = new AssemblyLoadContext(
                 $"HiAuRo.BasicAcr.{Guid.NewGuid():N}",
                 isCollectible: true);
-            candidateContext.Resolving += (_, requestedName) =>
-                ResolveRuntimeAssembly(requestedName, hostAssemblies, helperSnapshot);
+            candidateContext.Resolving += (_, requestedName) => bindings.Resolve(requestedName);
             var assembly = candidateContext.LoadFromStream(assemblyStream);
 
             var scriptTypes = assembly.GetExportedTypes()
@@ -194,133 +189,9 @@ internal static class BasicAcrCompiler
         }
     }
 
-    private static IReadOnlyDictionary<string, Assembly> GetHostAssemblies(
-        HelperUpdater.HelperAssemblySnapshot? helperSnapshot)
-    {
-        var assemblies = new Dictionary<string, Assembly>(StringComparer.OrdinalIgnoreCase);
-
-        if (helperSnapshot is not null)
-            TryAddHostAssembly(assemblies, helperSnapshot.Assembly);
-
-        TryAddHostAssembly(assemblies, typeof(IBasicAcrScript).Assembly);
-        TryAddHostAssembly(assemblies, typeof(OmenTools.OmenService.GameState).Assembly);
-        TryAddHostAssembly(assemblies, typeof(Dalamud.Plugin.IDalamudPlugin).Assembly);
-        TryAddHostAssembly(assemblies, typeof(object).Assembly);
-        TryAddHostAssembly(assemblies, typeof(List<>).Assembly);
-        TryAddHostAssembly(assemblies, typeof(Enumerable).Assembly);
-
-        foreach (var assembly in AssemblyLoadContext.Default.Assemblies)
-            TryAddHostAssembly(assemblies, assembly);
-
-        var hostContext = AssemblyLoadContext.GetLoadContext(typeof(BasicAcrCompiler).Assembly);
-        if (hostContext is not null && !ReferenceEquals(hostContext, AssemblyLoadContext.Default))
-        {
-            foreach (var assembly in hostContext.Assemblies)
-                TryAddHostAssembly(assemblies, assembly);
-        }
-
-        return assemblies;
-    }
-
-    private static void TryAddHostAssembly(
-        IDictionary<string, Assembly> assemblies,
-        Assembly assembly)
-    {
-        if (assembly.IsDynamic)
-            return;
-
-        var name = assembly.GetName().Name;
-        if (string.IsNullOrEmpty(name) || !IsAllowedAssembly(name) || assemblies.ContainsKey(name))
-            return;
-
-        assemblies[name] = assembly;
-    }
-
-    private static IReadOnlyList<MetadataReference> GetReferences(
-        string hostDllDir,
-        IReadOnlyDictionary<string, Assembly> hostAssemblies,
-        HelperUpdater.HelperAssemblySnapshot? helperSnapshot)
-    {
-        var references = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
-
-        if (helperSnapshot is not null)
-        {
-            try
-            {
-                references["HiAuRo.Helper"] = MetadataReference.CreateFromImage(helperSnapshot.AssemblyBytes);
-            }
-            catch { }
-        }
-
-        foreach (var assembly in hostAssemblies.Values)
-            TryAddAssemblyReference(references, assembly, hostDllDir);
-
-        return references.Values.ToArray();
-    }
-
-    private static unsafe void TryAddAssemblyReference(
-        IDictionary<string, MetadataReference> references,
-        Assembly assembly,
-        string hostDllDir)
-    {
-        if (assembly.IsDynamic)
-            return;
-
-        var name = assembly.GetName().Name;
-        if (string.IsNullOrEmpty(name) || !IsAllowedAssembly(name) || references.ContainsKey(name))
-            return;
-
-        if (!string.IsNullOrEmpty(assembly.Location))
-        {
-            try
-            {
-                references[name] = MetadataReference.CreateFromFile(assembly.Location);
-                return;
-            }
-            catch { }
-        }
-
-        try
-        {
-            if (assembly.TryGetRawMetadata(out var metadata, out var size))
-            {
-                var module = ModuleMetadata.CreateFromMetadata((IntPtr)metadata, size);
-                references[name] = AssemblyMetadata.Create(module)
-                    .GetReference(display: assembly.FullName);
-                return;
-            }
-        }
-        catch { }
-
-        var fallbackPath = Path.Combine(hostDllDir, name + ".dll");
-        if (!File.Exists(fallbackPath))
-            return;
-
-        try
-        {
-            references[name] = MetadataReference.CreateFromFile(fallbackPath);
-        }
-        catch { }
-    }
-
     private static bool IsAllowedAssembly(string name) =>
         name is "HiAuRo" or "HiAuRo.Helper" ||
         AllowedAssemblyPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal));
-
-    private static Assembly? ResolveRuntimeAssembly(
-        AssemblyName requestedName,
-        IReadOnlyDictionary<string, Assembly> hostAssemblies,
-        HelperUpdater.HelperAssemblySnapshot? helperSnapshot)
-    {
-        var name = requestedName.Name;
-        if (string.IsNullOrEmpty(name) || !IsAllowedAssembly(name))
-            return null;
-
-        if (name == "HiAuRo.Helper")
-            return helperSnapshot?.Assembly;
-
-        return hostAssemblies.TryGetValue(name, out var assembly) ? assembly : null;
-    }
 
     private static BasicAcrDiagnostic ToBasicDiagnostic(Diagnostic diagnostic)
     {

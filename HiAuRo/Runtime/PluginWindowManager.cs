@@ -9,12 +9,45 @@ namespace HiAuRo.Runtime;
 public static class PluginWindowManager
 {
     private static readonly Dictionary<string, PluginWindowWrapper> _windows = [];
+    private static WindowSystem? _windowSystem;
 
     /// <summary>已注册的插件窗口名称列表</summary>
     public static IReadOnlyDictionary<string, PluginWindowWrapper> Windows => _windows;
 
     /// <summary>扫描插件并注册窗口到 WindowSystem</summary>
     public static void Init(WindowSystem windowSystem)
+    {
+        _windowSystem = windowSystem;
+        RegisterWindows(windowSystem);
+    }
+
+    internal static void Clear()
+    {
+        if (_windowSystem is not null)
+        {
+            foreach (var window in _windows.Values)
+                _windowSystem.RemoveWindow(window);
+        }
+
+        _windows.Clear();
+    }
+
+    internal static void Refresh()
+    {
+        if (_windowSystem is null)
+            return;
+
+        Clear();
+        RegisterWindows(_windowSystem);
+    }
+
+    internal static void Shutdown()
+    {
+        Clear();
+        _windowSystem = null;
+    }
+
+    private static void RegisterWindows(WindowSystem windowSystem)
     {
         foreach (var (name, record) in PluginLoader.Plugins)
         {

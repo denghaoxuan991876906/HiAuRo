@@ -186,7 +186,13 @@ public sealed partial class AIRunner
         }, "枚举热键处理器");
 
         if (entry != null)
-            TryCleanupStep(entry.Dispose, "释放 ACR 入口");
+            TryCleanupStep(
+                () =>
+                {
+                    if (!ACRLoader.TryDisposeEntry(entry))
+                        entry.Dispose();
+                },
+                "释放 ACR 入口");
 
         CleanupExecutionState(preserveCombatProgress);
     }

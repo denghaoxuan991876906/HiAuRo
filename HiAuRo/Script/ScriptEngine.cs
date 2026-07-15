@@ -31,6 +31,20 @@ public sealed class ScriptEngine
 
     public void Register(ScriptRecord record)
     {
+        record.Activate();
+        try
+        {
+            RegisterCore(record);
+        }
+        catch
+        {
+            UnregisterAll(record);
+            throw;
+        }
+    }
+
+    private void RegisterCore(ScriptRecord record)
+    {
         if (record.Instance == null || record.Type == null) return;
 
         foreach (var method in record.Type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
@@ -99,26 +113,11 @@ public sealed class ScriptEngine
 
     public void UnregisterAll(ScriptRecord record)
     {
+        record.Deactivate();
         foreach (var (_, list) in _handlers)
             list.RemoveAll(e => e.Record == record);
 
         _checks.RemoveAll(e => e.Record == record);
-    }
-
-    /// <summary>显式调用脚本的 Init() 方法（如果存在）</summary>
-    public void InvokeInit(ScriptRecord record)
-    {
-        if (record.Instance == null || record.Type == null) return;
-        try
-        {
-            var initMethod = record.Type.GetMethod("Init", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-            if (initMethod != null)
-                initMethod.Invoke(record.Instance, null);
-        }
-        catch (Exception ex)
-        {
-            DService.Instance().Log.Warning($"[ScriptEngine] InvokeInit 失败 {record.Name}: {ex.Message}");
-        }
     }
 
     /// <summary>每帧：轮询 [ScriptCheck] 方法</summary>
@@ -167,16 +166,10 @@ public sealed class ScriptEngine
 
                 if (entry.DelayMs > 0)
                 {
-                    var capturedParams = eventParams;
-                    var capturedEntry = entry;
-                    Hi.Delay(entry.DelayMs, () =>
-                    {
-                        try { capturedEntry.Method.Invoke(capturedEntry.Instance, [capturedParams]); }
-                        catch (Exception ex)
-                        {
-                            Hi.Print($"[ScriptEngine] 延迟handler异常 [{capturedEntry.Key}]: {ex.GetType().Name}: {ex.Message}");
-                        }
-                    });
+                    _ = InvokeDelayedHandlerAsync(
+                        entry,
+                        eventParams,
+                        entry.Record.LifetimeToken);
                 }
                 else
                 {
@@ -187,6 +180,24 @@ public sealed class ScriptEngine
             {
                 Hi.Print($"[ScriptEngine] handler异常 [{entry.Key}]: {ex.GetType().Name}: {ex.Message}");
             }
+        }
+    }
+
+    private static async Task InvokeDelayedHandlerAsync(
+        MethodEntry entry,
+        ACR.ITriggerCondParams eventParams,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Runtime.Coroutine.Instance.WaitAsync(entry.DelayMs, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            entry.Method.Invoke(entry.Instance, [eventParams]);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            Hi.Print($"[ScriptEngine] 延迟handler异常 [{entry.Key}]: {ex.GetType().Name}: {ex.Message}");
         }
     }
 

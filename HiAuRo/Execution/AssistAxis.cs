@@ -30,6 +30,9 @@ public sealed class AssistAxis
     }
     private uint _previousTerritoryId;
     private CancellationTokenSource? _cts;
+    private Task _runTask = Task.CompletedTask;
+    private long _runGeneration;
+    internal Task Quiescence => _runTask;
     private readonly ConcurrentDictionary<TriggerLeafNode, TaskCompletionSource<bool>> _waitingConds = new();
 
     private AssistAxis() { }
@@ -60,13 +63,14 @@ public sealed class AssistAxis
         _paused = false;
         _waitingConds.Clear();
         _cts = new CancellationTokenSource();
+        Context.CancellationToken = _cts.Token;
         Hi.Verbose($"[AssistAxis] Start: {TimelineName}");
-        _ = RunTreeAsync(_cts.Token);
+        var generation = Interlocked.Increment(ref _runGeneration);
+        _runTask = RunTreeAsync(_cts.Token, generation);
     }
 
     public void Stop()
     {
-        if (!IsRunning) return;
         IsRunning = false;
         Context.IsDisposed = true;
         _cts?.Cancel();
@@ -78,7 +82,7 @@ public sealed class AssistAxis
         _waitingConds.Clear();
     }
 
-    private async Task RunTreeAsync(CancellationToken ct)
+    private async Task RunTreeAsync(CancellationToken ct, long generation)
     {
         try
         {
@@ -88,14 +92,26 @@ public sealed class AssistAxis
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { DService.Instance().Log.Error($"[AssistAxis] 辅助树异常: {ex}"); }
+        finally
+        {
+            if (Volatile.Read(ref _runGeneration) == generation)
+                IsRunning = false;
+        }
     }
 
-    internal Task<bool> WaitCond(TriggerLeafNode node)
+    internal async Task<bool> WaitCond(
+        TriggerLeafNode node,
+        CancellationToken cancellationToken)
     {
         var tcs = new TaskCompletionSource<bool>();
         _waitingConds[node] = tcs;
         Hi.Verbose($"[AssistAxis] WaitCond 注册: {node.DisplayName}(#{node.Id})");
-        return tcs.Task;
+        using var registration = cancellationToken.Register(() =>
+        {
+            if (_waitingConds.TryRemove(node, out var waiting))
+                waiting.TrySetCanceled(cancellationToken);
+        });
+        return await tcs.Task;
     }
 
     private void CheckWaitingConds()
