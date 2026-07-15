@@ -7,7 +7,7 @@ internal static class MainWindowNavigation
         new("主控", "settings", ["status", "settings"]),
         new("战斗设置", "settings", ["combat_settings"]),
         new("命令帮助", "settings", ["command_help"]),
-        new("ACR", "settings", ["acr_installed", "acr_sources", "acr_list", "acr_debug"]),
+        new("ACR", "settings", ["acr_installed", "acr_sources", "acr_list", "basic_acr_development", "acr_debug"]),
         new("调试", "bug", ["debug", "vfx_test"]),
         new("副本", "clock", ["recording", "combat_recording"]),
     ];

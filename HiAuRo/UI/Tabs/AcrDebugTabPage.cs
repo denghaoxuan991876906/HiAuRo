@@ -1,31 +1,15 @@
-using System.Numerics;
-using HiAuRo.ACR;
 using HiAuRo.ImGuiLib;
-using HiAuRo.Infrastructure;
 using HiAuRo.Runtime;
 
 namespace HiAuRo.UI.Tabs;
 
 public sealed class AcrDebugTabPage : TabPageBase
 {
-    private readonly PluginConfig _config;
-    private readonly Action _saveConfig;
-
-    public AcrDebugTabPage(PluginConfig config, Action saveConfig) : base("ACR 调试", "acr_debug", IconHelper.Icons.Settings)
-    {
-        _config = config;
-        _saveConfig = saveConfig;
-    }
+    public AcrDebugTabPage() : base("ACR 调试", "acr_debug", IconHelper.Icons.Settings) { }
 
     public override void DrawContent()
     {
         ImGui.Spacing();
-
-        if (_config.ShowDeveloperTools)
-        {
-            DrawBasicAcrDevelopment();
-            ComponentLibrary.Divider();
-        }
 
         ComponentLibrary.SectionHeader("SlotResolver 实时状态");
 
@@ -70,69 +54,5 @@ public sealed class AcrDebugTabPage : TabPageBase
                 ImGui.TextColored(Theme.Colors.TextTertiary, $"{info.CheckResult}");
         }
         ImGui.EndTable();
-    }
-
-    private void DrawBasicAcrDevelopment()
-    {
-        ComponentLibrary.SectionHeader("基础 ACR 开发");
-
-        var enabled = _config.BasicAcrScriptEnabled;
-        if (ComponentLibrary.Switch("basic_acr_development_enabled", "开发模式", ref enabled)
-            && BasicAcrDevelopment.SetEnabled(enabled))
-            _saveConfig();
-
-        var scriptPath = _config.BasicAcrScriptPath;
-        var availableWidth = Math.Max(0f, ImGui.GetContentRegionAvail().X);
-        var remainingWidth = Math.Max(0f,
-            availableWidth - ImGui.CalcTextSize("源码").X - ImGui.GetStyle().ItemSpacing.X);
-        const float minimumInputWidth = 120f;
-        var inputWidth = remainingWidth >= minimumInputWidth
-            ? Math.Clamp(remainingWidth, minimumInputWidth, Math.Min(520f, availableWidth))
-            : remainingWidth;
-        if (ComponentLibrary.InputText("basic_acr_development_source", "源码", ref scriptPath, 1024, inputWidth))
-        {
-            _config.BasicAcrScriptPath = scriptPath;
-            _saveConfig();
-        }
-
-        var canReload = _config.BasicAcrScriptEnabled;
-        ImGui.BeginDisabled(!canReload);
-        if (ComponentLibrary.DefaultButton("加载/重载"))
-            BasicAcrDevelopment.Reload();
-        ImGui.EndDisabled();
-
-        ImGui.Spacing();
-        switch (BasicAcrDevelopment.State)
-        {
-            case BasicAcrDevelopmentState.Disabled:
-                ComponentLibrary.StatusDot(false, "未启用", Theme.Colors.TextTertiary);
-                break;
-            case BasicAcrDevelopmentState.NotLoaded:
-                ComponentLibrary.StatusDot(true, "未加载", Theme.Colors.AccentOrange);
-                break;
-            case BasicAcrDevelopmentState.Ready:
-                ComponentLibrary.StatusDot(true, "已就绪", Theme.Colors.AccentGreen);
-                break;
-            case BasicAcrDevelopmentState.Failed:
-                ComponentLibrary.StatusDot(true, "加载失败", Theme.Colors.AccentRed);
-                break;
-        }
-
-        if (BasicAcrDevelopment.State == BasicAcrDevelopmentState.Ready)
-        {
-            ImGui.Text($"脚本类型: {BasicAcrDevelopment.ScriptTypeName}");
-            ImGui.Text($"目标职业: {BasicAcrDevelopment.TargetJob}");
-            ImGui.Text($"加载时间: {BasicAcrDevelopment.LoadedAt:yyyy-MM-dd HH:mm:ss}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(BasicAcrDevelopment.LastError))
-        {
-            using var errorColor = new ImRaii.ColorDisposable();
-            errorColor.Push(ImGuiCol.Text, Theme.Colors.AccentRed);
-            ImGui.TextWrapped(BasicAcrDevelopment.LastError);
-        }
-
-        foreach (var diagnostic in BasicAcrDevelopment.Diagnostics)
-            ImGui.TextWrapped(diagnostic.ToString());
     }
 }

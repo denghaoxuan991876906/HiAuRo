@@ -22,6 +22,7 @@ internal static class BasicAcrDevelopment
 
     internal static BasicAcrDevelopmentState State { get; private set; } = BasicAcrDevelopmentState.Disabled;
     internal static IReadOnlyList<BasicAcrDiagnostic> Diagnostics { get; private set; } = [];
+    internal static IReadOnlyList<string> LoadedSourcePaths { get; private set; } = [];
     internal static string? LastError { get; private set; }
     internal static string? ScriptTypeName => current?.ScriptTypeName;
     internal static Jobs? TargetJob => current?.TargetJob;
@@ -37,6 +38,7 @@ internal static class BasicAcrDevelopment
         helperInitializationTask = initializationTask;
         pendingInitialLoad = false;
         Diagnostics = [];
+        LoadedSourcePaths = [];
         LastError = null;
         LoadedAt = null;
 
@@ -80,6 +82,7 @@ internal static class BasicAcrDevelopment
 
         pendingInitialLoad = false;
         Diagnostics = [];
+        LoadedSourcePaths = [];
         LastError = null;
         LoadedAt = null;
 
@@ -156,30 +159,54 @@ internal static class BasicAcrDevelopment
         Diagnostics = [];
         LastError = null;
 
-        var scriptPath = pluginConfig.BasicAcrScriptPath;
-        if (string.IsNullOrWhiteSpace(scriptPath) || !Path.IsPathFullyQualified(scriptPath))
-            return FailClosed("基础 ACR 脚本路径必须是绝对路径");
-        if (!string.Equals(Path.GetExtension(scriptPath), ".cs", StringComparison.OrdinalIgnoreCase))
-            return FailClosed("基础 ACR 脚本必须是 .cs 文件");
-        if (!File.Exists(scriptPath))
-            return FailClosed($"基础 ACR 脚本不存在: {scriptPath}");
+        var enabledSources = (pluginConfig.BasicAcrSources ?? [])
+            .Where(source => source is { Enabled: true })
+            .ToArray();
+        if (enabledSources.Length == 0)
+            return FailClosed("基础 ACR 至少需要启用一个源码文件");
 
-        string source;
-        try
+        var sourceTexts = new List<BasicAcrSourceText>(enabledSources.Length);
+        var uniquePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < enabledSources.Length; index++)
         {
-            source = File.ReadAllText(scriptPath);
-        }
-        catch (IOException ex)
-        {
-            return FailClosed($"读取基础 ACR 脚本失败: {ex.Message}");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return FailClosed($"读取基础 ACR 脚本失败: {ex.Message}");
+            var configuredPath = enabledSources[index].Path?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(configuredPath)
+                || !Path.IsPathFullyQualified(configuredPath))
+                return FailClosed($"第 {index + 1} 个基础 ACR 源码路径必须是绝对路径");
+            if (!string.Equals(Path.GetExtension(configuredPath), ".cs", StringComparison.OrdinalIgnoreCase))
+                return FailClosed($"基础 ACR 源码必须是 .cs 文件: {configuredPath}");
+
+            string sourcePath;
+            try
+            {
+                sourcePath = Path.GetFullPath(configuredPath);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                return FailClosed($"基础 ACR 源码路径无效: {configuredPath}");
+            }
+
+            if (!uniquePaths.Add(sourcePath))
+                return FailClosed($"基础 ACR 源码路径重复: {sourcePath}");
+            if (!File.Exists(sourcePath))
+                return FailClosed($"基础 ACR 源码不存在: {sourcePath}");
+
+            try
+            {
+                sourceTexts.Add(new BasicAcrSourceText(File.ReadAllText(sourcePath), sourcePath));
+            }
+            catch (IOException ex)
+            {
+                return FailClosed($"读取基础 ACR 源码失败: {sourcePath}: {ex.Message}");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return FailClosed($"读取基础 ACR 源码失败: {sourcePath}: {ex.Message}");
+            }
         }
 
         HelperUpdater.TryLoadLocalSync();
-        using var result = BasicAcrCompiler.Compile(source, scriptPath);
+        using var result = BasicAcrCompiler.Compile(sourceTexts);
         Diagnostics = result.Diagnostics.ToArray();
         if (!result.Success)
         {
@@ -196,16 +223,19 @@ internal static class BasicAcrDevelopment
 
         var old = current;
         var loadedJob = Jobs.None;
+        var loadedScriptTypeName = string.Empty;
         try
         {
             loadedJob = candidate.TargetJob;
+            loadedScriptTypeName = candidate.ScriptTypeName;
+            var primarySourcePath = sourceTexts[0].Path;
             var registry = new ACRLifecycle.AcrRegistryEntry(
                 InstallKey,
-                $"Basic ACR: {Path.GetFileNameWithoutExtension(scriptPath)}",
+                $"Basic ACR: {candidate.ScriptTypeName}",
                 "",
                 "",
                 "dev",
-                Path.GetDirectoryName(scriptPath)!,
+                Path.GetDirectoryName(primarySourcePath) ?? configDir,
                 Path.Combine(configDir, "setting", "ACR", InstallKey),
                 candidate.Entry);
 
@@ -214,6 +244,7 @@ internal static class BasicAcrDevelopment
             current = TransferCandidateOwnership(ref candidate);
             DisposeCompilation(old, "卸载旧脚本");
             State = BasicAcrDevelopmentState.Ready;
+            LoadedSourcePaths = sourceTexts.Select(source => source.Path).ToArray();
             LastError = null;
             LoadedAt = DateTimeOffset.Now;
         }
@@ -226,7 +257,7 @@ internal static class BasicAcrDevelopment
             DisposeCompilation(candidate, "释放未应用的候选脚本");
         }
 
-        PrintSuccess(scriptPath, loadedJob);
+        PrintSuccess(loadedScriptTypeName, loadedJob, sourceTexts.Count);
         return true;
     }
 
@@ -262,6 +293,7 @@ internal static class BasicAcrDevelopment
         DisposeCompilation(old, "停止失效脚本");
 
         State = BasicAcrDevelopmentState.Failed;
+        LoadedSourcePaths = [];
         LastError = message;
         LoadedAt = null;
 
@@ -287,6 +319,7 @@ internal static class BasicAcrDevelopment
         config = null;
         configDir = string.Empty;
         Diagnostics = [];
+        LoadedSourcePaths = [];
         LastError = null;
         LoadedAt = null;
         State = BasicAcrDevelopmentState.Disabled;
@@ -355,11 +388,11 @@ internal static class BasicAcrDevelopment
         }
     }
 
-    private static void PrintSuccess(string scriptPath, Jobs targetJob)
+    private static void PrintSuccess(string scriptTypeName, Jobs targetJob, int sourceCount)
     {
         try
         {
-            Hi.Print($"基础 ACR 已加载: {Path.GetFileName(scriptPath)} ({targetJob})");
+            Hi.Print($"基础 ACR 已加载: {scriptTypeName} ({targetJob}, {sourceCount} 个源码文件)");
         }
         catch (Exception ex)
         {

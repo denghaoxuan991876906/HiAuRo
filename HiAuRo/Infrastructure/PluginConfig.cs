@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using HiAuRo.ACR;
 
 namespace HiAuRo.Infrastructure;
@@ -47,6 +48,13 @@ public enum NoDashDisplacementFilterMode
     Whitelist = 1
 }
 
+public sealed class BasicAcrSourceConfig
+{
+    public string Path { get; set; } = "";
+
+    public bool Enabled { get; set; } = true;
+}
+
 /// <summary>
 /// HiAuRo 主配置对象 —— 走 Dalamud 原生 IPluginConfiguration 序列化
 /// </summary>
@@ -63,15 +71,18 @@ public sealed class PluginConfig : SettingsBase
     }
 
     /// <summary>配置版本</summary>
-    public int Version { get; set; } = 1;
+    public int Version { get; set; } = 3;
     /// <summary>是否启用 Debug 日志</summary>
     public bool DebugEnabled { get; set; }
     /// <summary>是否输出 ACR 运行时细粒度调试日志（SpellCast/Action/SlotExec/EventSystem）</summary>
     public bool AcrRuntimeDebugEnabled { get; set; }
     /// <summary>是否启用基础 ACR 脚本开发模式</summary>
     public bool BasicAcrScriptEnabled { get; set; }
-    /// <summary>基础 ACR 开发脚本的绝对 .cs 文件路径</summary>
-    public string BasicAcrScriptPath { get; set; } = "";
+    /// <summary>基础 ACR 开发模式使用的本地源码文件</summary>
+    public List<BasicAcrSourceConfig> BasicAcrSources { get; set; } = [];
+    /// <summary>版本 3 之前使用的单源码路径，仅用于配置迁移</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BasicAcrScriptPath { get; set; }
     /// <summary>上次使用的插件版本</summary>
     public string? LastSeenPluginVersion { get; set; }
     /// <summary>插件加载次数</summary>

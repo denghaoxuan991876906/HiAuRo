@@ -30,7 +30,20 @@ public partial class Plugin
 
         PluginConfig.Instance = config;
         config.LoadCount++;
-        config.Version = 2;
+
+        config.BasicAcrSources ??= [];
+        config.BasicAcrSources.RemoveAll(static source => source is null);
+        if (config.BasicAcrSources.Count == 0
+            && !string.IsNullOrWhiteSpace(config.BasicAcrScriptPath))
+        {
+            config.BasicAcrSources.Add(new BasicAcrSourceConfig
+            {
+                Path = config.BasicAcrScriptPath.Trim(),
+                Enabled = true,
+            });
+        }
+        config.BasicAcrScriptPath = null;
+        config.Version = 3;
 
         if (config.Overlays?.Any(o => o.Name == "ActionPanel") == true)
             config.Overlays = config.Overlays.Where(o => o.Name != "ActionPanel")

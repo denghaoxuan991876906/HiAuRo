@@ -11,14 +11,21 @@ internal sealed record BasicAcrDiagnostic(
     int? Line,
     int? Column)
 {
-    public override string ToString()
+    public override string ToString() => Format(includeFullPath: false);
+
+    internal string ToDisplayString() => Format(includeFullPath: true);
+
+    private string Format(bool includeFullPath)
     {
         if (string.IsNullOrEmpty(FilePath) || Line is null || Column is null)
             return Message;
 
-        return $"{Path.GetFileName(FilePath)}({Line},{Column}): {Message}";
+        var displayPath = includeFullPath ? FilePath : Path.GetFileName(FilePath);
+        return $"{displayPath}({Line},{Column}): {Message}";
     }
 }
+
+internal sealed record BasicAcrSourceText(string Text, string Path);
 
 internal sealed class BasicAcrCompilation : IDisposable
 {
@@ -102,21 +109,31 @@ internal static class BasicAcrCompiler
 
     internal static BasicAcrCompileResult Compile(
         string source,
-        string sourcePath)
+        string sourcePath) =>
+        Compile([new BasicAcrSourceText(source, sourcePath)]);
+
+    internal static BasicAcrCompileResult Compile(
+        IReadOnlyList<BasicAcrSourceText> sources)
     {
         IReadOnlyList<BasicAcrDiagnostic> diagnostics = [];
         AssemblyLoadContext? candidateContext = null;
 
         try
         {
+            if (sources.Count == 0)
+                throw new InvalidOperationException("Basic ACR 至少需要一个源码文件");
+
             var bindings = SharedAssemblyResolver.CaptureHost();
-            var syntaxTree = CSharpSyntaxTree.ParseText(
-                source,
-                new CSharpParseOptions(LanguageVersion.Latest),
-                sourcePath);
+            var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
+            var syntaxTrees = sources
+                .Select(source => CSharpSyntaxTree.ParseText(
+                    source.Text,
+                    parseOptions,
+                    source.Path))
+                .ToArray();
             var compilation = CSharpCompilation.Create(
                 $"HiAuRo.BasicAcr.{Guid.NewGuid():N}",
-                [syntaxTree],
+                syntaxTrees,
                 bindings.GetMetadataReferences(IsAllowedAssembly, includeExtensions: false),
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
                     .WithOptimizationLevel(OptimizationLevel.Release));
