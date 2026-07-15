@@ -203,6 +203,7 @@ internal static class BasicAcrCompiler
 
         TryAddHostAssembly(assemblies, typeof(IBasicAcrScript).Assembly);
         TryAddHostAssembly(assemblies, typeof(OmenTools.OmenService.GameState).Assembly);
+        TryAddHostAssembly(assemblies, typeof(Dalamud.Plugin.IDalamudPlugin).Assembly);
         TryAddHostAssembly(assemblies, typeof(object).Assembly);
         TryAddHostAssembly(assemblies, typeof(List<>).Assembly);
         TryAddHostAssembly(assemblies, typeof(Enumerable).Assembly);
