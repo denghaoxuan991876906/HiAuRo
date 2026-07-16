@@ -167,6 +167,41 @@ public static class CommandMgr
         }
     }
 
+    private static void HandleShowIdCommand(string sub)
+    {
+        var cfg  = PluginConfig.Instance;
+        var chat = DService.Instance().Chat;
+
+        switch (sub)
+        {
+            case "on":
+                cfg.ShowItemIdEnabled = true;
+                cfg.Save();
+                chat.Print("[HiAuRo] 显示 ID: 已启用");
+                break;
+            case "off":
+                cfg.ShowItemIdEnabled = false;
+                cfg.Save();
+                chat.Print("[HiAuRo] 显示 ID: 已禁用");
+                break;
+            case "toggle":
+                cfg.ShowItemIdEnabled = !cfg.ShowItemIdEnabled;
+                cfg.Save();
+                chat.Print($"[HiAuRo] 显示 ID: {(cfg.ShowItemIdEnabled ? "已启用" : "已禁用")}");
+                break;
+            case "status":
+                chat.Print($"[HiAuRo] 显示 ID: {(cfg.ShowItemIdEnabled ? "启用" : "禁用")}");
+                chat.Print($"  十六进制: {(cfg.ShowItemIdHex ? "是" : "否")}");
+                chat.Print($"  双格式: {(cfg.ShowItemIdBoth ? "是" : "否")}");
+                chat.Print($"  解析动作ID: {(cfg.ShowItemIdResolvedActionId ? "是" : "否")}");
+                chat.Print($"  原始动作ID: {(cfg.ShowItemIdOriginalActionId ? "是" : "否")}");
+                break;
+            default:
+                chat.Print("[HiAuRo] 用法: /hi showid on|off|toggle|status");
+                break;
+        }
+    }
+
     private static bool ApplyCombatCommand(PluginConfig cfg, string rawArgs, Dalamud.Plugin.Services.IChatGui? chat)
     {
         Action<string>? print = chat is null ? null : message => chat.Print(message);
@@ -382,6 +417,19 @@ public static class CommandMgr
                 Plugin.Instance.UploadCatalogAsync().ContinueWith(
                     t => { if (t.Exception != null) DService.Instance().Log.Error($"[Command] catalog upload 失败: {t.Exception.InnerException?.Message}"); },
                     TaskContinuationOptions.OnlyOnFaulted);
+                break;
+            case "showid":
+            case "showid status":
+                HandleShowIdCommand("status");
+                break;
+            case "showid on":
+                HandleShowIdCommand("on");
+                break;
+            case "showid off":
+                HandleShowIdCommand("off");
+                break;
+            case "showid toggle":
+                HandleShowIdCommand("toggle");
                 break;
             case "target":
             case "target on":

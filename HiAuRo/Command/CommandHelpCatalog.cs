@@ -6,7 +6,7 @@ public static class CommandHelpCatalog
     public sealed record CommandHelpItem(string Syntax, string Description, string Example);
 
     public static string MainHelpMessage =>
-        "HiAuRo: /hi on|off|toggle|status|panel|reload|fact|assist [load|unload]|debug|gallery|catalog [export|upload]|target [on|off|toggle|status|logic|range|keep|dummy|countdown|hostile|death|aggro]|combat [status|range|knockback|dash|animlock]|help|commands";
+        "HiAuRo: /hi on|off|toggle|status|panel|reload|fact|assist [load|unload]|debug|gallery|catalog [export|upload]|target [on|off|toggle|status|logic|range|keep|dummy|countdown|hostile|death|aggro]|combat [status|range|knockback|dash|animlock]|showid [on|off|toggle|status]|help|commands";
 
     public static string CombatHelpMessage =>
         "[HiAuRo] 用法: /hi combat status | range on|off|toggle|status|value <0-10> | knockback on|off|toggle|status | dash on|off|toggle|status|mode blacklist|whitelist|list|add <actionId>|remove <actionId> | animlock on|off|toggle|status|value <0-2>";
@@ -59,6 +59,7 @@ public static class CommandHelpCatalog
             new("/hi panel", "打开面板页面", "/hi panel"),
             new("/hi reload", "重载 ACR（开发模式仅重编译 Basic）", "/hi reload"),
             new("/hi gallery", "打开组件展示窗口", "/hi gallery"),
+            new("/hi showid on|off|toggle|status", "在物品/技能悬浮提示上显示 ID", "/hi showid toggle"),
 #if DEBUG
             new("/hi debug", "切换调试性能窗口", "/hi debug"),
 #endif

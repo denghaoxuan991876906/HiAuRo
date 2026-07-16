@@ -78,6 +78,7 @@ public partial class Plugin : IDalamudPlugin
             EventSystem.Init();
             GameEventHook.Instance.Init();
             CombatEnhancementManager.Instance.Init(_config);
+            ShowIdService.Init();
             ScriptEngine.Instance.Init();
             EncounterRecorder.Instance.Init();
             CombatRecorder.Instance.Init();

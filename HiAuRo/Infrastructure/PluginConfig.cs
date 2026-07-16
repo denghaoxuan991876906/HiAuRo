@@ -255,6 +255,23 @@ public sealed class PluginConfig : SettingsBase
     /// <summary>Combat Recorder 按职业配置的额外跟踪技能列表。</summary>
     public Dictionary<uint, List<uint>> CombatRecorderTrackedSkillsByJob { get; set; } = [];
 
+    // ── 显示 ID（调试）──
+
+    /// <summary>在物品/技能悬浮提示上显示其 ID</summary>
+    public bool ShowItemIdEnabled { get; set; }
+
+    /// <summary>以十六进制显示 ID</summary>
+    public bool ShowItemIdHex { get; set; }
+
+    /// <summary>同时以十进制与十六进制显示 ID</summary>
+    public bool ShowItemIdBoth { get; set; }
+
+    /// <summary>显示解析后的动作 ID（连击/变身等实际生效技能）</summary>
+    public bool ShowItemIdResolvedActionId { get; set; } = true;
+
+    /// <summary>在解析动作 ID 旁显示原始动作 ID</summary>
+    public bool ShowItemIdOriginalActionId { get; set; }
+
     // ── 身位指示器 ──
 
     /// <summary>启用身位指示器 VFX</summary>

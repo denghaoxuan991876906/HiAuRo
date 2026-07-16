@@ -68,6 +68,59 @@ public sealed class SettingsTabPage : TabPageBase
             }
         });
 
+        // ── 显示 ID（调试）──
+        CL.Card("显示 ID（调试）", () =>
+        {
+            var enabled = _config.ShowItemIdEnabled;
+            if (CL.Switch("showid_enabled", "显示物品/技能 ID", ref enabled))
+            {
+                _config.ShowItemIdEnabled = enabled;
+                _saveConfig();
+            }
+
+            ImGui.BeginDisabled(!enabled);
+            {
+                var hex = _config.ShowItemIdHex;
+                if (CL.Switch("showid_hex", "十六进制显示", ref hex))
+                {
+                    _config.ShowItemIdHex = hex;
+                    _saveConfig();
+                }
+
+                ImGui.BeginDisabled(!hex);
+                {
+                    var both = _config.ShowItemIdBoth;
+                    if (CL.Switch("showid_both", "同时显示十进制与十六进制", ref both))
+                    {
+                        _config.ShowItemIdBoth = both;
+                        _saveConfig();
+                    }
+                }
+                ImGui.EndDisabled();
+
+                var resolved = _config.ShowItemIdResolvedActionId;
+                if (CL.Switch("showid_resolved", "显示解析后动作 ID", ref resolved))
+                {
+                    _config.ShowItemIdResolvedActionId = resolved;
+                    _saveConfig();
+                }
+
+                ImGui.BeginDisabled(!resolved);
+                {
+                    var original = _config.ShowItemIdOriginalActionId;
+                    if (CL.Switch("showid_original", "显示原始动作 ID", ref original))
+                    {
+                        _config.ShowItemIdOriginalActionId = original;
+                        _saveConfig();
+                    }
+                }
+                ImGui.EndDisabled();
+            }
+            ImGui.EndDisabled();
+
+            ImGui.TextColored(Theme.Colors.TextTertiary, "在物品/技能悬浮提示的类别文字后追加其 ID，便于查表编写轴数据。");
+        });
+
         CL.Card("战斗录制", () =>
         {
             var logRoot = _config.CombatRecorderLogRoot ?? "";
