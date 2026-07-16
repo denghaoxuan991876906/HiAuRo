@@ -260,6 +260,27 @@ public sealed class PluginConfig : SettingsBase
     /// <summary>在物品/技能悬浮提示上显示其 ID</summary>
     public bool ShowItemIdEnabled { get; set; }
 
+    /// <summary>鼠标悬停自身/目标状态栏 buff 时，在鼠标位置显示其 StatusID</summary>
+    public bool ShowBuffIdEnabled { get; set; }
+
+    /// <summary>Buff 信息框显示状态图标</summary>
+    public bool ShowBuffIdShowIcon { get; set; } = true;
+
+    /// <summary>Buff 信息框显示状态名称</summary>
+    public bool ShowBuffIdShowName { get; set; } = true;
+
+    /// <summary>Buff 信息框显示剩余时间</summary>
+    public bool ShowBuffIdShowRemainingTime { get; set; }
+
+    /// <summary>Buff 信息框显示层数</summary>
+    public bool ShowBuffIdShowStackCount { get; set; }
+
+    /// <summary>Buff 信息框以十六进制显示 StatusID</summary>
+    public bool ShowBuffIdHex { get; set; }
+
+    /// <summary>Buff 信息框背景不透明度（0.2 - 1.0）</summary>
+    public float ShowBuffIdBgAlpha { get; set; } = 0.92f;
+
     /// <summary>以十六进制显示 ID</summary>
     public bool ShowItemIdHex { get; set; }
 

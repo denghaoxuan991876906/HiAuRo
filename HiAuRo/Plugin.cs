@@ -79,6 +79,7 @@ public partial class Plugin : IDalamudPlugin
             GameEventHook.Instance.Init();
             CombatEnhancementManager.Instance.Init(_config);
             ShowIdService.Init();
+            BuffInfoService.Init();
             ScriptEngine.Instance.Init();
             EncounterRecorder.Instance.Init();
             CombatRecorder.Instance.Init();
@@ -269,6 +270,7 @@ public partial class Plugin : IDalamudPlugin
             _windowSystem.RemoveAllWindows();
         }
         _vfxRenderer?.Dispose();
+        BuffInfoService.Shutdown();
         Instance = null!;
         PluginConfig.Instance = null!;
 

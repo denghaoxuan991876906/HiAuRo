@@ -121,6 +121,64 @@ public sealed class SettingsTabPage : TabPageBase
             ImGui.TextColored(Theme.Colors.TextTertiary, "在物品/技能悬浮提示的类别文字后追加其 ID，便于查表编写轴数据。");
         });
 
+        CL.Card("显示 Buff ID（调试）", () =>
+        {
+            var enabled = _config.ShowBuffIdEnabled;
+            if (CL.Switch("buffid_enabled", "悬停 buff 时显示 StatusID", ref enabled))
+            {
+                _config.ShowBuffIdEnabled = enabled;
+                _saveConfig();
+            }
+
+            ImGui.BeginDisabled(!enabled);
+            {
+                var showIcon = _config.ShowBuffIdShowIcon;
+                if (CL.Switch("buffid_icon", "显示状态图标", ref showIcon))
+                {
+                    _config.ShowBuffIdShowIcon = showIcon;
+                    _saveConfig();
+                }
+
+                var showName = _config.ShowBuffIdShowName;
+                if (CL.Switch("buffid_name", "显示状态名称", ref showName))
+                {
+                    _config.ShowBuffIdShowName = showName;
+                    _saveConfig();
+                }
+
+                var showRemain = _config.ShowBuffIdShowRemainingTime;
+                if (CL.Switch("buffid_remain", "显示剩余时间", ref showRemain))
+                {
+                    _config.ShowBuffIdShowRemainingTime = showRemain;
+                    _saveConfig();
+                }
+
+                var showStack = _config.ShowBuffIdShowStackCount;
+                if (CL.Switch("buffid_stack", "显示层数", ref showStack))
+                {
+                    _config.ShowBuffIdShowStackCount = showStack;
+                    _saveConfig();
+                }
+
+                var hex = _config.ShowBuffIdHex;
+                if (CL.Switch("buffid_hex", "十六进制显示 StatusID", ref hex))
+                {
+                    _config.ShowBuffIdHex = hex;
+                    _saveConfig();
+                }
+
+                var alpha = _config.ShowBuffIdBgAlpha;
+                if (CL.Slider("buffid_alpha", "背景不透明度", ref alpha, 0.2f, 1.0f, "%.2f"))
+                {
+                    _config.ShowBuffIdBgAlpha = alpha;
+                    _saveConfig();
+                }
+            }
+            ImGui.EndDisabled();
+
+            ImGui.TextColored(Theme.Colors.TextTertiary, "鼠标悬停自身/目标状态栏的 buff 图标时，在鼠标位置显示其 StatusID。");
+        });
+
         CL.Card("战斗录制", () =>
         {
             var logRoot = _config.CombatRecorderLogRoot ?? "";

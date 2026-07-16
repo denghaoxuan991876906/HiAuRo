@@ -202,6 +202,37 @@ public static class CommandMgr
         }
     }
 
+    private static void HandleBuffInfoCommand(string sub)
+    {
+        var cfg  = PluginConfig.Instance;
+        var chat = DService.Instance().Chat;
+
+        switch (sub)
+        {
+            case "on":
+                cfg.ShowBuffIdEnabled = true;
+                cfg.Save();
+                chat.Print("[HiAuRo] 显示 Buff ID: 已启用");
+                break;
+            case "off":
+                cfg.ShowBuffIdEnabled = false;
+                cfg.Save();
+                chat.Print("[HiAuRo] 显示 Buff ID: 已禁用");
+                break;
+            case "toggle":
+                cfg.ShowBuffIdEnabled = !cfg.ShowBuffIdEnabled;
+                cfg.Save();
+                chat.Print($"[HiAuRo] 显示 Buff ID: {(cfg.ShowBuffIdEnabled ? "已启用" : "已禁用")}");
+                break;
+            case "status":
+                chat.Print($"[HiAuRo] 显示 Buff ID: {(cfg.ShowBuffIdEnabled ? "启用" : "禁用")}");
+                break;
+            default:
+                chat.Print("[HiAuRo] 用法: /hi buffinfo on|off|toggle|status");
+                break;
+        }
+    }
+
     private static bool ApplyCombatCommand(PluginConfig cfg, string rawArgs, Dalamud.Plugin.Services.IChatGui? chat)
     {
         Action<string>? print = chat is null ? null : message => chat.Print(message);
@@ -430,6 +461,19 @@ public static class CommandMgr
                 break;
             case "showid toggle":
                 HandleShowIdCommand("toggle");
+                break;
+            case "buffinfo":
+            case "buffinfo status":
+                HandleBuffInfoCommand("status");
+                break;
+            case "buffinfo on":
+                HandleBuffInfoCommand("on");
+                break;
+            case "buffinfo off":
+                HandleBuffInfoCommand("off");
+                break;
+            case "buffinfo toggle":
+                HandleBuffInfoCommand("toggle");
                 break;
             case "target":
             case "target on":
